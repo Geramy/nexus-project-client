@@ -1,0 +1,252 @@
+// Copyright (c) 2026 Geramy Loveless DBA Nexus Projects.
+// Author: Geramy Loveless <support@nexus-projects.ai>
+// Licensed under the Sustainable Use License. See LICENSE.md.
+
+/// Lightweight HTTP client for the Nexus gateway ("Nexus Router") Account /
+/// Billing / Usage API. Deliberately SEPARATE from LemonadeApiClient (which is
+/// per-inference-server): this one targets the single billing gateway and
+/// carries the user's ACCOUNT bearer token.
+///
+/// Follows the same conventions as infrastructure/lemonade/api/lemonade_client.dart:
+///   - builds a Uri, sets `Authorization: Bearer <token>`, json headers,
+///   - decodes JSON, maps non-2xx to the typed exceptions in
+///     infrastructure/lemonade/api/exceptions.dart
+///     (UnauthorizedException / NotFoundException / ServerException),
+///   - extracts error messages from {error}/{errors}/{detail}/{message}.
+///
+/// The token is never logged.
+library;
+
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+
+import '../lemonade/api/exceptions.dart';
+import 'models/nexus_account_models.dart';
+
+class NexusAccountClient {
+  /// Default production gateway. Override for local dev (http://localhost:5098).
+  static const String defaultGatewayBaseUrl = 'https://api.nexus-projects.ai';
+
+  /// Raw base URL as supplied (scheme optional; normalized by [_apiBase]).
+  final String baseUrl;
+
+  /// Account bearer token (`nxr_<prefix>_<secret>`). Null for unauthenticated
+  /// calls (register / login / plans).
+  final String? token;
+
+  final http.Client _http;
+
+  NexusAccountClient({
+    String? baseUrl,
+    this.token,
+    http.Client? client,
+  })  : baseUrl = baseUrl ?? defaultGatewayBaseUrl,
+        _http = client ?? http.Client();
+
+  /// Returns a copy of this client bound to [token] (reuses the http client).
+  NexusAccountClient withToken(String? token) =>
+      NexusAccountClient(baseUrl: baseUrl, token: token, client: _http);
+
+  // ── URL helpers ─────────────────────────────────────────────────────
+  // Equivalent to ServerConfig.apiUrl: default to https:// when the scheme is
+  // omitted, strip trailing slashes, and normalize to a `/api/v1` base.
+  String get _apiBase {
+    String url = baseUrl.trim();
+    if (!url.contains('://')) url = 'https://$url';
+    while (url.endsWith('/')) {
+      url = url.substring(0, url.length - 1);
+    }
+    if (url.endsWith('/api/v1')) return url;
+    if (url.endsWith('/v1')) return url;
+    if (url.endsWith('/api')) return '$url/v1';
+    return '$url/api/v1';
+  }
+
+  Uri _uri(String path) {
+    final base = _apiBase;
+    final joined = path.startsWith('/') ? '$base$path' : '$base/$path';
+    return Uri.parse(joined);
+  }
+
+  Map<String, String> get _authHeaders {
+    final t = token?.trim();
+    if (t == null || t.isEmpty) return const {};
+    return {'Authorization': 'Bearer $t'};
+  }
+
+  Map<String, String> get _jsonHeaders =>
+      {..._authHeaders, 'Content-Type': 'application/json', 'Accept': 'application/json'};
+
+  // ── Auth ────────────────────────────────────────────────────────────
+
+  /// POST /auth/register → AuthResult (token + user + client). 400 surfaces the
+  /// server's validation messages (e.g. weak password) via ServerException.
+  Future<AuthResult> register({
+    required String clientName,
+    required String email,
+    required String password,
+  }) async {
+    final json = await _postJson(_uri('/auth/register'), {
+      'client_name': clientName,
+      'email': email,
+      'password': password,
+    });
+    return AuthResult.fromJson(json);
+  }
+
+  /// POST /auth/login → AuthResult. 401 → UnauthorizedException.
+  Future<AuthResult> login({
+    required String email,
+    required String password,
+  }) async {
+    final json = await _postJson(_uri('/auth/login'), {
+      'email': email,
+      'password': password,
+    });
+    return AuthResult.fromJson(json);
+  }
+
+  // ── Billing / Plans ─────────────────────────────────────────────────
+
+  /// GET /plans (no auth) → catalog of plans + add-ons.
+  Future<PlanCatalog> fetchPlans() async {
+    final json = await _getJson(_uri('/plans'));
+    return PlanCatalog.fromJson(json);
+  }
+
+  /// POST /billing/checkout (auth) → Stripe Checkout URL to open in a browser.
+  Future<String> startCheckout({
+    required String plan,
+    List<String> addons = const [],
+  }) async {
+    final json = await _postJson(_uri('/billing/checkout'), {
+      'plan': plan,
+      'addons': addons,
+    });
+    return (json['url'] ?? '') as String;
+  }
+
+  /// POST /billing/portal (auth) → Stripe billing-portal URL.
+  Future<String> openBillingPortal() async {
+    final json = await _postJson(_uri('/billing/portal'), const {});
+    return (json['url'] ?? '') as String;
+  }
+
+  // ── Usage / Account ─────────────────────────────────────────────────
+
+  /// GET /usage (auth) → current-period usage vs. entitlements.
+  Future<UsageSnapshot> fetchUsage() async {
+    final json = await _getJson(_uri('/usage'));
+    return UsageSnapshot.fromJson(json);
+  }
+
+  /// GET /account (auth) → account + subscription summary.
+  Future<AccountSummary> fetchAccount() async {
+    final json = await _getJson(_uri('/account'));
+    return AccountSummary.fromJson(json);
+  }
+
+  void close() => _http.close();
+
+  // ── Core request helpers ────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> _postJson(Uri uri, Map<String, dynamic> body) {
+    return _withErrorMapping(uri.path, () async {
+      final resp = await _http.post(uri, headers: _jsonHeaders, body: jsonEncode(body));
+      _logIfError(resp, uri);
+      _ensureOk(resp.statusCode, resp.body, uri.path);
+      return _decodeJsonObject(resp.body);
+    });
+  }
+
+  Future<Map<String, dynamic>> _getJson(Uri uri) {
+    return _withErrorMapping(uri.path, () async {
+      final resp = await _http.get(uri, headers: _jsonHeaders);
+      _logIfError(resp, uri);
+      _ensureOk(resp.statusCode, resp.body, uri.path);
+      return _decodeJsonObject(resp.body);
+    });
+  }
+
+  void _logIfError(http.Response resp, Uri uri) {
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      // Never log Authorization headers or the token; only status + body.
+      debugPrint('[Nexus] ${resp.statusCode} ${uri.path} — '
+          '${resp.body.isEmpty ? '(empty body)' : resp.body}');
+    }
+  }
+
+  // ── Error handling (mirrors LemonadeApiClient) ──────────────────────
+
+  void _ensureOk(int status, String body, String endpoint) {
+    if (status >= 200 && status < 300) return;
+    final message = _extractErrorMessage(body) ?? 'HTTP $status';
+    switch (status) {
+      case 401:
+      case 403:
+        throw UnauthorizedException(message, endpoint: endpoint);
+      case 404:
+        throw NotFoundException(message, endpoint: endpoint);
+      default:
+        // 400 (validation) and 5xx → ServerException carrying the server text.
+        throw ServerException(message, statusCode: status, endpoint: endpoint);
+    }
+  }
+
+  /// Extracts a human message from the gateway's error envelopes. The C# router
+  /// returns {error, errors[]}; FastAPI-style services use {detail}; some use
+  /// {message}. Concatenate field-level `errors` when present.
+  String? _extractErrorMessage(String body) {
+    if (body.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) {
+        final parts = <String>[];
+        final err = decoded['error'];
+        if (err is String && err.isNotEmpty) parts.add(err);
+        if (err is Map && err['message'] is String) parts.add(err['message'] as String);
+        final errors = decoded['errors'];
+        if (errors is List && errors.isNotEmpty) {
+          parts.add(errors.map((e) => e.toString()).join('; '));
+        }
+        if (parts.isEmpty && decoded['message'] is String) {
+          parts.add(decoded['message'] as String);
+        }
+        if (parts.isEmpty) {
+          final detail = decoded['detail'];
+          if (detail is String) {
+            parts.add(detail);
+          } else if (detail is List && detail.isNotEmpty) {
+            parts.add(detail
+                .map((e) => e is Map ? (e['msg'] ?? e['message'] ?? e.toString()) : e.toString())
+                .join('; '));
+          }
+        }
+        if (parts.isNotEmpty) return parts.join(' ');
+      }
+    } catch (_) {}
+    return body.length > 500 ? body.substring(0, 500) : body;
+  }
+
+  Map<String, dynamic> _decodeJsonObject(String body) {
+    if (body.isEmpty) return const {};
+    final decoded = jsonDecode(body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return {'data': decoded};
+  }
+
+  Future<T> _withErrorMapping<T>(String endpoint, Future<T> Function() run) async {
+    try {
+      return await run();
+    } on LemonadeApiException {
+      rethrow;
+    } on TimeoutException catch (e) {
+      throw ServerException('Request timed out', endpoint: endpoint, cause: e);
+    } catch (e) {
+      throw ServerException('Network error: $e', endpoint: endpoint, cause: e);
+    }
+  }
+}

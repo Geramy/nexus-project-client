@@ -1,0 +1,6 @@
+#include "../../Flutter/Flutter-Debug.xcconfig"
+#include "Warnings.xcconfig"
+
+// Raised for the 'vad' plugin (and its onnxruntime dependency) which requires 13.3+.
+// Matches the minimum deployment target declared by the lemonade_mobile-aligned vad package.
+MACOSX_DEPLOYMENT_TARGET = 13.3

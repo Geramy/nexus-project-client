@@ -1,0 +1,57 @@
+platform :osx, '13.3'
+
+# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+def flutter_root
+  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'ephemeral', 'Flutter-Generated.xcconfig'), __FILE__)
+  unless File.exist?(generated_xcode_build_settings_path)
+    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure \"flutter pub get\" is executed first"
+  end
+
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/FLUTTER_ROOT\=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Flutter-Generated.xcconfig, then run \"flutter pub get\""
+end
+
+require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+
+flutter_macos_podfile_setup
+
+target 'Runner' do
+  use_frameworks!
+
+  flutter_install_all_macos_pods File.dirname(File.realpath(__FILE__))
+  target 'RunnerTests' do
+    inherit! :search_paths
+  end
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_macos_build_settings(target)
+  end
+
+  # Fix git2dart_binaries' broken macOS packaging: its vendored libgit2.dylib
+  # ships with install id `@rpath/libgit2-experimental.1.9.dylib` (≠ filename),
+  # so the app load-links a name that isn't on disk and dyld fails at launch.
+  # Re-point the install id to its actual filename and re-sign, on every pod
+  # install (survives `flutter pub get` restoring the upstream package).
+  dylib = File.join(installer.sandbox.root, 'git2dart_binaries', 'macos', 'libgit2.dylib')
+  if File.exist?(dylib)
+    id = `otool -D "#{dylib}"`.lines.last.to_s.strip
+    unless id == '@rpath/libgit2.dylib'
+      system("install_name_tool -id @rpath/libgit2.dylib \"#{dylib}\"")
+      system("codesign --force -s - \"#{dylib}\"")
+      Pod::UI.puts "[nexus] fixed libgit2.dylib install id -> @rpath/libgit2.dylib"
+    end
+  end
+end

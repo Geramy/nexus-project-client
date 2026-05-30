@@ -1,0 +1,50 @@
+name: Release
+
+# Push a version tag and this builds all three desktop installers and publishes
+# a GitHub Release with them attached. Examples:
+#   git tag v1.2.3 && git push origin v1.2.3      -> stable release
+#   git tag v1.2.3-beta.1 && git push --tags      -> pre-release (tag has a '-')
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Reuse the desktop build pipeline; pass the tag as the version.
+  build:
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      version: ${{ github.ref_name }}
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download installers
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: installer-*
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -lAR artifacts
+
+      - name: Create / update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: artifacts/**/*

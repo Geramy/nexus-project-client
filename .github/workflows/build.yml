@@ -1,0 +1,241 @@
+name: Build (desktop installers)
+
+# Builds signed/packaged desktop installers for Windows, macOS and Linux.
+# Reusable: release.yml calls this via `uses:`; you can also run it by hand from
+# the Actions tab (workflow_dispatch) to get downloadable artifacts for testing.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version string, e.g. 1.2.3 (a leading v is stripped). Blank = pubspec version.'
+        type: string
+        required: false
+        default: ''
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version string, e.g. 1.2.3. Blank = pubspec version.'
+        type: string
+        required: false
+        default: ''
+
+env:
+  APP_NAME: nexus_projects_client
+  PRETTY_NAME: Nexus Projects
+
+jobs:
+  # ---------------------------------------------------------------- Windows ---
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve version
+        shell: bash
+        run: |
+          V="${{ inputs.version }}"; V="${V#v}"
+          if [ -z "$V" ]; then
+            V="$(grep -E '^version:' pubspec.yaml | head -1 | sed -E 's/^version:[[:space:]]*//; s/\+.*$//')"
+          fi
+          echo "APP_VERSION=$V" >> "$GITHUB_ENV"
+          echo "Resolved version: $V"
+
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Generate code
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Build Windows (release)
+        run: flutter build windows --release --build-name=${{ env.APP_VERSION }} --build-number=${{ github.run_number }}
+
+      - name: Package installer (Inno Setup)
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=$env:APP_VERSION "packaging\windows\installer.iss"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-windows
+          path: dist/*.exe
+          if-no-files-found: error
+
+  # ------------------------------------------------------------------ macOS ---
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve version
+        run: |
+          V="${{ inputs.version }}"; V="${V#v}"
+          if [ -z "$V" ]; then
+            V="$(grep -E '^version:' pubspec.yaml | head -1 | sed -E 's/^version:[[:space:]]*//; s/\+.*$//')"
+          fi
+          echo "APP_VERSION=$V" >> "$GITHUB_ENV"
+          echo "Resolved version: $V"
+
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Generate code
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Build macOS (release)
+        run: flutter build macos --release --build-name=${{ env.APP_VERSION }} --build-number=${{ github.run_number }}
+
+      - name: Sign, package (.pkg) and notarize
+        env:
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          MACOS_DEV_SIGNING_IDENTITY_KEY: ${{ secrets.MACOS_DEV_SIGNING_IDENTITY_KEY }}
+          MACOS_INST_SIGNING_IDENTITY_KEY: ${{ secrets.MACOS_INST_SIGNING_IDENTITY_KEY }}
+          MACOS_APP_CONNECT_KEY_GERAMY: ${{ secrets.MACOS_APP_CONNECT_KEY_GERAMY }}
+          # notarytool also needs the key id + issuer id of the App Store Connect key:
+          MACOS_APP_CONNECT_KEY_ID: ${{ secrets.MACOS_APP_CONNECT_KEY_ID }}
+          MACOS_APP_CONNECT_ISSUER_ID: ${{ secrets.MACOS_APP_CONNECT_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          APP="build/macos/Build/Products/Release/${APP_NAME}.app"
+          mkdir -p dist
+
+          if [ -z "${MACOS_DEV_SIGNING_IDENTITY_KEY:-}" ]; then
+            echo "::warning::No macOS signing secrets set — producing an UNSIGNED zip."
+            ditto -c -k --keepParent "$APP" "dist/${APP_NAME}-${APP_VERSION}-macos-unsigned.zip"
+            exit 0
+          fi
+
+          # --- temporary keychain with both Developer ID certs ---
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          KPWD="$(openssl rand -base64 24)"
+          security create-keychain -p "$KPWD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KPWD" "$KEYCHAIN"
+          echo "$MACOS_DEV_SIGNING_IDENTITY_KEY"  | base64 --decode > "$RUNNER_TEMP/dev.p12"
+          echo "$MACOS_INST_SIGNING_IDENTITY_KEY" | base64 --decode > "$RUNNER_TEMP/inst.p12"
+          security import "$RUNNER_TEMP/dev.p12"  -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security import "$RUNNER_TEMP/inst.p12" -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/productbuild
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed 's/"//g')
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KPWD" "$KEYCHAIN" >/dev/null
+
+          APP_ID="$(security find-identity -v -p codesigning "$KEYCHAIN" | awk -F'"' '/Developer ID Application/{print $2; exit}')"
+          INST_ID="$(security find-identity -v "$KEYCHAIN" | awk -F'"' '/Developer ID Installer/{print $2; exit}')"
+          echo "App identity:       $APP_ID"
+          echo "Installer identity: $INST_ID"
+
+          # --- sign the .app with hardened runtime ---
+          codesign --force --deep --options runtime --timestamp \
+            --entitlements macos/Runner/Release.entitlements \
+            --sign "$APP_ID" "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+
+          # --- build the signed installer package ---
+          PKG="dist/${APP_NAME}-${APP_VERSION}-macos.pkg"
+          productbuild --component "$APP" /Applications --sign "$INST_ID" --timestamp "$PKG"
+
+          # --- notarize + staple (needs the API key + its id + issuer) ---
+          if [ -n "${MACOS_APP_CONNECT_KEY_GERAMY:-}" ] && [ -n "${MACOS_APP_CONNECT_KEY_ID:-}" ] && [ -n "${MACOS_APP_CONNECT_ISSUER_ID:-}" ]; then
+            if printf '%s' "$MACOS_APP_CONNECT_KEY_GERAMY" | grep -q 'BEGIN PRIVATE KEY'; then
+              printf '%s' "$MACOS_APP_CONNECT_KEY_GERAMY" > "$RUNNER_TEMP/api_key.p8"
+            else
+              printf '%s' "$MACOS_APP_CONNECT_KEY_GERAMY" | base64 --decode > "$RUNNER_TEMP/api_key.p8"
+            fi
+            xcrun notarytool submit "$PKG" \
+              --key "$RUNNER_TEMP/api_key.p8" \
+              --key-id "$MACOS_APP_CONNECT_KEY_ID" \
+              --issuer "$MACOS_APP_CONNECT_ISSUER_ID" \
+              --wait
+            xcrun stapler staple "$PKG"
+          else
+            echo "::warning::Notarization skipped — set MACOS_APP_CONNECT_KEY_GERAMY + MACOS_APP_CONNECT_KEY_ID + MACOS_APP_CONNECT_ISSUER_ID. The .pkg is signed but not notarized."
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-macos
+          path: dist/*
+          if-no-files-found: error
+
+  # ------------------------------------------------------------------ Linux ---
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve version
+        run: |
+          V="${{ inputs.version }}"; V="${V#v}"
+          if [ -z "$V" ]; then
+            V="$(grep -E '^version:' pubspec.yaml | head -1 | sed -E 's/^version:[[:space:]]*//; s/\+.*$//')"
+          fi
+          echo "APP_VERSION=$V" >> "$GITHUB_ENV"
+          echo "Resolved version: $V"
+
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Generate code
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Build Linux (release)
+        run: flutter build linux --release --build-name=${{ env.APP_VERSION }} --build-number=${{ github.run_number }}
+
+      - name: Package (tar.gz + .deb)
+        run: |
+          set -euo pipefail
+          BUNDLE=build/linux/x64/release/bundle
+          mkdir -p dist
+
+          # Portable tarball
+          tar -C "$BUNDLE" -czf "dist/${APP_NAME}-${APP_VERSION}-linux-x64.tar.gz" .
+
+          # Debian package
+          PKGROOT="$(mktemp -d)"
+          mkdir -p "$PKGROOT/opt/${APP_NAME}" "$PKGROOT/usr/bin" \
+                   "$PKGROOT/usr/share/applications" "$PKGROOT/DEBIAN"
+          cp -r "$BUNDLE"/. "$PKGROOT/opt/${APP_NAME}/"
+          ln -s "/opt/${APP_NAME}/${APP_NAME}" "$PKGROOT/usr/bin/${APP_NAME}"
+
+          cat > "$PKGROOT/usr/share/applications/${APP_NAME}.desktop" <<EOF
+          [Desktop Entry]
+          Name=${PRETTY_NAME}
+          Exec=/opt/${APP_NAME}/${APP_NAME}
+          Type=Application
+          Categories=Development;
+          Terminal=false
+          EOF
+
+          cat > "$PKGROOT/DEBIAN/control" <<EOF
+          Package: ${APP_NAME//_/-}
+          Version: ${APP_VERSION}
+          Section: devel
+          Priority: optional
+          Architecture: amd64
+          Depends: libgtk-3-0, libblkid1, liblzma5
+          Maintainer: Geramy Loveless DBA Nexus Projects <support@nexus-projects.ai>
+          Description: ${PRETTY_NAME} - Agentic Agile + Git + CI Environment
+          EOF
+
+          dpkg-deb --build --root-owner-group "$PKGROOT" \
+            "dist/${APP_NAME}-${APP_VERSION}-linux-amd64.deb"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-linux
+          path: dist/*
+          if-no-files-found: error
