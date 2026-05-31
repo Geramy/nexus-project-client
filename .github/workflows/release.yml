@@ -70,6 +70,17 @@ jobs:
             - **Strict multi-tenancy** — Client → Project scoping with full isolation.
             - Streaming, tools, image generation, and audio (STT/TTS) out of the box.
 
+            ### Subscription & access
+            Nexus Projects runs on the **Nexus Router** — a managed gateway that
+            handles authentication, billing, and AI inference. Create an account,
+            pick a plan, and manage your subscription at
+            **[www.nexus-projects.ai](https://www.nexus-projects.ai)**.
+
+            - Plans, quotas, and add-ons are managed centrally; over-quota usage is
+              paced (never hard-blocked) with an in-app upgrade prompt.
+            - Sign in from the app's **Account** screen to connect your subscription
+              and start routing inference.
+
             ### Download
             Pick the installer for your platform from **Assets** below:
             - **Windows** — `.exe` installer
