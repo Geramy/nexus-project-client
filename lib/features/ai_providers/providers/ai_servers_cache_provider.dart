@@ -169,10 +169,18 @@ class AiServersCacheNotifier extends StateNotifier<AiServersCache> {
 final aiServersCacheProvider =
     StateNotifierProvider<AiServersCacheNotifier, AiServersCache>((ref) {
   final notifier = AiServersCacheNotifier(ref);
-  // Auto-refresh on creation
-  ref.onDispose(() {});
-  // Trigger initial fetch asynchronously
-  Future.microtask(notifier.refresh);
+  // Refresh whenever the configured server list changes for the current client.
+  // This is what fetches models for a server added *after* startup — most
+  // importantly the built-in Nexus Router (subscription) server, which is
+  // materialized only once the account signs in. Without this, a freshly-added
+  // server would have no cache entry until the 5-min TTL and would appear to
+  // have no models. `refresh()` is per-server TTL-guarded, so this is cheap.
+  final clientId = ref.watch(currentClientIdProvider);
+  ref.listen<AsyncValue<List<InferenceServer>>>(
+    inferenceServersForClientProvider(clientId),
+    (_, next) => next.whenData((_) => notifier.refresh()),
+    fireImmediately: true,
+  );
   return notifier;
 });
 

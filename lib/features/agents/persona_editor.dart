@@ -307,10 +307,12 @@ class _PersonaEditorState extends ConsumerState<PersonaEditor> {
   }
 
   Widget _buildOmniDropdown(List<ApiModelInfo> omniModels) {
+    final seen = <String>{};
     final items = <DropdownMenuItem<String?>>[
       const DropdownMenuItem(value: null, child: Text('No Omni Collection — use individual models below')),
     ];
     for (final m in omniModels) {
+      if (!seen.add(m.id)) continue;
       items.add(DropdownMenuItem(
         value: m.id,
         child: Text(m.id, overflow: TextOverflow.ellipsis),
@@ -323,7 +325,9 @@ class _PersonaEditorState extends ConsumerState<PersonaEditor> {
           style: TextStyle(fontSize: 12, color: context.nx.textMuted)),
     );
 
-    final cur = omniCollectionModel?.isNotEmpty == true ? omniCollectionModel : null;
+    final cur = (omniCollectionModel?.isNotEmpty == true && seen.contains(omniCollectionModel))
+        ? omniCollectionModel
+        : null;
     return DropdownButtonFormField<String?>(
       initialValue: cur,
       decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'Omni Collection Model', isDense: true),
@@ -386,12 +390,18 @@ class _PersonaEditorState extends ConsumerState<PersonaEditor> {
 
   Widget _buildModDropdown(List<ApiModelInfo> models, String key) {
     if (models.isEmpty) return Text('No models', style: TextStyle(fontSize: 12, color: context.nx.textMuted));
+    // A backend (e.g. the router aggregating multiple servers) can report the
+    // same model id more than once; DropdownButton asserts on duplicate values,
+    // so collapse to unique ids first.
+    final seen = <String>{};
     final items = <DropdownMenuItem<String?>>[const DropdownMenuItem(value: null, child: Text('Use default'))];
     for (final m in models) {
+      if (!seen.add(m.id)) continue;
       items.add(DropdownMenuItem(value: m.id, child: Text(m.id, overflow: TextOverflow.ellipsis)));
     }
+    final cur = seen.contains(_mods[key]) ? _mods[key] : null;
     return DropdownButtonFormField<String?>(
-      initialValue: _mods[key],
+      initialValue: cur,
       isDense: true,
       isExpanded: true,
       items: items,
