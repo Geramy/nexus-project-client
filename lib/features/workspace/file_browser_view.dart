@@ -7,7 +7,9 @@ import 'package:flutter_code_editor/flutter_code_editor.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:nexus_projects_client/core/providers/app_shell_provider.dart';
+import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/workspace.dart';
+import 'package:nexus_projects_client/infrastructure/workspace/workspace_exporter.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/workspace_provider.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/git_status.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/git/git_engine_provider.dart';
@@ -82,15 +84,56 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
             tooltip: 'Workspace storage',
             itemBuilder: (_) => const [
               PopupMenuItem(enabled: false, child: Text('Project disk (.nxtprj)', style: TextStyle(fontSize: 12))),
-              PopupMenuItem(value: 'export', child: Text('Export as image… (soon)')),
+              PopupMenuItem(value: 'export_zip', child: Text('Export all files (.zip)')),
+              PopupMenuItem(value: 'export_image', child: Text('Export as image… (soon)')),
             ],
-            onSelected: (_) => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Native image export (.dmg/.vhd/ext4) is the next phase.')),
-            ),
+            onSelected: (value) => _onStorageMenu(context, projectId, value),
           ),
         ],
       ),
     );
+  }
+
+  /// Workspace storage menu: export-all-files (zip) or the not-yet-built image
+  /// export. The zip lands in Downloads; the snackbar reveals it in Finder/etc.
+  Future<void> _onStorageMenu(
+      BuildContext context, int projectId, String value) async {
+    final messenger = ScaffoldMessenger.of(context);
+    if (value == 'export_image') {
+      messenger.showSnackBar(const SnackBar(
+        content:
+            Text('Native image export (.dmg/.vhd/ext4) is the next phase.'),
+      ));
+      return;
+    }
+    if (value != 'export_zip') return;
+
+    messenger.showSnackBar(const SnackBar(
+      content: Text('Exporting project files…'),
+      duration: Duration(seconds: 30),
+    ));
+    try {
+      final fs = await ref.read(workspaceFsProvider(projectId).future);
+      final project =
+          await ref.read(nexusDatabaseProvider).getProjectById(projectId);
+      const exporter = WorkspaceExporter();
+      final file = await exporter.exportZip(
+        fs,
+        projectName: project?.name ?? 'project',
+      );
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(SnackBar(
+        content: Text('Exported to ${file.path}'),
+        duration: const Duration(seconds: 8),
+        action: SnackBarAction(
+          label: 'Show',
+          onPressed: () => exporter.revealInFileManager(file.path),
+        ),
+      ));
+    } catch (e) {
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(SnackBar(content: Text('Export failed: $e')));
+    }
   }
 
   // ── Git header (branch + change count) ───────────────────────────
