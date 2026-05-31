@@ -13,7 +13,7 @@ enum MainView { projectPlans, tasks, agents, aiProviders, activity, launch, code
 @riverpod
 class CurrentMainView extends _$CurrentMainView {
   @override
-  MainView build() => MainView.tasks;
+  MainView build() => MainView.projectPlans;
 
   void setView(MainView view) {
     state = view;

@@ -273,6 +273,29 @@ class NexusDatabase extends _$NexusDatabase {
     );
   }
 
+  /// The persona id the project's Coordinator should use: the explicitly
+  /// assigned agent, or — when none is set — the seeded Project Manager persona
+  /// for the project's client. The fallback is persisted so the choice sticks
+  /// and the UI reflects it. Returns null only if no Project Manager exists.
+  Future<int?> getOrAssignCoordinatorPersonaId(int projectPk) async {
+    final existing = await getProjectAgentPersonaId(projectPk);
+    if (existing != null) return existing;
+
+    final proj = await (select(projects)..where((p) => p.project_pk.equals(projectPk))).getSingleOrNull();
+    if (proj == null) return null;
+
+    final pm = await (select(agentPersonas)
+          ..where((p) =>
+              p.client_fk.equals(proj.client_fk) &
+              p.title.equals(AgentRole.projectManager.key))
+          ..limit(1))
+        .getSingleOrNull();
+    if (pm == null) return null;
+
+    await setProjectAgentPersona(projectPk, pm.agent_pk);
+    return pm.agent_pk;
+  }
+
   /// Reactive single-project query — the project controls watch this so the
   /// Start/Pause state and working-hours edits reflect immediately.
   Stream<Project?> watchProject(int projectPk) {

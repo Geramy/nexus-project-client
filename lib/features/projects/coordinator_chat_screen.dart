@@ -109,7 +109,10 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
       // to a different server and get 500s.
       AgentPersona? persona;
       try {
-        final personaId = await db.getProjectAgentPersonaId(widget.projectId);
+        // Falls back to (and persists) the Project Manager persona when the
+        // project has no agent assigned yet, so the coordinator chat always
+        // opens with a sensible default agent selected.
+        final personaId = await db.getOrAssignCoordinatorPersonaId(widget.projectId);
         if (personaId != null) persona = await db.resolveAgentPersona(personaId);
       } catch (e) {
         debugPrint('Coordinator: could not load project agent (non-fatal): $e');
@@ -154,8 +157,17 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
       String? resolvedChatModel;
       if (persona != null) {
         ttsVoice = persona.ttsVoice;
+        // On the subscription (Nexus Router) server, default to the first omni
+        // collection the server advertises when the persona hasn't picked one,
+        // so routed agents get full voice/vision/image capability out of the box.
+        var omniCollection = persona.omniCollectionModel;
+        if ((omniCollection == null || omniCollection.trim().isEmpty) &&
+            isRoutedProviderType(chosen.providerType)) {
+          final firstOmni = serverModels.where((m) => m.isCollection).toList();
+          if (firstOmni.isNotEmpty) omniCollection = firstOmni.first.id;
+        }
         final resolved = resolvePersonaModels(
-          omniCollectionModel: persona.omniCollectionModel,
+          omniCollectionModel: omniCollection,
           llmModel: persona.llmModel,
           sttModel: persona.sttModel,
           ttsModel: persona.ttsModel,

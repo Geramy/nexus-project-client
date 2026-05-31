@@ -290,7 +290,7 @@ class _AgentDropdown extends ConsumerWidget {
               style: TextStyle(fontSize: 12, color: Colors.grey));
         }
         return FutureBuilder<int?>(
-          future: db.getProjectAgentPersonaId(projectId),
+          future: db.getOrAssignCoordinatorPersonaId(projectId),
           builder: (context, snap) {
             final raw = snap.data;
             final current = (raw != null && personas.where((p) => p.agent_pk == raw).length == 1) ? raw : null;

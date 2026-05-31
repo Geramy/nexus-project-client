@@ -27,12 +27,14 @@ class LeftSidebar extends ConsumerWidget {
   final MainView currentView;
   final Function(MainView) onViewChanged;
   final bool collapsed;
+  final VoidCallback? onToggleCollapsed;
 
   const LeftSidebar({
     super.key,
     required this.currentView,
     required this.onViewChanged,
     this.collapsed = false,
+    this.onToggleCollapsed,
   });
 
   @override
@@ -53,7 +55,22 @@ class LeftSidebar extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-          const SizedBox(height: 16),
+          // Collapse control — explicit toggle (replaces hover expand/collapse).
+          if (onToggleCollapsed != null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 6, right: 6),
+                child: IconButton(
+                  tooltip: 'Collapse sidebar',
+                  iconSize: 18,
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: onToggleCollapsed,
+                ),
+              ),
+            ),
+          const SizedBox(height: 4),
 
           // Clean Client + Projects hierarchy (B)
           Padding(
@@ -269,7 +286,16 @@ class LeftSidebar extends ConsumerWidget {
       color: Theme.of(context).colorScheme.surface,
       child: Column(
         children: [
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
+          if (onToggleCollapsed != null)
+            IconButton(
+              tooltip: 'Expand sidebar',
+              iconSize: 18,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.chevron_right),
+              onPressed: onToggleCollapsed,
+            ),
+          const SizedBox(height: 8),
           for (final (view, icon, activeIcon, label) in _navDestinations)
             _NavItem(
               icon: icon,

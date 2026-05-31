@@ -49,7 +49,7 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   /// Width of the collapsed left navigation rail (icon-only).
   static const double _leftRailWidth = 64;
-  bool _leftHovered = false;
+  bool _leftExpanded = true;
 
   @override
   void initState() {
@@ -163,35 +163,32 @@ class _MainShellState extends ConsumerState<MainShell> {
                 final maxRight = (totalWidth - _leftWidth - reserved).clamp(_minPane, totalWidth);
                 _rightWidth = _rightWidth.clamp(_minPane, maxRight);
 
-                final leftPaneWidth = _leftHovered ? _leftWidth : _leftRailWidth;
+                final leftPaneWidth = _leftExpanded ? _leftWidth : _leftRailWidth;
 
                 return Row(
                   children: [
-                    // LEFT PANE — collapses to a slim icon rail when the mouse
-                    // leaves it, expands to the full nav + Clients/Projects tree
-                    // on hover.
-                    MouseRegion(
-                      onEnter: (_) => setState(() => _leftHovered = true),
-                      onExit: (_) => setState(() => _leftHovered = false),
-                      child: AnimatedContainer(
-                        duration: AppMotion.base,
-                        curve: AppMotion.curve,
-                        width: leftPaneWidth,
-                        clipBehavior: Clip.hardEdge,
-                        decoration: const BoxDecoration(),
-                        child: OverflowBox(
-                          alignment: Alignment.centerLeft,
-                          minWidth: _leftRailWidth,
-                          maxWidth: _leftWidth,
-                          child: SizedBox(
-                            width: leftPaneWidth,
-                            child: LeftSidebar(
-                              collapsed: !_leftHovered,
-                              currentView: currentView,
-                              onViewChanged: (view) {
-                                ref.read(currentMainViewProvider.notifier).setView(view);
-                              },
-                            ),
+                    // LEFT PANE — slim icon rail or the full nav + Clients/
+                    // Projects tree, toggled explicitly by the chevron button
+                    // (no hover-driven expand/collapse).
+                    AnimatedContainer(
+                      duration: AppMotion.base,
+                      curve: AppMotion.curve,
+                      width: leftPaneWidth,
+                      clipBehavior: Clip.hardEdge,
+                      decoration: const BoxDecoration(),
+                      child: OverflowBox(
+                        alignment: Alignment.centerLeft,
+                        minWidth: _leftRailWidth,
+                        maxWidth: _leftWidth,
+                        child: SizedBox(
+                          width: leftPaneWidth,
+                          child: LeftSidebar(
+                            collapsed: !_leftExpanded,
+                            currentView: currentView,
+                            onViewChanged: (view) {
+                              ref.read(currentMainViewProvider.notifier).setView(view);
+                            },
+                            onToggleCollapsed: () => setState(() => _leftExpanded = !_leftExpanded),
                           ),
                         ),
                       ),
