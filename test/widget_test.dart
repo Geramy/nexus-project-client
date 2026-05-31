@@ -2,32 +2,34 @@
 // Author: Geramy Loveless <support@nexus-projects.ai>
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:nexus_projects_client/app/app.dart';
+import 'package:nexus_projects_client/shared/ui/app_theme.dart';
 
 void main() {
-  testWidgets('App launches smoke test', (WidgetTester tester) async {
-    await tester.pumpWidget(const NexusProjectsApp());
+  test('every theme choice maps to a usable ThemeData', () {
+    for (final choice in AppThemeChoice.values) {
+      expect(AppTheme.of(choice), isA<ThemeData>());
+    }
+  });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  test('fromName round-trips and falls back to the default', () {
+    expect(AppThemeChoice.fromName('midnight'), AppThemeChoice.midnight);
+    expect(AppThemeChoice.fromName('does-not-exist'), AppThemeChoice.defaultChoice);
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  testWidgets('a MaterialApp renders under the default theme', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          theme: AppTheme.of(AppThemeChoice.defaultChoice),
+          home: const Scaffold(body: Center(child: Text('Nexus Projects'))),
+        ),
+      ),
+    );
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Nexus Projects'), findsOneWidget);
   });
 }
