@@ -57,6 +57,55 @@ and is the customer-facing front end to that subscription system.
 - Supports streaming, tools, image generation, and audio (STT/TTS).
 - 3-pane resizable shell with proper default proportions.
 
+## Screenshots
+
+#### Project setup, driven by an interview
+The Coordinator interviews you about the project with short multiple-choice questions and proposes tags onto the board as you talk — turning a conversation into a structured stack (Industries, Platforms, Objectives, Features, Languages, Frameworks, Libraries). The left rail scopes everything by **Client → Project**.
+
+![Project setup board](screenshots/02-project-setup-navigation.jpg)
+
+#### The Coordinator interview — text or voice
+Answer by typing, or go hands-free. Real Silero VAD with end-of-speech detection and OS-level echo cancellation lets you talk to the Coordinator naturally while it fills in the board live.
+
+![Setup interview](screenshots/10-setup-interview.jpg)
+![Voice setup interview](screenshots/11-setup-interview-voice.jpg)
+
+#### Living plans
+Generated plans are living Markdown documents (Overview, Client, Server, Database) that every layer shares as project-wide context. Choose the Coordinator agent that owns each plan.
+
+![Plan editor](screenshots/12-plan-editor.jpg)
+
+#### Hierarchical tasks with a rich detail panel
+Each task has Overview, Sub-Tasks, Git Changes, Agent Work, and Builds & CI tabs. Status, priority, dates, and assigned agent persist live.
+
+![Task detail](screenshots/03-task-detail.jpg)
+
+#### Agents & personas
+A roster of specialized agent personas — Project Manager, Coordinator, and SDE specialists (Generalist, Networking, Physics, Database, UI/UX, DevOps) plus a Verification agent — each backed by a configurable model.
+
+![Agents and personas](screenshots/04-agents-personas.jpg)
+
+#### Bring your own inference
+Automatic LAN discovery of Lemonade inference servers alongside your configured providers — pick the model that runs each agent.
+
+![AI providers](screenshots/05-ai-providers.jpg)
+
+#### Code & Git, in app
+An integrated workspace with Git — commit, push, pull, merge, branch, and history — plus an editor and source-control view over your project's plans and code.
+
+![Code and Git](screenshots/06-code-and-git.jpg)
+
+#### Build & package from the app
+Docker-backed build environments, images, and containers with live build logs.
+
+![Launch and packaging](screenshots/07-launch-packaging.jpg)
+
+#### Account, usage & subscription
+Usage is metered against your plan for the billing period; going over quota **paces** output instead of hard-failing. Plans run from Basic to Platinum with optional add-ons.
+
+![Account and usage](screenshots/08-account-usage.jpg)
+![Plans](screenshots/09-account-plans.jpg)
+
 ## Project Structure
 
 ```

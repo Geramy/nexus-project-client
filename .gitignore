@@ -49,3 +49,6 @@ app.*.map.json
 # Only README.md and LICENSE.md ship publicly.
 /docs/
 /ADMIN_CONSOLE_PLAN.md
+
+# Raw screenshot originals (PNG). Compressed JPGs in screenshots/ ship instead.
+/photos/
