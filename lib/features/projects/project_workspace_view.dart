@@ -10,6 +10,7 @@ import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/features/projects/coordinator_chat_screen.dart';
 import 'package:nexus_projects_client/features/projects/orchestration/project_orchestrator.dart';
 import 'package:nexus_projects_client/features/projects/widgets/project_orchestration_controls.dart';
+import 'package:nexus_projects_client/features/projects/workspace_nav.dart';
 import 'package:nexus_projects_client/features/project_plans/plan_workspace.dart';
 import 'package:nexus_projects_client/features/project_setup/providers/tag_providers.dart';
 import 'package:nexus_projects_client/features/project_setup/setup_chat_controller.dart';
@@ -118,9 +119,21 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
     final setupComplete = setupStatus == 'complete';
     _setupTabIndex = setupComplete ? 4 : 1;
     _planTabIndex = setupComplete ? 3 : 4;
+    // Overview sits before Plan in both layouts: Chat,[Setup],Summary,Overview.
+    final overviewTabIndex = setupComplete ? 2 : 3;
+
+    // External nudges (e.g. the setup "Done" dialog) can ask us to surface the
+    // Overview tab, where the orchestration Start button lives.
+    ref.listen<int>(requestOverviewTabProvider, (prev, next) {
+      if (next != (prev ?? 0) && _tabs.index != overviewTabIndex) {
+        _tabs.animateTo(overviewTabIndex);
+      }
+    });
 
     if (_gatedProjectId != projectId &&
-        (setupStatus == 'notStarted' || setupStatus == 'inProgress')) {
+        (setupStatus == 'notStarted' ||
+            setupStatus == 'inProgress' ||
+            setupStatus == 'refining')) {
       _gatedProjectId = projectId;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _tabs.index != _setupTabIndex) {
