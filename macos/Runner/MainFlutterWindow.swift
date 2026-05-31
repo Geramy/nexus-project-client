@@ -4,9 +4,19 @@ import FlutterMacOS
 class MainFlutterWindow: NSWindow {
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
-    let windowFrame = self.frame
     self.contentViewController = flutterViewController
-    self.setFrame(windowFrame, display: true)
+
+    // Launch at 50% of the screen's visible area, centered. Falls back to the
+    // nib's frame if no screen is reported.
+    if let visible = (self.screen ?? NSScreen.main)?.visibleFrame {
+      let width = visible.width * 0.5
+      let height = visible.height * 0.5
+      let x = visible.origin.x + (visible.width - width) / 2
+      let y = visible.origin.y + (visible.height - height) / 2
+      self.setFrame(NSRect(x: x, y: y, width: width, height: height), display: true)
+    } else {
+      self.setFrame(self.frame, display: true)
+    }
 
     RegisterGeneratedPlugins(registry: flutterViewController)
 

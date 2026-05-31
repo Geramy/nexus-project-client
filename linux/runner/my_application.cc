@@ -52,7 +52,28 @@ static void my_application_activate(GApplication* application) {
     gtk_window_set_title(window, "nexus_projects_client");
   }
 
-  gtk_window_set_default_size(window, 1280, 720);
+  // Launch at 50% of the monitor's work area, centered. GTK sizes are in
+  // logical units (it handles HiDPI scaling), so half the work area applies
+  // directly. Falls back to a fixed size when no monitor is reported.
+  gint win_width = 1280;
+  gint win_height = 720;
+  GdkDisplay* display = gdk_display_get_default();
+  if (display != nullptr) {
+    GdkMonitor* monitor = gdk_display_get_primary_monitor(display);
+    if (monitor == nullptr) {
+      monitor = gdk_display_get_monitor(display, 0);
+    }
+    if (monitor != nullptr) {
+      GdkRectangle work_area;
+      gdk_monitor_get_workarea(monitor, &work_area);
+      if (work_area.width > 0 && work_area.height > 0) {
+        win_width = work_area.width / 2;
+        win_height = work_area.height / 2;
+      }
+    }
+  }
+  gtk_window_set_default_size(window, win_width, win_height);
+  gtk_window_set_position(window, GTK_WIN_POS_CENTER);
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(

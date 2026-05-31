@@ -651,7 +651,7 @@ class ProjectOrchestrator {
       selectedModel: chosen.selectedModel,
       availableModels: models,
     );
-    return (client: backendForServer(uiServer), model: model);
+    return (client: backendForServer(uiServer, agentName: persona.name), model: model);
   }
 }
 

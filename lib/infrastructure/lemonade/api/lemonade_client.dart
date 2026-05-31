@@ -61,7 +61,14 @@ class LemonadeApiClient {
   Map<String, String> get _authHeaders {
     final raw = server.apiKey?.trim();
     final key = (raw == null || raw.isEmpty) ? 'lemonade' : raw;
-    return {'Authorization': 'Bearer $key'};
+    final headers = {'Authorization': 'Bearer $key'};
+    final agent = server.agentName?.trim();
+    if (agent != null && agent.isNotEmpty) {
+      // Router attributes per-agent cost from this header (capped at 128 chars
+      // server-side); calls without it roll up as "(unattributed)".
+      headers['X-Nexus-Agent'] = agent.length > 128 ? agent.substring(0, 128) : agent;
+    }
+    return headers;
   }
   Map<String, String> get jsonHeaders => {..._authHeaders, 'Content-Type': 'application/json', 'Accept': 'application/json'};
   Map<String, String> get sseHeaders => {..._authHeaders, 'Content-Type': 'application/json', 'Accept': 'text/event-stream'};

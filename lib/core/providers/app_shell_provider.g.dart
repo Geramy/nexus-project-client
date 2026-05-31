@@ -6,7 +6,7 @@ part of 'app_shell_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$currentMainViewHash() => r'7645f9811f8558e5c58ec9c3bb7cc55b0d2a9f06';
+String _$currentMainViewHash() => r'd8d197027b1d2b403652bea6613441e1063d875c';
 
 /// See also [CurrentMainView].
 @ProviderFor(CurrentMainView)

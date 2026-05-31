@@ -12,10 +12,16 @@ class ServerConfig {
   final String? apiKey;
   final String name;
 
+  /// Optional agent identity sent as the `X-Nexus-Agent` header so the Nexus
+  /// Router can attribute per-agent cost. Null on non-agent (e.g. coordinator)
+  /// calls, which roll up as unattributed.
+  final String? agentName;
+
   ServerConfig({
     required this.baseUrl,
     this.apiKey,
     required this.name,
+    this.agentName,
   });
 
   /// Returns the base URL normalized for API use.

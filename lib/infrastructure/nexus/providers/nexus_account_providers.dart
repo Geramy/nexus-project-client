@@ -212,3 +212,12 @@ Future<AccountSummary> nexusAccountSummary(Ref ref) {
   final client = ref.read(nexusAuthProvider.notifier).authedClient();
   return client.fetchAccount();
 }
+
+/// Per-agent cost breakdown over [days] (null = current billing period).
+@riverpod
+Future<AgentUsageReport> nexusAgentUsage(Ref ref, {int? days}) {
+  ref.watch(nexusAuthProvider.select((s) => s.token));
+  ref.watch(nexusGatewayBaseUrlProvider);
+  final client = ref.read(nexusAuthProvider.notifier).authedClient();
+  return client.fetchAgentUsage(days: days);
+}

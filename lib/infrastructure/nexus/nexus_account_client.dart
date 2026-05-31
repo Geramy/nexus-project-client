@@ -149,6 +149,14 @@ class NexusAccountClient {
     return AccountSummary.fromJson(json);
   }
 
+  /// GET /usage/agents (auth) → per-agent cost breakdown. [days] windows the
+  /// scan; null defaults to the current billing period server-side.
+  Future<AgentUsageReport> fetchAgentUsage({int? days}) async {
+    final path = days == null ? '/usage/agents' : '/usage/agents?days=$days';
+    final json = await _getJson(_uri(path));
+    return AgentUsageReport.fromJson(json);
+  }
+
   void close() => _http.close();
 
   // ── Core request helpers ────────────────────────────────────────────

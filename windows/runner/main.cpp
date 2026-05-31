@@ -25,8 +25,22 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
   FlutterWindow window(project);
+  // Launch at 50% of the primary monitor's work area, centered. Win32Window::Create
+  // scales these logical values to physical pixels by the monitor DPI, so we convert
+  // the physical work area to logical units before halving. Falls back to a fixed
+  // size if the work area can't be read.
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
+  RECT work_area;
+  if (::SystemParametersInfo(SPI_GETWORKAREA, 0, &work_area, 0)) {
+    const double scale = ::GetDpiForSystem() / 96.0;
+    const int work_w = static_cast<int>((work_area.right - work_area.left) / scale);
+    const int work_h = static_cast<int>((work_area.bottom - work_area.top) / scale);
+    const int win_w = work_w / 2;
+    const int win_h = work_h / 2;
+    origin = Win32Window::Point((work_w - win_w) / 2, (work_h - win_h) / 2);
+    size = Win32Window::Size(win_w, win_h);
+  }
   if (!window.Create(L"nexus_projects_client", origin, size)) {
     return EXIT_FAILURE;
   }

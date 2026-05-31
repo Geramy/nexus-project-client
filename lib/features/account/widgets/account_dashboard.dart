@@ -55,6 +55,18 @@ class AccountDashboard extends ConsumerWidget {
                 onRetry: () => ref.invalidate(nexusUsageProvider),
               ),
             ),
+            Gap.sm,
+
+            // Full history (12-month token usage) lives on the website dashboard.
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () =>
+                    openExternalUrl(_websiteDashboardUrl(ref.read(nexusGatewayBaseUrlProvider))),
+                icon: const Icon(Icons.history, size: 18),
+                label: const Text('View usage history on website'),
+              ),
+            ),
             Gap.lg,
 
             // Subscription summary.
@@ -87,6 +99,26 @@ class AccountDashboard extends ConsumerWidget {
 
 String _messageOf(Object e) =>
     e is LemonadeApiException ? e.message : e.toString();
+
+/// Maps the API gateway base URL to the customer website's usage-history page.
+/// The API is served from the `api.` host (e.g. api.nexus-projects.ai) while the
+/// site dashboard lives at the root host, so we drop a leading `api.` and point
+/// at `/dashboard`. Falls back to the production site for bare/odd inputs.
+String _websiteDashboardUrl(String gatewayBaseUrl) {
+  var raw = gatewayBaseUrl.trim();
+  if (!raw.contains('://')) raw = 'https://$raw';
+  final uri = Uri.tryParse(raw);
+  if (uri == null || uri.host.isEmpty) {
+    return 'https://nexus-projects.ai/dashboard';
+  }
+  final host = uri.host.startsWith('api.') ? uri.host.substring(4) : uri.host;
+  return Uri(
+    scheme: uri.scheme,
+    host: host,
+    port: uri.hasPort ? uri.port : null,
+    path: '/dashboard',
+  ).toString();
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 

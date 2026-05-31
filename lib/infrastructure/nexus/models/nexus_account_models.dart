@@ -310,6 +310,64 @@ class AccountSummary {
   }
 }
 
+/// One agent's usage roll-up from GET /usage/agents. `agent` is the
+/// X-Nexus-Agent label, or "(unattributed)" for calls sent without it.
+class AgentUsageRow {
+  final String agent;
+  final int calls;
+  final int inputTokens;
+  final int outputTokens;
+  final int totalTokens;
+  final double cost;
+
+  const AgentUsageRow({
+    required this.agent,
+    required this.calls,
+    required this.inputTokens,
+    required this.outputTokens,
+    required this.totalTokens,
+    required this.cost,
+  });
+
+  factory AgentUsageRow.fromJson(Map<String, dynamic> json) {
+    final input = _asInt(json['input_tokens']) ?? 0;
+    final output = _asInt(json['output_tokens']) ?? 0;
+    return AgentUsageRow(
+      agent: (json['agent'] as String?)?.trim().isNotEmpty == true
+          ? json['agent'] as String
+          : '(unattributed)',
+      calls: _asInt(json['calls']) ?? 0,
+      inputTokens: input,
+      outputTokens: output,
+      totalTokens: _asInt(json['total_tokens']) ?? (input + output),
+      cost: _asDouble(json['cost']) ?? 0,
+    );
+  }
+}
+
+/// Response of GET /usage/agents: per-agent cost over the chosen window.
+class AgentUsageReport {
+  final DateTime? since;
+  final double totalCost;
+  final List<AgentUsageRow> agents;
+
+  const AgentUsageReport({
+    required this.since,
+    required this.totalCost,
+    required this.agents,
+  });
+
+  factory AgentUsageReport.fromJson(Map<String, dynamic> json) {
+    return AgentUsageReport(
+      since: _asDate(json['since']),
+      totalCost: _asDouble(json['total_cost']) ?? 0,
+      agents: _asList(json['agents'])
+          .map((e) => AgentUsageRow.fromJson(_asMap(e)))
+          .toList(),
+    );
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Parsing helpers (tolerant of int/double/string/null variations)
 // ─────────────────────────────────────────────────────────────────────────────

@@ -14,18 +14,22 @@ import 'inference_backend.dart';
 import '../lemonade/lemonade_backend.dart' show LemonadeBackend;
 
 /// Returns a concrete InferenceBackend for the given server row.
-InferenceBackend backendForServer(ui_model.InferenceServer server) {
+///
+/// [agentName] is forwarded as the `X-Nexus-Agent` header so the Router can
+/// attribute per-agent cost; pass it when the call is made on behalf of a
+/// specific agent persona.
+InferenceBackend backendForServer(ui_model.InferenceServer server, {String? agentName}) {
   final type = server.providerType.toLowerCase();
 
   switch (type) {
     case 'lemonade':
-      return LemonadeBackend(server);
+      return LemonadeBackend(server, agentName: agentName);
 
     // The Nexus Router subscription gateway is OpenAI-compatible and is reached
     // through the same transport (ServerConfig maps api.nexus-projects.ai to
     // /api/v1, which the Router proxy serves).
     case 'routed':
-      return LemonadeBackend(server);
+      return LemonadeBackend(server, agentName: agentName);
 
     default:
       throw UnimplementedError(

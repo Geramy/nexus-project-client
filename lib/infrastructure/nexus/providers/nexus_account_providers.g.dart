@@ -96,6 +96,160 @@ final nexusAccountSummaryProvider =
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef NexusAccountSummaryRef = AutoDisposeFutureProviderRef<AccountSummary>;
+String _$nexusAgentUsageHash() => r'2bb1c4f99cf4b0102dd53b5fd7f76ddd54250ba8';
+
+/// Copied from Dart SDK
+class _SystemHash {
+  _SystemHash._();
+
+  static int combine(int hash, int value) {
+    // ignore: parameter_assignments
+    hash = 0x1fffffff & (hash + value);
+    // ignore: parameter_assignments
+    hash = 0x1fffffff & (hash + ((0x0007ffff & hash) << 10));
+    return hash ^ (hash >> 6);
+  }
+
+  static int finish(int hash) {
+    // ignore: parameter_assignments
+    hash = 0x1fffffff & (hash + ((0x03ffffff & hash) << 3));
+    // ignore: parameter_assignments
+    hash = hash ^ (hash >> 11);
+    return 0x1fffffff & (hash + ((0x00003fff & hash) << 15));
+  }
+}
+
+/// Per-agent cost breakdown over [days] (null = current billing period).
+///
+/// Copied from [nexusAgentUsage].
+@ProviderFor(nexusAgentUsage)
+const nexusAgentUsageProvider = NexusAgentUsageFamily();
+
+/// Per-agent cost breakdown over [days] (null = current billing period).
+///
+/// Copied from [nexusAgentUsage].
+class NexusAgentUsageFamily extends Family<AsyncValue<AgentUsageReport>> {
+  /// Per-agent cost breakdown over [days] (null = current billing period).
+  ///
+  /// Copied from [nexusAgentUsage].
+  const NexusAgentUsageFamily();
+
+  /// Per-agent cost breakdown over [days] (null = current billing period).
+  ///
+  /// Copied from [nexusAgentUsage].
+  NexusAgentUsageProvider call({int? days}) {
+    return NexusAgentUsageProvider(days: days);
+  }
+
+  @override
+  NexusAgentUsageProvider getProviderOverride(
+    covariant NexusAgentUsageProvider provider,
+  ) {
+    return call(days: provider.days);
+  }
+
+  static const Iterable<ProviderOrFamily>? _dependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get dependencies => _dependencies;
+
+  static const Iterable<ProviderOrFamily>? _allTransitiveDependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get allTransitiveDependencies =>
+      _allTransitiveDependencies;
+
+  @override
+  String? get name => r'nexusAgentUsageProvider';
+}
+
+/// Per-agent cost breakdown over [days] (null = current billing period).
+///
+/// Copied from [nexusAgentUsage].
+class NexusAgentUsageProvider
+    extends AutoDisposeFutureProvider<AgentUsageReport> {
+  /// Per-agent cost breakdown over [days] (null = current billing period).
+  ///
+  /// Copied from [nexusAgentUsage].
+  NexusAgentUsageProvider({int? days})
+    : this._internal(
+        (ref) => nexusAgentUsage(ref as NexusAgentUsageRef, days: days),
+        from: nexusAgentUsageProvider,
+        name: r'nexusAgentUsageProvider',
+        debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+            ? null
+            : _$nexusAgentUsageHash,
+        dependencies: NexusAgentUsageFamily._dependencies,
+        allTransitiveDependencies:
+            NexusAgentUsageFamily._allTransitiveDependencies,
+        days: days,
+      );
+
+  NexusAgentUsageProvider._internal(
+    super._createNotifier, {
+    required super.name,
+    required super.dependencies,
+    required super.allTransitiveDependencies,
+    required super.debugGetCreateSourceHash,
+    required super.from,
+    required this.days,
+  }) : super.internal();
+
+  final int? days;
+
+  @override
+  Override overrideWith(
+    FutureOr<AgentUsageReport> Function(NexusAgentUsageRef provider) create,
+  ) {
+    return ProviderOverride(
+      origin: this,
+      override: NexusAgentUsageProvider._internal(
+        (ref) => create(ref as NexusAgentUsageRef),
+        from: from,
+        name: null,
+        dependencies: null,
+        allTransitiveDependencies: null,
+        debugGetCreateSourceHash: null,
+        days: days,
+      ),
+    );
+  }
+
+  @override
+  AutoDisposeFutureProviderElement<AgentUsageReport> createElement() {
+    return _NexusAgentUsageProviderElement(this);
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is NexusAgentUsageProvider && other.days == days;
+  }
+
+  @override
+  int get hashCode {
+    var hash = _SystemHash.combine(0, runtimeType.hashCode);
+    hash = _SystemHash.combine(hash, days.hashCode);
+
+    return _SystemHash.finish(hash);
+  }
+}
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+mixin NexusAgentUsageRef on AutoDisposeFutureProviderRef<AgentUsageReport> {
+  /// The parameter `days` of this provider.
+  int? get days;
+}
+
+class _NexusAgentUsageProviderElement
+    extends AutoDisposeFutureProviderElement<AgentUsageReport>
+    with NexusAgentUsageRef {
+  _NexusAgentUsageProviderElement(super.provider);
+
+  @override
+  int? get days => (origin as NexusAgentUsageProvider).days;
+}
+
 String _$nexusGatewayBaseUrlHash() =>
     r'991bd162df89746d05cc654c666fb27ab906e302';
 
@@ -116,7 +270,7 @@ final nexusGatewayBaseUrlProvider =
     );
 
 typedef _$NexusGatewayBaseUrl = AutoDisposeNotifier<String>;
-String _$nexusAuthHash() => r'c9509733ee4563aa95438af89b76f61f4ea22b05';
+String _$nexusAuthHash() => r'0e14e9283a0362e97f213504acf9b39df7188f17';
 
 /// Signed-in account state. Hydrates the token + cached identity from secure
 /// storage on build, then exposes login / register / logout.
