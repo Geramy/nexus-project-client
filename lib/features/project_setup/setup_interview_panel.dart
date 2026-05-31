@@ -133,6 +133,7 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
               ],
             ),
           ),
+          if (controller.refining) const _RefineBanner(),
           if (controller.error != null)
             Container(
               width: double.infinity,
@@ -170,6 +171,40 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
             hintText: controller.refining
                 ? 'Describe your UI, screens, behavior, data…'
                 : 'Tell the setup host about your project…',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shown in the interview chat while the session is in the refine phase, to
+/// remind the user the plans are now editable and inviting them to keep
+/// chatting to flesh them out.
+class _RefineBanner extends StatelessWidget {
+  const _RefineBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      color: theme.colorScheme.tertiaryContainer,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.auto_fix_high,
+              size: 16, color: theme.colorScheme.onTertiaryContainer),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Refining your plans — chat with me to add more detail: screens, '
+              'behavior, data, and edge cases. Tell me what to change.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onTertiaryContainer,
+              ),
+            ),
           ),
         ],
       ),
