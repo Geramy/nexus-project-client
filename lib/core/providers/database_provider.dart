@@ -107,3 +107,11 @@ Stream<List<ChatMessage>> chatMessagesForSession(Ref ref, int sessionId) {
   final db = ref.watch(nexusDatabaseProvider);
   return db.watchChatMessagesForSession(sessionId);
 }
+
+/// App-wide stream of task-completion events (a task was approved → Done). The
+/// main shell listens to this to show a tappable "task complete" notification.
+/// Plain provider (not codegen) so it can expose the DB's broadcast stream
+/// directly without a build step.
+final taskCompletedStreamProvider = StreamProvider<TaskCompletedEvent>((ref) {
+  return ref.watch(nexusDatabaseProvider).taskCompleted;
+});

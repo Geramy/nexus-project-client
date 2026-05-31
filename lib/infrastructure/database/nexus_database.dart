@@ -2,6 +2,7 @@
 // Author: Geramy Loveless <support@nexus-projects.ai>
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 
@@ -33,6 +34,21 @@ import '../../features/projects/task_workflow.dart';
 
 part 'nexus_database.g.dart';
 
+/// Emitted on the [NexusDatabase.taskCompleted] stream when a task is approved
+/// (→ Done). Carries enough to surface a notification that deep-links to the
+/// task: its pk, the owning project, and its title.
+class TaskCompletedEvent {
+  const TaskCompletedEvent({
+    required this.taskPk,
+    required this.projectPk,
+    required this.title,
+  });
+
+  final int taskPk;
+  final int projectPk;
+  final String title;
+}
+
 /// Database definition using Drift.
 ///
 /// All tables use integer auto-increment primary keys named `<entity>_pk`
@@ -43,6 +59,14 @@ class NexusDatabase extends _$NexusDatabase {
   NexusDatabase() : super(_openConnection()) {
     _initDriftOptions();
   }
+
+  /// Broadcasts a [TaskCompletedEvent] every time a task is approved (→ Done),
+  /// so the app shell can surface a tappable "task complete" notification. The
+  /// single completion chokepoint ([approveTask]) feeds this.
+  final StreamController<TaskCompletedEvent> _taskCompletedController =
+      StreamController<TaskCompletedEvent>.broadcast();
+  Stream<TaskCompletedEvent> get taskCompleted =>
+      _taskCompletedController.stream;
 
   @override
   int get schemaVersion => 25;
@@ -612,10 +636,18 @@ class NexusDatabase extends _$NexusDatabase {
 
   /// The Coordinator merged the branch — task is fully done. Clears the live
   /// worker session so its (ephemeral) context can be torn down.
-  Future<void> approveTask(int taskPk) {
-    return _applyTaskEvent(taskPk, TaskEvent.approve, const TasksCompanion(
+  Future<void> approveTask(int taskPk) async {
+    final t = await getTaskById(taskPk);
+    await _applyTaskEvent(taskPk, TaskEvent.approve, const TasksCompanion(
       worker_session_fk: Value(null),
     ));
+    if (t != null) {
+      _taskCompletedController.add(TaskCompletedEvent(
+        taskPk: taskPk,
+        projectPk: t.task_project_fk,
+        title: t.title,
+      ));
+    }
   }
 
   /// Send a task back to the board (PM/Coordinator reject), clearing its live

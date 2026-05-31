@@ -122,6 +122,27 @@ class _MainShellState extends ConsumerState<MainShell> {
     ref.listen<int>(currentClientIdProvider, (_, clientId) => _warmClient(clientId));
     ref.listen<int>(currentProjectIdProvider, (_, projectId) => _warmProject(projectId));
 
+    // Surface a tappable notification whenever a task is approved (→ Done). The
+    // DB broadcasts each completion; tapping "View" deep-links to that task.
+    ref.listen(taskCompletedStreamProvider, (_, next) {
+      final ev = next.valueOrNull;
+      if (ev == null) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          duration: const Duration(seconds: 6),
+          content: Text('Task complete: "${ev.title}"'),
+          action: SnackBarAction(
+            label: 'View',
+            onPressed: () {
+              ref.read(currentProjectIdProvider.notifier).selectProject(ev.projectPk);
+              ref.read(selectedTaskIdNotifierProvider.notifier).selectTask(ev.taskPk);
+              ref.read(currentMainViewProvider.notifier).setView(MainView.tasks);
+            },
+          ),
+        ));
+    });
+
     // React to view changes via ref.listen — its callback runs AFTER the frame,
     // so we can safely modify providers + call setState (doing this inline in
     // build() throws "modified a provider while the widget tree was building").
