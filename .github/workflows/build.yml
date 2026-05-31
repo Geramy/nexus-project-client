@@ -46,6 +46,25 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
+
+      # git2dart_binaries' windows/CMakeLists.txt bundles libcrypto-1_1-x64.dll
+      # (never shipped — libgit2.dll uses Windows-native TLS) and a versioned
+      # libgit2-1.6.2.dll, while the package ships plain libgit2.dll. Fix both.
+      - name: Patch git2dart_binaries native lib names (Windows)
+        shell: pwsh
+        run: |
+          $root = if ($env:PUB_CACHE) { $env:PUB_CACHE } else { "$env:LOCALAPPDATA\Pub\Cache" }
+          $cm = Get-ChildItem -Path $root -Recurse -Filter CMakeLists.txt -ErrorAction SilentlyContinue |
+                Where-Object { $_.FullName -match 'git2dart_binaries' -and $_.FullName -match '\\windows\\' } |
+                Select-Object -First 1
+          if (-not $cm) { Write-Error 'git2dart_binaries windows/CMakeLists.txt not found'; exit 1 }
+          Write-Host "Patching $($cm.FullName)"
+          (Get-Content $cm.FullName) |
+            Where-Object { $_ -notmatch 'libcrypto-1_1-x64\.dll' } |
+            ForEach-Object { $_ -replace 'libgit2-1\.6\.2\.dll','libgit2.dll' } |
+            Set-Content $cm.FullName
+          Get-Content $cm.FullName | Select-String 'bundled_libraries' -Context 0,4
+
       - name: Generate code
         run: dart run build_runner build --delete-conflicting-outputs
 
@@ -87,6 +106,19 @@ jobs:
         run: flutter pub get
       - name: Generate code
         run: dart run build_runner build --delete-conflicting-outputs
+
+      # The build step must NOT require a "Mac Development" cert — the dedicated
+      # signing/notarize step below does the real Developer ID signing. Force
+      # ad-hoc ("-") manual signing with no team so the unsigned .app builds.
+      - name: Disable Xcode signing for the build step
+        run: |
+          set -euo pipefail
+          PBX=macos/Runner.xcodeproj/project.pbxproj
+          sed -i '' \
+            -e 's/CODE_SIGN_IDENTITY = "Apple Development";/CODE_SIGN_IDENTITY = "-";/g' \
+            -e 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' \
+            -e 's/DEVELOPMENT_TEAM = YBQ9BU6Q6F;/DEVELOPMENT_TEAM = "";/g' \
+            "$PBX"
 
       - name: Build macOS (release)
         run: flutter build macos --release --build-name=${{ env.APP_VERSION }} --build-number=${{ github.run_number }}
@@ -189,6 +221,19 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
+
+      # git2dart_binaries' linux/CMakeLists.txt bundles a versioned filename
+      # (libgit2-1.6.2.so) but the package actually ships libgit2.so, so the
+      # native build fails copying a non-existent file. Point it at the real name.
+      - name: Patch git2dart_binaries native lib name (Linux)
+        run: |
+          set -euo pipefail
+          CM="$(find "${PUB_CACHE:-$HOME/.pub-cache}" -path '*git2dart_binaries*/linux/CMakeLists.txt' 2>/dev/null | head -1)"
+          if [ -z "$CM" ]; then echo "git2dart_binaries linux/CMakeLists.txt not found" >&2; exit 1; fi
+          echo "Patching $CM"
+          sed -i 's#libgit2-1\.6\.2\.so#libgit2.so#g' "$CM"
+          grep -n -A4 bundled_libraries "$CM" || true
+
       - name: Generate code
         run: dart run build_runner build --delete-conflicting-outputs
 
