@@ -21,6 +21,7 @@ import 'package:nexus_projects_client/features/agents/agents_hub_view.dart';
 import 'package:nexus_projects_client/features/agents/persona_bulk_select.dart';
 import 'package:nexus_projects_client/features/agents/bulk_edit_personas_panel.dart';
 import 'package:nexus_projects_client/features/ai_providers/ai_providers_page.dart';
+import 'package:nexus_projects_client/features/ai_providers/providers/router_server_sync.dart';
 import 'package:nexus_projects_client/features/ai_providers/widgets/admin_console/admin_console_widget.dart';
 import 'package:nexus_projects_client/features/main/widgets/launch_center.dart';
 import 'package:nexus_projects_client/features/main/widgets/activity_center.dart';
@@ -108,6 +109,11 @@ class _MainShellState extends ConsumerState<MainShell> {
   Widget build(BuildContext context) {
     final currentView = ref.watch(currentMainViewProvider);
     final connectionMode = ref.watch(connectionModeNotifierProvider);
+
+    // Keep the built-in Nexus Router (subscription) server reconciled with the
+    // signed-in account for the whole session (materialize on login, remove on
+    // logout). Result is intentionally ignored; we just keep the provider alive.
+    ref.watch(routerServerSyncProvider);
 
     // Warm every page's data in the background as soon as the client/project is
     // known, so switching tabs shows cached data immediately instead of a blank

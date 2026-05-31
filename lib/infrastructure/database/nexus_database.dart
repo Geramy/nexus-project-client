@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
+import '../inference/routed_server.dart' show kRoutedProviderType;
 import '../models/database/tables/client.dart';
 import '../models/database/tables/project.dart';
 import '../models/database/tables/task.dart';
@@ -659,6 +660,73 @@ class NexusDatabase extends _$NexusDatabase {
 
   Future<int> deleteInferenceServer(int serverPk) {
     return (delete(inferenceServers)..where((s) => s.server_pk.equals(serverPk))).go();
+  }
+
+  /// Upserts the managed Nexus Router (subscription) server for a client. The
+  /// row is detected by its `routed` providerType; its apiKey is the account
+  /// token the gateway mints on login (which rotates), and [maxAgents] /
+  /// [maxConcurrency] come from the account's current subscription entitlements.
+  ///
+  /// Change-aware: when the row already matches, nothing is written, so the
+  /// periodic poll that calls this never churns the InferenceServers stream.
+  Future<void> upsertRoutedServer({
+    required int clientPk,
+    required String name,
+    required String baseUrl,
+    required String apiKey,
+    int? maxAgents,
+    int? maxConcurrency,
+  }) async {
+    final existing = await (select(inferenceServers)
+          ..where((s) =>
+              s.client_fk.equals(clientPk) &
+              s.providerType.equals(kRoutedProviderType)))
+        .get();
+    if (existing.isEmpty) {
+      await createInferenceServer(
+        InferenceServersCompanion.insert(
+          client_fk: clientPk,
+          name: name,
+          baseUrl: baseUrl,
+          apiKey: Value(apiKey),
+          providerType: const Value(kRoutedProviderType),
+          maxAgents: maxAgents == null ? const Value.absent() : Value(maxAgents),
+          maxConcurrency:
+              maxConcurrency == null ? const Value.absent() : Value(maxConcurrency),
+        ),
+      );
+      return;
+    }
+    final row = existing.first;
+    // Collapse any accidental duplicates so the list never shows two routers.
+    for (final extra in existing.skip(1)) {
+      await deleteInferenceServer(extra.server_pk);
+    }
+    final unchanged = row.name == name &&
+        row.baseUrl == baseUrl &&
+        row.apiKey == apiKey &&
+        (maxAgents == null || row.maxAgents == maxAgents) &&
+        (maxConcurrency == null || row.maxConcurrency == maxConcurrency);
+    if (unchanged) return;
+    await (update(inferenceServers)..where((s) => s.server_pk.equals(row.server_pk)))
+        .write(InferenceServersCompanion(
+      name: Value(name),
+      baseUrl: Value(baseUrl),
+      apiKey: Value(apiKey),
+      maxAgents: maxAgents == null ? const Value.absent() : Value(maxAgents),
+      maxConcurrency:
+          maxConcurrency == null ? const Value.absent() : Value(maxConcurrency),
+      updatedAt: Value(DateTime.now()),
+    ));
+  }
+
+  /// Removes the managed Nexus Router server(s) for a client (on sign-out).
+  Future<int> removeRoutedServersForClient(int clientPk) {
+    return (delete(inferenceServers)
+          ..where((s) =>
+              s.client_fk.equals(clientPk) &
+              s.providerType.equals(kRoutedProviderType)))
+        .go();
   }
 
   Future<void> updateInferenceServerSelectedModel(int serverPk, String? modelId) async {

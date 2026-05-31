@@ -21,6 +21,12 @@ InferenceBackend backendForServer(ui_model.InferenceServer server) {
     case 'lemonade':
       return LemonadeBackend(server);
 
+    // The Nexus Router subscription gateway is OpenAI-compatible and is reached
+    // through the same transport (ServerConfig maps api.nexus-projects.ai to
+    // /api/v1, which the Router proxy serves).
+    case 'routed':
+      return LemonadeBackend(server);
+
     default:
       throw UnimplementedError(
         'No backend implementation yet for providerType="$type". '

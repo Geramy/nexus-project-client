@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart';
 import 'package:nexus_projects_client/infrastructure/inference/inference_backend_factory.dart' show backendForServer;
+import 'package:nexus_projects_client/infrastructure/inference/routed_server.dart' show isRoutedProviderType;
 import 'package:nexus_projects_client/infrastructure/inference/inference_client.dart' show InferenceBackend;
 import 'package:nexus_projects_client/infrastructure/models/ui/inference_server.dart' as ui_server;
 import 'package:nexus_projects_client/infrastructure/workspace/workspace.dart';
@@ -617,7 +618,12 @@ class ProjectOrchestrator {
     final servers = await _db.getInferenceServersForClient(project.client_fk);
     if (servers.isEmpty) return null;
 
-    var chosen = servers.first;
+    // Default to the Nexus Router (subscription) server when present (signed in),
+    // else the first configured server. An explicit agent provider_fk wins.
+    var chosen = servers.firstWhere(
+      (s) => isRoutedProviderType(s.providerType),
+      orElse: () => servers.first,
+    );
     if (persona.provider_fk != null) {
       for (final s in servers) {
         if (s.server_pk == persona.provider_fk) {

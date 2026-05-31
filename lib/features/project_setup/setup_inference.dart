@@ -10,6 +10,8 @@ import '../../core/providers/database_provider.dart';
 import '../../infrastructure/inference/inference_backend.dart';
 import '../../infrastructure/inference/inference_backend_factory.dart'
     show backendForServer;
+import '../../infrastructure/inference/routed_server.dart'
+    show isRoutedProviderType;
 import '../../infrastructure/lemonade/services/persona_model_resolver.dart';
 import '../../infrastructure/models/ui/inference_server.dart' as ui_server;
 import '../../features/ai_providers/providers/ai_servers_cache_provider.dart';
@@ -54,7 +56,13 @@ final projectInferenceProvider = FutureProvider.family<ResolvedInference?,
     if (personaId != null) persona = await db.resolveAgentPersona(personaId);
   } catch (_) {}
 
-  var chosen = servers.first;
+  // Default to the Nexus Router (subscription) server when it exists — its
+  // presence means the user is signed in. An agent's explicit provider_fk still
+  // wins below.
+  var chosen = servers.firstWhere(
+    (s) => isRoutedProviderType(s.providerType),
+    orElse: () => servers.first,
+  );
   if (persona?.provider_fk != null) {
     for (final s in servers) {
       if (s.server_pk == persona.provider_fk) {

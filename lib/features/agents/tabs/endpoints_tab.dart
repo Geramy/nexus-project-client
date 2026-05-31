@@ -11,6 +11,7 @@ import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart' show InferenceServersCompanion;
 import 'package:nexus_projects_client/features/agents/dialogs/server_config_dialog.dart';
 import 'package:nexus_projects_client/infrastructure/models/ui/inference_server.dart' as ui_model;
+import 'package:nexus_projects_client/infrastructure/inference/routed_server.dart' show isRoutedProviderType;
 
 /// Endpoints (Inference Servers) tab with add/clone/edit flows.
 /// Extracted from the monolithic center_agents_view during organization refactor.
@@ -52,22 +53,53 @@ class EndpointsTab extends ConsumerWidget {
                   itemBuilder: (context, index) {
                     final s = servers[index];
                     final ui = _driftServerToUiModel(s);
+                    final isRouter = isRoutedProviderType(s.providerType);
                     return Card(
                       child: ListTile(
-                        leading: const Icon(Icons.dns_outlined),
-                        title: Text(s.name),
-                        subtitle: Text(s.baseUrl),
+                        leading: Icon(isRouter ? Icons.cloud_done_outlined : Icons.dns_outlined),
+                        title: Row(
+                          children: [
+                            Flexible(child: Text(s.name)),
+                            if (isRouter) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.primaryContainer,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  'Subscription',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        subtitle: Text(isRouter
+                            ? 'Managed by your Nexus account — used by default while signed in'
+                            : s.baseUrl),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            IconButton(
-                              icon: const Icon(Icons.copy),
-                              tooltip: 'Clone to another Client',
-                              onPressed: () => _showCloneServerDialog(context, ref, s, currentClientId),
-                            ),
+                            if (isRouter)
+                              const Tooltip(
+                                message: 'Provided by your subscription — cannot be removed while signed in',
+                                child: Icon(Icons.lock_outline, size: 18, color: Colors.grey),
+                              )
+                            else
+                              IconButton(
+                                icon: const Icon(Icons.copy),
+                                tooltip: 'Clone to another Client',
+                                onPressed: () => _showCloneServerDialog(context, ref, s, currentClientId),
+                              ),
                             IconButton(
                               icon: const Icon(Icons.edit),
-                              tooltip: 'Configure / Edit',
+                              tooltip: isRouter ? 'Pick model' : 'Configure / Edit',
                               onPressed: () => _editServerViaDialog(context, ref, ui, currentClientId),
                             ),
                           ],

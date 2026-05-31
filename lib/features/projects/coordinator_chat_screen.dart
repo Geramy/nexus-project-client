@@ -13,6 +13,7 @@ import 'package:nexus_projects_client/infrastructure/database/nexus_database.dar
     show ChatMessagesCompanion, ChatMessage, AgentPersona;
 // Backward-compat types (InferenceClient = InferenceBackend).
 import 'package:nexus_projects_client/infrastructure/inference/inference_backend_factory.dart' show backendForServer;
+import 'package:nexus_projects_client/infrastructure/inference/routed_server.dart' show isRoutedProviderType;
 import 'package:nexus_projects_client/infrastructure/inference/inference_client.dart';
 import 'package:nexus_projects_client/infrastructure/lemonade/api/types/model_info.dart';
 import 'package:nexus_projects_client/infrastructure/lemonade/services/persona_model_resolver.dart';
@@ -114,8 +115,13 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
         debugPrint('Coordinator: could not load project agent (non-fatal): $e');
       }
 
-      // Pick the server the agent is connected to (provider_fk); else the first.
-      var chosen = servers.first;
+      // Pick the server the agent is connected to (provider_fk); else default to
+      // the Nexus Router (subscription) server when present (i.e. signed in),
+      // else the first configured server.
+      var chosen = servers.firstWhere(
+        (s) => isRoutedProviderType(s.providerType),
+        orElse: () => servers.first,
+      );
       if (persona?.provider_fk != null) {
         for (final s in servers) {
           if (s.server_pk == persona!.provider_fk) {
