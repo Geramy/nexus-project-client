@@ -42,9 +42,38 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
+          name: Nexus Projects ${{ github.ref_name }}
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
+          # Marketing template first; `generate_release_notes` appends the
+          # auto-generated "What's Changed" changelog (commits/PRs) below it.
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: artifacts/**/*
+          body: |
+            ## Nexus Projects — the agentic project workspace
+
+            A production-grade desktop app where you plan, build, and ship complex
+            projects with an AI **Coordinator** at the center — talk to it by **text
+            or voice**, and it creates tasks, updates status, proposes plan changes,
+            and generates diagrams with full project context.
+
+            ### Highlights
+            - **Project Coordinator** — chat or hands-free voice (real Silero VAD with
+              end-of-speech detection + OS-level echo cancellation).
+            - **Living plans** — Markdown plans (Overview, Client, Server, Database)
+              shared as project-wide context for every layer.
+            - **Hierarchical tasks** — rich detail panel: Overview, Sub-Tasks, Git
+              Changes, Agent Work, and Builds & CI.
+            - **Agentic execution** — inference servers, personas, tool calling, and
+              live reactive updates throughout.
+            - **Strict multi-tenancy** — Client → Project scoping with full isolation.
+            - Streaming, tools, image generation, and audio (STT/TTS) out of the box.
+
+            ### Download
+            Pick the installer for your platform from **Assets** below:
+            - **Windows** — `.exe` installer
+            - **macOS** — `.pkg` (signed & notarized)
+            - **Linux** — `.deb` package or portable `.tar.gz`
+
+            ---
