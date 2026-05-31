@@ -8,6 +8,11 @@ import '../../core/agents/loop_guard.dart';
 import '../../infrastructure/inference/inference_backend.dart';
 import 'setup_tools.dart';
 
+/// Two stages of the setup host: the bounded multiple-choice [interview], and
+/// the post-finalize [refine] stage where plans exist and the user enriches
+/// them with free-text descriptions that the host folds into the plan files.
+enum SetupPhase { interview, refine }
+
 /// Drives the bounded Project Setup interview. The AI hosts the conversation and
 /// writes rationale, but every decision flows through [SetupTools]: it asks the
 /// user multiple-choice questions, verifies libraries against the registries,
@@ -30,6 +35,12 @@ class SetupSession {
 
   final List<Map<String, dynamic>> _history = [];
 
+  /// Which stage the host is in. Starts in [SetupPhase.interview]; flips to
+  /// [SetupPhase.refine] once `finalize_setup` has generated the plan files.
+  SetupPhase phase = SetupPhase.interview;
+
+  void enterRefinePhase() => phase = SetupPhase.refine;
+
   /// Detects when the interview agent gets stuck re-issuing the same tool call
   /// (e.g. re-asking the same question or re-proposing the same tags). Lives at
   /// session scope so it catches loops that span user turns, not just one turn.
@@ -40,7 +51,10 @@ class SetupSession {
   String get _effectiveModel =>
       model.trim().isEmpty ? 'default-coordinator' : model.trim();
 
-  String _systemPrompt() {
+  String _systemPrompt() =>
+      phase == SetupPhase.refine ? _refinePrompt() : _interviewPrompt();
+
+  String _interviewPrompt() {
     return '''
 You are the Project Setup host for the project "$projectName". Your job is to
 interview the user with SHORT, BOUNDED questions and build a structured project
@@ -90,6 +104,38 @@ Rules:
 ''';
   }
 
+  String _refinePrompt() {
+    return '''
+You are the Project Setup host for "$projectName", now in the REFINE stage. The
+plan files already exist as Markdown under /PLANS (an Overview plus one file per
+architectural layer, e.g. Client.md, Server.md, Database.md). Your job is to help
+the user flesh those plans out with detail, in their own words — this is open
+conversation, NOT a multiple-choice interview.
+
+How to work:
+- Invite the user to DESCRIBE the project in free text — start with the UI:
+  the key screens, layout, look & feel, and what each screen does. Then move to
+  backend behavior (API endpoints, business rules), then the data model. Ask one
+  open, specific prompt at a time; never give multiple-choice options.
+- When the user describes something, decide which plan file it belongs in:
+  • UI / screens / look & feel / navigation  → the client/UI layer plan.
+  • API / endpoints / services / auth / rules → the server plan.
+  • entities / tables / relationships / data  → the database plan.
+  • cross-cutting goals / scope / milestones  → Overview.
+  Use `list_plans` to see the files if unsure.
+- ALWAYS `read_plan` the target file first, then `update_plan` with the FULL new
+  Markdown that folds their description into the right section. Preserve the
+  existing headings and the `- [ ]` checkbox skeleton — ADD detail and new
+  checklist items; never delete what is already there. Edits apply immediately.
+- After each edit, tell the user in 1-2 sentences what you added and to which
+  plan (e.g. "Added a Dashboard + Settings screen spec to Client.md.").
+- When the plans look well fleshed out, let the user know they can keep going or
+  click "Done refining" to start turning the plans into tasks. Do not finalize
+  anything yourself — the user controls when refinement ends.
+- Keep spoken replies short and concrete. Be a collaborative product partner.
+''';
+  }
+
   /// Runs one user turn with an internal tool loop. Returns the assistant's
   /// final spoken text. The callbacks surface the live conversation so the UI
   /// can render it inline (mirroring the coordinator chat):
@@ -106,14 +152,18 @@ Rules:
   }) async {
     _history.add({'role': 'user', 'content': userMessage});
     final rollbackTo = _history.length - 1;
-    final tools = SetupTools.buildToolSchemas();
 
     try {
       for (var round = 0; round < maxToolRounds; round++) {
+        // Recompute per round: the system prompt and toolset both depend on the
+        // phase, which can flip to refine the moment finalize_setup runs.
         final messages = [
           {'role': 'system', 'content': _systemPrompt()},
           ..._history,
         ];
+        final tools = phase == SetupPhase.refine
+            ? SetupTools.buildRefineToolSchemas()
+            : SetupTools.buildToolSchemas();
 
         final resp = await client.createChatCompletion(
           model: _effectiveModel,
@@ -178,6 +228,11 @@ Rules:
 
           final result = await executor.execute(call.function.name, args);
           onToolResult?.call(call.function.name, result);
+          // Generating the plans flips the host into the refine stage so the
+          // rest of this turn (and the next) uses the plan-editing toolset.
+          if (call.function.name == 'finalize_setup') {
+            phase = SetupPhase.refine;
+          }
           final body = action == LoopAction.warn
               ? '$result\n\n${_loopGuard.feedback(call.function.name, action)}'
               : result;

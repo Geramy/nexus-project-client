@@ -163,7 +163,14 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
               onEnd: _toggleCall,
             ),
           const Divider(height: 1),
-          _Composer(controller: _input, busy: controller.busy, onSend: _send),
+          _Composer(
+            controller: _input,
+            busy: controller.busy,
+            onSend: _send,
+            hintText: controller.refining
+                ? 'Describe your UI, screens, behavior, data…'
+                : 'Tell the setup host about your project…',
+          ),
         ],
       ),
     );
@@ -495,11 +502,13 @@ class _Composer extends StatelessWidget {
     required this.controller,
     required this.busy,
     required this.onSend,
+    required this.hintText,
   });
 
   final TextEditingController controller;
   final bool busy;
   final VoidCallback onSend;
+  final String hintText;
 
   @override
   Widget build(BuildContext context) {
@@ -513,9 +522,9 @@ class _Composer extends StatelessWidget {
               enabled: !busy,
               minLines: 1,
               maxLines: 3,
-              decoration: const InputDecoration(
-                hintText: 'Tell the setup host about your project…',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                hintText: hintText,
+                border: const OutlineInputBorder(),
                 isDense: true,
               ),
               onSubmitted: (_) => onSend(),

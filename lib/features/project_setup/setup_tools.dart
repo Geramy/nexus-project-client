@@ -133,6 +133,71 @@ class SetupTools {
       },
     ];
   }
+
+  /// The toolset for the post-finalize REFINE phase. The plans already exist as
+  /// `/PLANS/*.md` files; here the host enriches them from the user's free-text
+  /// descriptions. It can list the plans, read one, and overwrite one with an
+  /// expanded version (edits apply directly).
+  static List<Map<String, dynamic>> buildRefineToolSchemas() {
+    return [
+      {
+        'type': 'function',
+        'function': {
+          'name': 'list_plans',
+          'description':
+              'List the generated plan files under /PLANS (path + name) so you '
+                  'can decide which one a piece of detail belongs in.',
+          'parameters': {'type': 'object', 'properties': {}},
+        },
+      },
+      {
+        'type': 'function',
+        'function': {
+          'name': 'read_plan',
+          'description':
+              'Read the full Markdown of one plan file. ALWAYS read a plan '
+                  'before updating it so you preserve its existing content.',
+          'parameters': {
+            'type': 'object',
+            'properties': {
+              'path': {
+                'type': 'string',
+                'description': 'Full workspace path, e.g. /PLANS/Client.md.',
+              },
+            },
+            'required': ['path'],
+          },
+        },
+      },
+      {
+        'type': 'function',
+        'function': {
+          'name': 'update_plan',
+          'description':
+              'Overwrite a plan file with an expanded version that folds the '
+                  "user's description into the right section. Preserve the "
+                  'existing headings and checkbox skeleton — ADD detail, never '
+                  'delete what is there. The change is applied immediately.',
+          'parameters': {
+            'type': 'object',
+            'properties': {
+              'path': {
+                'type': 'string',
+                'description': 'Full workspace path under /PLANS to overwrite.',
+              },
+              'content': {
+                'type': 'string',
+                'description':
+                    'The complete new Markdown for the file (existing content '
+                        'plus your additions).',
+              },
+            },
+            'required': ['path', 'content'],
+          },
+        },
+      },
+    ];
+  }
 }
 
 /// Executes the bounded setup tools against the live DB + registries.
@@ -143,6 +208,7 @@ class SetupToolExecutor {
     required this.verification,
     required this.planStore,
     this.askQuestion,
+    this.onPlansChanged,
   });
 
   final NexusDatabase db;
@@ -152,6 +218,10 @@ class SetupToolExecutor {
   /// Resolved plan store for the project workspace; null disables finalize's
   /// file generation (the resolver still runs and the status is set).
   final PlanStore? planStore;
+
+  /// Called after a refine-phase plan edit writes a file, so the UI can re-walk
+  /// the /PLANS tree (the Plan explorer + open Plan tab refresh).
+  final void Function()? onPlansChanged;
 
   /// UI hook: presents [question] with [options] and returns the user's
   /// selection(s). When null, ask_question reports that input isn't available.
@@ -169,6 +239,12 @@ class SetupToolExecutor {
         return _propose(args);
       case 'finalize_setup':
         return _finalize();
+      case 'list_plans':
+        return _listPlans();
+      case 'read_plan':
+        return _readPlan(args);
+      case 'update_plan':
+        return _updatePlan(args);
       default:
         return 'Unknown setup tool "$name".';
     }
@@ -306,12 +382,54 @@ class SetupToolExecutor {
     if (planStore != null) {
       generated = await PlanGenerator(planStore!).generate(uiTags);
     }
-    await db.setProjectSetupStatus(projectPk, 'complete');
+    // Enter the REFINE phase rather than completing outright: the plans now
+    // exist, but the user keeps fleshing them out in Setup before tasks.
+    await db.setProjectSetupStatus(projectPk, 'refining');
 
     return generated.isEmpty
         ? 'Setup finalized. (No workspace available to write plan files.)'
         : 'Setup finalized. Generated: ${generated.join(', ')}.';
   }
+
+  Future<String> _listPlans() async {
+    if (planStore == null) return 'No workspace available — no plans to list.';
+    final nodes = await planStore!.list();
+    final docs = nodes.where((n) => !n.isFolder).toList();
+    if (docs.isEmpty) return 'No plan files exist yet.';
+    return 'Plans:\n${docs.map((n) => '- ${n.path}').join('\n')}';
+  }
+
+  Future<String> _readPlan(Map<String, dynamic> args) async {
+    if (planStore == null) return 'No workspace available.';
+    final path = (args['path'] ?? '').toString().trim();
+    if (!_isPlanPath(path)) return 'Path must be a file under /PLANS.';
+    try {
+      final content = await planStore!.read(path);
+      return content.isEmpty ? '(empty file)' : content;
+    } catch (e) {
+      return 'Could not read $path: $e';
+    }
+  }
+
+  Future<String> _updatePlan(Map<String, dynamic> args) async {
+    if (planStore == null) return 'No workspace available — cannot edit plans.';
+    final path = (args['path'] ?? '').toString().trim();
+    final content = (args['content'] ?? '').toString();
+    if (!_isPlanPath(path)) return 'Path must be a file under /PLANS.';
+    if (content.trim().isEmpty) return 'Refusing to write empty content.';
+    try {
+      await planStore!.write(path, content);
+      onPlansChanged?.call();
+      final name = path.split('/').last;
+      return 'Updated $name.';
+    } catch (e) {
+      return 'Could not update $path: $e';
+    }
+  }
+
+  /// Guards plan tools to real documents under /PLANS (no traversal/escapes).
+  static bool _isPlanPath(String path) =>
+      path.startsWith('$plansRoot/') && !path.contains('..');
 
   static String _d(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
