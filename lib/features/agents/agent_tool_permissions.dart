@@ -69,6 +69,7 @@ const List<ToolSpec> kCoordinatorToolSpecs = [
   ToolSpec('rename_plan', 'Plans', 'Rename plan', ToolPerm.grant),
   ToolSpec('delete_plan', 'Plans', 'Delete plan / folder', ToolPerm.ask, destructive: true),
   ToolSpec('propose_plan_adjustment', 'Plans', 'Propose plan adjustment', ToolPerm.grant),
+  ToolSpec('sync_plans_to_tasks', 'Plans', 'Sync plans → tasks', ToolPerm.grant),
   // Files
   ToolSpec('list_files', 'Files', 'List workspace files', ToolPerm.grant),
   ToolSpec('read_file', 'Files', 'Read file', ToolPerm.grant),

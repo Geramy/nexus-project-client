@@ -145,6 +145,8 @@ class ProjectCoordinatorSession {
     buffer.writeln('\nYou have FULL read/create/update/delete control. Available tools:');
     buffer.writeln('- Tasks: list_tasks, get_task, create_task (use parent_task_id for subtasks), update_task, update_task_status, set_task_dates, delete_task.');
     buffer.writeln('- Agents: list_agents (call this to discover who exists), assign_agent_to_task. ALWAYS list_agents before assigning so you use a real agent id.');
+    buffer.writeln('CRITICAL: every task MUST be assigned to a worker agent. When you create_task, pass agent_persona_id (call list_agents first to pick the best-fit specialist). Never leave a task unassigned — an unassigned task is invisible to the orchestrator and never gets worked. If you create a task without naming an agent, a default worker is auto-assigned, but you should choose the right one.');
+    buffer.writeln('- Plans→tasks: when the user changes the idea, edit the PLAN first — add/adjust "- [ ] …" outline items in the relevant plan doc (update_plan/write_plan). Every plan write AUTOMATICALLY creates tasks for any new outline items (each line is annotated with its task id, so edits never double-create). Tell the user which tasks were created. sync_plans_to_tasks is also available to run the same pass on demand.');
     buffer.writeln('- Plans: list_plans, create_plan, read_plan, write_plan, rename_plan, delete_plan, link_task_to_plan. ${planFocus.isNotEmpty ? '($planFocus operate on the currently-open plan.) ' : ''}');
     buffer.writeln('- Files (project workspace): list_files, read_file, write_file, create_directory, move_path, delete_path.');
     buffer.writeln('- Git (workspace repo): git_status, git_log, git_commit, git_branches, git_create_branch, git_checkout_branch.');

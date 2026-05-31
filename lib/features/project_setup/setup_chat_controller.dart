@@ -16,6 +16,7 @@ import '../../services/audio/coordinator_duplex_voice_session.dart' show VoiceSt
 import '../../services/audio/setup_voice_session.dart';
 import '../../services/audio/tts_service.dart';
 import '../project_plans/plan_store.dart';
+import 'plan_task_sync.dart';
 import 'setup_inference.dart';
 import 'setup_session.dart';
 import 'setup_tools.dart';
@@ -60,6 +61,11 @@ class SetupChatController extends ChangeNotifier {
   bool busy = false;
   String? error;
 
+  /// True once the plans have been generated and the host is helping the user
+  /// flesh them out (free-text). Drives the Setup tab's action bar (Finalize →
+  /// Done refining) and the composer hint.
+  bool refining = false;
+
   SetupSession? _session;
   bool _restored = false;
 
@@ -88,6 +94,8 @@ class SetupChatController extends ChangeNotifier {
     try {
       final project =
           await _ref.read(nexusDatabaseProvider).getProjectById(projectId);
+      // Reopening a project that was mid-refinement resumes that stage.
+      if (project?.setupStatus == 'refining') refining = true;
       final raw = project?.setupTranscriptJson;
       if (raw == null || raw.isEmpty) return;
       final turns = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
@@ -126,6 +134,7 @@ class SetupChatController extends ChangeNotifier {
       verification: _ref.read(verificationServiceProvider),
       planStore: planStore,
       askQuestion: _askQuestion,
+      onPlansChanged: _bumpWorkspace,
     );
     _session = SetupSession(
       client: resolved.backend,
@@ -133,7 +142,15 @@ class SetupChatController extends ChangeNotifier {
       projectName: 'Project',
       executor: executor,
     );
+    // If we resumed into refinement (or already finalized), start in refine.
+    if (refining) _session!.enterRefinePhase();
     return _session;
+  }
+
+  /// Re-walks the project's /PLANS tree so the explorer + open Plan tab reflect
+  /// freshly generated or edited plan files.
+  void _bumpWorkspace() {
+    _ref.read(workspaceRevisionProvider(projectId).notifier).state++;
   }
 
   /// Presents a bounded question inline and returns the user's pick(s). The
@@ -210,6 +227,10 @@ class SetupChatController extends ChangeNotifier {
       await _ref
           .read(nexusDatabaseProvider)
           .setProjectSetupTranscript(projectId, session.toTranscriptJson());
+      // The host may finalize on its own during a turn; surface the refine UI.
+      if (!refining && session.phase == SetupPhase.refine) {
+        _enterRefineUi();
+      }
       if (reply.trim().isEmpty &&
           (messages.isEmpty || messages.last.kind != SetupMsgKind.assistant)) {
         _append(SetupMsg(
@@ -223,8 +244,9 @@ class SetupChatController extends ChangeNotifier {
     }
   }
 
-  /// Runs finalize_setup, bumps the workspace revision so the Plan explorer
-  /// re-walks, and returns the human-readable result for a snackbar.
+  /// Generates the plan files, bumps the workspace revision so the Plan explorer
+  /// re-walks, and enters the REFINE stage (the host now helps flesh the plans
+  /// out). Returns the human-readable result for a snackbar.
   Future<String> finalize() async {
     busy = true;
     error = null;
@@ -239,7 +261,10 @@ class SetupChatController extends ChangeNotifier {
         planStore: planStore,
       );
       final result = await executor.execute('finalize_setup', const {});
-      _ref.read(workspaceRevisionProvider(projectId).notifier).state++;
+      _bumpWorkspace();
+      // Flip the live session (if any) and surface the refine guidance.
+      (await _ensureSession())?.enterRefinePhase();
+      _enterRefineUi();
       return result;
     } catch (e) {
       error = 'Finalize failed: $e';
@@ -248,6 +273,53 @@ class SetupChatController extends ChangeNotifier {
       busy = false;
       notifyListeners();
     }
+  }
+
+  /// Posts the in-chat hand-off message that kicks off refinement and flips the
+  /// action bar to "Done refining". Idempotent — safe to call from either the
+  /// button path or when the host finalizes on its own.
+  void _enterRefineUi() {
+    if (refining) return;
+    refining = true;
+    _append(SetupMsg(
+      kind: SetupMsgKind.assistant,
+      text: 'Your plans are generated — check the Plan tab to see them. '
+          "Now let's flesh them out. Tell me how you picture the UI: the key "
+          'screens, how they\'re laid out, and what each one does. I\'ll fold '
+          'your descriptions into the right plan. When you\'re happy, hit '
+          '"Done refining" to start turning the plans into tasks.',
+    ));
+    notifyListeners();
+  }
+
+  /// Ends refinement: turns every plan outline item into a task (idempotently —
+  /// see [PlanTaskSync]), marks setup `complete`, and drops the user onto the
+  /// Chat tab where the coordinator can keep refining the breakdown.
+  Future<void> completeSetup() async {
+    refining = false;
+    final db = _ref.read(nexusDatabaseProvider);
+    try {
+      final planStore = await _ref.read(planStoreProvider(projectId).future);
+      final result = await PlanTaskSync(
+        db: db,
+        planStore: planStore,
+        projectId: projectId,
+      ).sync();
+      _bumpWorkspace();
+      _append(SetupMsg(
+        kind: SetupMsgKind.assistant,
+        text: '${result.describe()} You can keep refining the breakdown with '
+            'the coordinator in the Chat tab.',
+      ));
+    } catch (e) {
+      _append(SetupMsg(
+        kind: SetupMsgKind.system,
+        text: 'Could not auto-generate tasks from the plans ($e). You can ask '
+            'the coordinator to create them in the Chat tab.',
+      ));
+    }
+    await db.setProjectSetupStatus(projectId, 'complete');
+    notifyListeners();
   }
 
   Future<void> skip() async {
@@ -374,9 +446,20 @@ class SetupChatController extends ChangeNotifier {
         return 'Proposing tags: $names';
       case 'finalize_setup':
         return 'Finalizing setup & generating plans…';
+      case 'list_plans':
+        return 'Looking over the plan files…';
+      case 'read_plan':
+        return 'Reading ${_planName(args['path'])}…';
+      case 'update_plan':
+        return 'Updating ${_planName(args['path'])}…';
       default:
         return 'Running $name…';
     }
+  }
+
+  static String _planName(Object? path) {
+    final s = path?.toString() ?? '';
+    return s.isEmpty ? 'a plan' : s.split('/').last;
   }
 }
 

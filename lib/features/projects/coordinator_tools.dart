@@ -9,7 +9,9 @@ import 'package:nexus_projects_client/infrastructure/database/nexus_database.dar
 // Backward-compat types (InferenceClient = InferenceBackend).
 import 'package:nexus_projects_client/infrastructure/inference/inference_backend.dart';
 import 'package:nexus_projects_client/features/agents/agent_tool_permissions.dart';
+import 'package:nexus_projects_client/features/projects/agent_assignment.dart';
 import 'package:nexus_projects_client/features/project_plans/plan_store.dart';
+import 'package:nexus_projects_client/features/project_setup/plan_task_sync.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/workspace.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/git/nxtprj_git_engine.dart';
 import 'package:nexus_projects_client/infrastructure/build/build_service.dart';
@@ -57,7 +59,7 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'create_task',
-          'description': 'Create a new task (or subtask) in the current project. Use when the user asks to add work, break down a plan, or capture an action item.',
+          'description': 'Create a new task (or subtask) in the current project. Use when the user asks to add work, break down a plan, or capture an action item. Every task MUST end up assigned to a worker agent: pass agent_persona_id with the best-fit specialist (call list_agents first to get real ids). If you omit it, a default worker is auto-assigned so the task is never left unassigned.',
           'parameters': {
             'type': 'object',
             'properties': {
@@ -65,6 +67,7 @@ class CoordinatorTools {
               'description': {'type': 'string', 'description': 'Optional details or acceptance criteria'},
               'parent_task_id': {'type': 'string', 'description': 'Optional parent task id to create this as a subtask'},
               'priority': {'type': 'string', 'enum': ['HIGH', 'MED', 'LOW'], 'description': 'Priority level'},
+              'agent_persona_id': {'type': 'string', 'description': 'Worker persona id to assign. Strongly preferred — call list_agents first. If omitted, a default worker is auto-assigned.'},
             },
             'required': ['title'],
           },
@@ -164,6 +167,17 @@ class CoordinatorTools {
         'function': {
           'name': 'view_current_plan',
           'description': 'Retrieve the current high-level plan context for the project.',
+          'parameters': {
+            'type': 'object',
+            'properties': {},
+          },
+        },
+      },
+      {
+        'type': 'function',
+        'function': {
+          'name': 'sync_plans_to_tasks',
+          'description': 'Scan every plan document under /PLANS and create a task for each unchecked outline item ("- [ ] …") that does not already have one. Each plan item is annotated with its task id so re-running never creates duplicates. New tasks are auto-assigned to a worker. Call this to turn the plans into the task board (it runs automatically when setup completes, but you can re-run it after editing plans).',
           'parameters': {
             'type': 'object',
             'properties': {},
@@ -913,6 +927,8 @@ class CoordinatorToolExecutor {
           return await _listOpenTasks();
         case 'view_current_plan':
           return await _viewCurrentPlan();
+        case 'sync_plans_to_tasks':
+          return await _syncPlansToTasks();
         case 'assign_agent_to_task':
           return await _assignAgentToTask(args);
         case 'set_task_dates':
@@ -1033,6 +1049,18 @@ class CoordinatorToolExecutor {
     final parentId = _asInt(args['parent_task_id']);
     final priority = args['priority'] as String? ?? 'MED';
 
+    // A task is never left unassigned: use the persona the coordinator named if
+    // it resolves, otherwise fall back to the project's default worker. An
+    // unassigned task is skipped forever by the orchestrator, so this guarantee
+    // is load-bearing, not cosmetic.
+    final requested = _asInt(args['agent_persona_id']);
+    int? assignee;
+    if (requested != null && await db.resolveAgentPersona(requested) != null) {
+      assignee = requested;
+    } else {
+      assignee = await resolveDefaultWorkerPersonaId(db, projectId);
+    }
+
     final newId = await db.createTaskInProject(
       projectPk: projectId,
       title: title,
@@ -1041,9 +1069,17 @@ class CoordinatorToolExecutor {
       parentPk: parentId,
       planPath: openPlanPath,
       chatSessionPk: chatSessionPk,
+      agentPk: assignee,
     );
 
-    return 'Created task "$title" (id: $newId). It is now visible in the project task list.';
+    if (assignee == null) {
+      return 'Created task "$title" (id: $newId), but NO agent persona exists to '
+          'assign it to — create a worker agent in the Agents hub so it can be '
+          'picked up.';
+    }
+    final persona = await db.resolveAgentPersona(assignee);
+    final who = persona?.name ?? 'agent #$assignee';
+    return 'Created task "$title" (id: $newId), assigned to "$who".';
   }
 
   Future<String> _updateTaskStatus(Map<String, dynamic> args) async {
@@ -1134,6 +1170,39 @@ class CoordinatorToolExecutor {
     }
     if (tasks.length > 20) b.writeln('... and ${tasks.length - 20} more.');
     return b.toString().trim();
+  }
+
+  Future<String> _syncPlansToTasks() async {
+    if (planStore == null) {
+      return 'Plan storage is unavailable in this context, so plans can\'t be '
+          'synced to tasks.';
+    }
+    final result = await PlanTaskSync(
+      db: db,
+      planStore: planStore!,
+      projectId: projectId,
+      chatSessionPk: chatSessionPk,
+    ).sync();
+    return result.describe();
+  }
+
+  /// Runs the idempotent plan→task sync after a plan write so any new outline
+  /// items become tasks immediately (existing ones are marker-skipped, so this
+  /// never double-creates). Returns a short suffix to append to the tool result,
+  /// or '' when nothing new was created. Best-effort: never throws.
+  Future<String> _autoSyncAfterPlanWrite() async {
+    if (planStore == null) return '';
+    try {
+      final result = await PlanTaskSync(
+        db: db,
+        planStore: planStore!,
+        projectId: projectId,
+        chatSessionPk: chatSessionPk,
+      ).sync();
+      return result.created == 0 ? '' : ' ${result.describe()}';
+    } catch (_) {
+      return '';
+    }
   }
 
   Future<String> _assignAgentToTask(Map<String, dynamic> args) async {
@@ -1236,7 +1305,8 @@ class CoordinatorToolExecutor {
     final content = args['content'] as String?;
     if (content == null) return 'update_plan failed: content is required.';
     await planStore!.write(openPlanPath!, content);
-    return 'Updated the plan "${_basename(openPlanPath!)}". The new version is saved.';
+    final synced = await _autoSyncAfterPlanWrite();
+    return 'Updated the plan "${_basename(openPlanPath!)}". The new version is saved.$synced';
   }
 
   String _proposePlanAdjustment(Map<String, dynamic> args) {
@@ -1362,7 +1432,8 @@ class CoordinatorToolExecutor {
     final parent = (parentRaw is String && parentRaw.trim().isNotEmpty) ? parentRaw.trim() : null;
     final content = args['content'] as String? ?? '';
     final path = await planStore!.create(parent: parent, name: name, isFolder: isFolder, content: content);
-    return 'Created ${isFolder ? 'folder' : 'plan'} "$name" (path: $path).';
+    final synced = isFolder ? '' : await _autoSyncAfterPlanWrite();
+    return 'Created ${isFolder ? 'folder' : 'plan'} "$name" (path: $path).$synced';
   }
 
   Future<String> _readPlan(Map<String, dynamic> args) async {
@@ -1386,7 +1457,8 @@ class CoordinatorToolExecutor {
     final content = args['content'] as String?;
     if (path.isEmpty || content == null) return 'write_plan failed: plan_path and content required.';
     await planStore!.write(path, content);
-    return 'Updated plan "${_basename(path)}" (path: $path). The new version is saved.';
+    final synced = await _autoSyncAfterPlanWrite();
+    return 'Updated plan "${_basename(path)}" (path: $path). The new version is saved.$synced';
   }
 
   Future<String> _renamePlan(Map<String, dynamic> args) async {
