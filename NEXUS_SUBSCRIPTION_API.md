@@ -59,8 +59,8 @@ All paths are relative to `<base>/api/v1`. Content-Type and Accept are
 
 | Method | Path | Auth | Request body | Response |
 |--------|------|------|--------------|----------|
-| POST | `/auth/register` | No | `{ "client_name", "email", "password" }` | `AuthResult` |
-| POST | `/auth/login` | No | `{ "email", "password" }` | `AuthResult` |
+| POST | `/auth/register` | No | `{ "client_name", "email", "password", "device_id"?, "device_name"?, "app_name"? }` | `AuthResult` |
+| POST | `/auth/login` | No | `{ "email", "password", "device_id"?, "device_name"?, "app_name"? }` | `AuthResult` |
 | GET | `/plans` | No | — | `PlanCatalog` |
 | GET | `/account` | Yes | — | `AccountSummary` |
 | GET | `/usage` | Yes | — | `UsageSnapshot` |
@@ -75,6 +75,14 @@ Notes:
   (see §6), not via a callback.
 - `/usage/agents?days=<N>` windows the per-agent cost scan; omit `days` to get
   the current billing period.
+- **Multi-device sign-in (`device_id` / `device_name` / `app_name`, all optional):**
+  send a stable per-device id and the minted token is scoped to that device.
+  Signing in on a new device mints an independent token and does **not** revoke
+  other devices' tokens, so several devices stay signed in at once. Re-signing
+  in on the **same** `device_id` with the same `app_name` revokes that device's
+  previous token and mints a fresh one. `device_name` ("Geramy's iPhone") and
+  `app_name` ("Omni AI Chat") are stored for display. Omit `device_id` entirely
+  to keep the legacy behavior (one shared token per user, rotated each sign-in).
 
 ---
 
