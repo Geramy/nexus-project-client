@@ -11,6 +11,7 @@ import '../call_system_editor.dart';
 import '../call_system_providers.dart';
 import '../model/call_node.dart';
 import 'call_flow_canvas.dart';
+import 'export_dialog.dart';
 import 'node_visuals.dart';
 
 /// Builder's Regular(false)/Advanced(true) toggle — gates the node palette.
@@ -58,6 +59,12 @@ class CallFlowWorkspace extends ConsumerWidget {
                 onChanged: (v) => ref
                     .read(callBuilderAdvancedProvider(projectId).notifier)
                     .state = v,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              OutlinedButton.icon(
+                onPressed: () => showCallExportDialog(context, project),
+                icon: const Icon(Icons.ios_share, size: 18),
+                label: const Text('Export'),
               ),
               const SizedBox(width: AppSpacing.sm),
               PopupMenuButton<CallNodeType>(
