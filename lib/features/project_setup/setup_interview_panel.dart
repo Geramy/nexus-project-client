@@ -9,6 +9,7 @@ import '../../services/audio/audio_recorder_service.dart';
 import '../../services/audio/coordinator_duplex_voice_session.dart'
     show VoiceState;
 import '../../widgets/live_mic_visualizer.dart';
+import '../../shared/ui/chat_markdown.dart';
 import 'setup_chat_controller.dart';
 
 /// The Project Setup interview, rendered as a chat in the MainShell right outer
@@ -286,7 +287,11 @@ class _Bubble extends StatelessWidget {
               : theme.colorScheme.surfaceContainer,
           borderRadius: BorderRadius.circular(12),
         ),
-        child: SelectableText(text, style: const TextStyle(fontSize: 14)),
+        // The interviewer's replies render as Markdown (lists, **bold**, code);
+        // the user's own typed/spoken text stays plain.
+        child: isUser
+            ? SelectableText(text, style: const TextStyle(fontSize: 14))
+            : ChatMarkdown(text),
       ),
     );
   }

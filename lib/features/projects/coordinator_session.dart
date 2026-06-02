@@ -328,7 +328,10 @@ class ProjectCoordinatorSession {
           }
 
           final result = await executor.execute(name: call.function.name, args: args);
-          onToolResult?.call(result);
+          // Show only a short summary in the chat — big payloads (a whole plan or
+          // file the model read) shouldn't flood the transcript. The MODEL still
+          // receives the full result via `body`/history below.
+          onToolResult?.call(_summarizeToolResult(result));
           final body = action == LoopAction.warn
               ? '$result\n\n${_loopGuard.feedback(call.function.name, action)}'
               : result;
@@ -348,6 +351,23 @@ class ProjectCoordinatorSession {
 
     // Hit the round cap — finish gracefully.
     yield const ChatStreamFinish(finishReason: 'length', toolCalls: [], contentSoFar: '');
+  }
+
+  /// A short, UI-friendly version of a tool result so large payloads (e.g. an
+  /// entire plan/file the model read) don't flood the chat transcript. The model
+  /// still gets the full result in history; only the on-screen note is summarized.
+  static String _summarizeToolResult(String result) {
+    final trimmed = result.trim();
+    const cap = 200;
+    final lineCount = '\n'.allMatches(trimmed).length + 1;
+    // Short single-line results are already their own summary — show as-is.
+    if (trimmed.length <= cap && lineCount == 1) return trimmed;
+    final firstLine = trimmed.split('\n').first.trim();
+    final head = firstLine.length > cap
+        ? '${firstLine.substring(0, cap).trimRight()}…'
+        : firstLine;
+    final more = lineCount - 1;
+    return more > 0 ? '$head  (+$more more line${more == 1 ? '' : 's'})' : '$head…';
   }
 
   /// Repairs a message list for the wire. Failed turns can leave a run of

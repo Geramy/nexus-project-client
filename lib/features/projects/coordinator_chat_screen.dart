@@ -33,6 +33,7 @@ import 'package:nexus_projects_client/core/providers/app_shell_provider.dart';
 import 'package:nexus_projects_client/services/audio/audio_recorder_service.dart';
 import 'package:nexus_projects_client/services/audio/tts_service.dart';
 import 'package:nexus_projects_client/features/agents/thinking_mode.dart';
+import 'package:nexus_projects_client/shared/ui/chat_markdown.dart';
 import 'package:nexus_projects_client/services/audio/coordinator_duplex_voice_session.dart';
 import 'package:nexus_projects_client/widgets/live_mic_visualizer.dart';
 
@@ -727,13 +728,18 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        SelectableText(
-                          msg.text,
-                          style: TextStyle(
-                            fontStyle: isSystem ? FontStyle.italic : FontStyle.normal,
-                            fontSize: isSystem ? 13 : 14,
+                        // Assistant replies render as Markdown (code blocks, lists,
+                        // **bold**, etc.); user text and system notes stay plain.
+                        if (!msg.isUser && !isSystem)
+                          ChatMarkdown(msg.text)
+                        else
+                          SelectableText(
+                            msg.text,
+                            style: TextStyle(
+                              fontStyle: isSystem ? FontStyle.italic : FontStyle.normal,
+                              fontSize: isSystem ? 13 : 14,
+                            ),
                           ),
-                        ),
                         if (msg.audioPath != null)
                           Padding(
                             padding: const EdgeInsets.only(top: 6),

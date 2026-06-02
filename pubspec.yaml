@@ -87,6 +87,7 @@ dependencies:
   flutter_code_editor: ^0.3.5
   flutter_highlight: ^0.7.0
   highlight: ^0.7.0
+  gpt_markdown: ^1.1.7
 
 # No more record_platform_interface override — we now use the modern record 6.x
 # stack that lemonade_mobile successfully uses on macOS. If macOS debug builds
