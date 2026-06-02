@@ -36,7 +36,7 @@ class WorkspaceTagObserver {
 
     for (final o in found) {
       await controller.upsert(ProjectTag(
-        category: o.category,
+        category: o.category.wire,
         value: o.value,
         source: TagSource.workspace,
         origin: 'workspace',

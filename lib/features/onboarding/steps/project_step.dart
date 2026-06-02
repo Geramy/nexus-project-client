@@ -2,6 +2,7 @@
 // Author: Geramy Loveless <support@nexus-projects.ai>
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -10,7 +11,8 @@ import '../../../core/providers/database_provider.dart';
 import '../../../infrastructure/database/nexus_database.dart'
     show ProjectsCompanion;
 import '../../agents/packs/agent_pack_catalog.dart';
-import '../widgets/pack_selector.dart';
+import '../../projects/types/project_type.dart';
+import '../../projects/types/project_type_selector.dart';
 import '../../../shared/ui/nexus_ui.dart';
 
 /// Step 4 — name the first project and pick the agent pack(s) to provision into
@@ -21,7 +23,7 @@ class ProjectStep extends ConsumerStatefulWidget {
     required this.onCreated,
     this.headline = 'Create your first project',
     this.subhead =
-        'Name it and choose the team of agents to set up. You can change both later.',
+        'Name it and choose the project type. You can change both later.',
     this.defaultName = 'My First Project',
   });
 
@@ -41,7 +43,8 @@ class ProjectStep extends ConsumerStatefulWidget {
 class _ProjectStepState extends ConsumerState<ProjectStep> {
   late final TextEditingController _name =
       TextEditingController(text: widget.defaultName);
-  Set<String> _packs = {kDefaultAgentPackKey};
+  String _typeKey = kDefaultProjectTypeKey;
+  String? _subKey;
   bool _creating = false;
 
   @override
@@ -57,12 +60,19 @@ class _ProjectStepState extends ConsumerState<ProjectStep> {
     try {
       final clientId = ref.read(currentClientIdProvider);
       final db = ref.read(nexusDatabaseProvider);
+      final type = projectTypeByKey(_typeKey);
       final projectId = await db.createProject(
-        ProjectsCompanion.insert(client_fk: clientId, name: name),
+        ProjectsCompanion.insert(
+          client_fk: clientId,
+          name: name,
+          projectType: Value(type.key),
+          subCategory: Value(_subKey),
+        ),
       );
-      // Provision the chosen pack(s) into the client (dedupes against any
-      // already-seeded agents).
-      await db.provisionAgentPack(clientId, agentsForPackKeys(_packs));
+      // Provision the type's default agent pack(s) into the client (dedupes
+      // against any already-seeded agents).
+      await db.provisionAgentPack(
+          clientId, agentsForPackKeys(type.defaultAgentPackKeys));
       ref.read(currentProjectIdProvider.notifier).selectProject(projectId);
       if (mounted) widget.onCreated();
     } finally {
@@ -96,12 +106,14 @@ class _ProjectStepState extends ConsumerState<ProjectStep> {
         Gap.lg,
         Align(
           alignment: Alignment.centerLeft,
-          child: Text('Agent packs', style: theme.textTheme.titleSmall),
+          child: Text('Project type', style: theme.textTheme.titleSmall),
         ),
         Gap.sm,
-        PackSelector(
-          selected: _packs,
-          onChanged: (next) => setState(() => _packs = next),
+        ProjectTypeSelector(
+          selectedTypeKey: _typeKey,
+          selectedSubKey: _subKey,
+          onTypeChanged: (k) => setState(() => _typeKey = k),
+          onSubChanged: (k) => setState(() => _subKey = k),
         ),
         Gap.lg,
         GradientButton(

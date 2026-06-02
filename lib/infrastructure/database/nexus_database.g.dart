@@ -2678,6 +2678,41 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         type: DriftSqlType.dateTime,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _projectTypeMeta = const VerificationMeta(
+    'projectType',
+  );
+  @override
+  late final GeneratedColumn<String> projectType = GeneratedColumn<String>(
+    'project_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('application-development'),
+  );
+  static const VerificationMeta _subCategoryMeta = const VerificationMeta(
+    'subCategory',
+  );
+  @override
+  late final GeneratedColumn<String> subCategory = GeneratedColumn<String>(
+    'sub_category',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _experienceModeMeta = const VerificationMeta(
+    'experienceMode',
+  );
+  @override
+  late final GeneratedColumn<String> experienceMode = GeneratedColumn<String>(
+    'experience_mode',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('regular'),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -2719,6 +2754,9 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
     setupTranscriptJson,
     projectSummaryMd,
     summaryUpdatedAt,
+    projectType,
+    subCategory,
+    experienceMode,
     createdAt,
     updatedAt,
   ];
@@ -2864,6 +2902,33 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         ),
       );
     }
+    if (data.containsKey('project_type')) {
+      context.handle(
+        _projectTypeMeta,
+        projectType.isAcceptableOrUnknown(
+          data['project_type']!,
+          _projectTypeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sub_category')) {
+      context.handle(
+        _subCategoryMeta,
+        subCategory.isAcceptableOrUnknown(
+          data['sub_category']!,
+          _subCategoryMeta,
+        ),
+      );
+    }
+    if (data.containsKey('experience_mode')) {
+      context.handle(
+        _experienceModeMeta,
+        experienceMode.isAcceptableOrUnknown(
+          data['experience_mode']!,
+          _experienceModeMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -2945,6 +3010,18 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}summary_updated_at'],
       ),
+      projectType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_type'],
+      )!,
+      subCategory: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sub_category'],
+      ),
+      experienceMode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}experience_mode'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -3008,6 +3085,19 @@ class Project extends DataClass implements Insertable<Project> {
   /// idle cycles. Null until first generated.
   final String? projectSummaryMd;
   final DateTime? summaryUpdatedAt;
+
+  /// The project type key from the ProjectType catalog (e.g.
+  /// 'application-development', 'project-coordination', 'ivr-call-systems').
+  /// Drives which capabilities/UI are shown. Defaults to application-development
+  /// so existing projects are unchanged.
+  final String projectType;
+
+  /// Optional sub-category within the type (e.g. IVR: 'inboundIvr',
+  /// 'outboundCampaign', 'aiVoicebot'). Null = the type's default.
+  final String? subCategory;
+
+  /// Experience mode: 'regular' | 'advanced'. Presentation only — same model.
+  final String experienceMode;
   final DateTime createdAt;
   final DateTime updatedAt;
   const Project({
@@ -3026,6 +3116,9 @@ class Project extends DataClass implements Insertable<Project> {
     this.setupTranscriptJson,
     this.projectSummaryMd,
     this.summaryUpdatedAt,
+    required this.projectType,
+    this.subCategory,
+    required this.experienceMode,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -3067,6 +3160,11 @@ class Project extends DataClass implements Insertable<Project> {
     if (!nullToAbsent || summaryUpdatedAt != null) {
       map['summary_updated_at'] = Variable<DateTime>(summaryUpdatedAt);
     }
+    map['project_type'] = Variable<String>(projectType);
+    if (!nullToAbsent || subCategory != null) {
+      map['sub_category'] = Variable<String>(subCategory);
+    }
+    map['experience_mode'] = Variable<String>(experienceMode);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -3107,6 +3205,11 @@ class Project extends DataClass implements Insertable<Project> {
       summaryUpdatedAt: summaryUpdatedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(summaryUpdatedAt),
+      projectType: Value(projectType),
+      subCategory: subCategory == null && nullToAbsent
+          ? const Value.absent()
+          : Value(subCategory),
+      experienceMode: Value(experienceMode),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -3141,6 +3244,9 @@ class Project extends DataClass implements Insertable<Project> {
       summaryUpdatedAt: serializer.fromJson<DateTime?>(
         json['summaryUpdatedAt'],
       ),
+      projectType: serializer.fromJson<String>(json['projectType']),
+      subCategory: serializer.fromJson<String?>(json['subCategory']),
+      experienceMode: serializer.fromJson<String>(json['experienceMode']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -3166,6 +3272,9 @@ class Project extends DataClass implements Insertable<Project> {
       'setupTranscriptJson': serializer.toJson<String?>(setupTranscriptJson),
       'projectSummaryMd': serializer.toJson<String?>(projectSummaryMd),
       'summaryUpdatedAt': serializer.toJson<DateTime?>(summaryUpdatedAt),
+      'projectType': serializer.toJson<String>(projectType),
+      'subCategory': serializer.toJson<String?>(subCategory),
+      'experienceMode': serializer.toJson<String>(experienceMode),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -3187,6 +3296,9 @@ class Project extends DataClass implements Insertable<Project> {
     Value<String?> setupTranscriptJson = const Value.absent(),
     Value<String?> projectSummaryMd = const Value.absent(),
     Value<DateTime?> summaryUpdatedAt = const Value.absent(),
+    String? projectType,
+    Value<String?> subCategory = const Value.absent(),
+    String? experienceMode,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => Project(
@@ -3217,6 +3329,9 @@ class Project extends DataClass implements Insertable<Project> {
     summaryUpdatedAt: summaryUpdatedAt.present
         ? summaryUpdatedAt.value
         : this.summaryUpdatedAt,
+    projectType: projectType ?? this.projectType,
+    subCategory: subCategory.present ? subCategory.value : this.subCategory,
+    experienceMode: experienceMode ?? this.experienceMode,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -3263,6 +3378,15 @@ class Project extends DataClass implements Insertable<Project> {
       summaryUpdatedAt: data.summaryUpdatedAt.present
           ? data.summaryUpdatedAt.value
           : this.summaryUpdatedAt,
+      projectType: data.projectType.present
+          ? data.projectType.value
+          : this.projectType,
+      subCategory: data.subCategory.present
+          ? data.subCategory.value
+          : this.subCategory,
+      experienceMode: data.experienceMode.present
+          ? data.experienceMode.value
+          : this.experienceMode,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -3286,6 +3410,9 @@ class Project extends DataClass implements Insertable<Project> {
           ..write('setupTranscriptJson: $setupTranscriptJson, ')
           ..write('projectSummaryMd: $projectSummaryMd, ')
           ..write('summaryUpdatedAt: $summaryUpdatedAt, ')
+          ..write('projectType: $projectType, ')
+          ..write('subCategory: $subCategory, ')
+          ..write('experienceMode: $experienceMode, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -3309,6 +3436,9 @@ class Project extends DataClass implements Insertable<Project> {
     setupTranscriptJson,
     projectSummaryMd,
     summaryUpdatedAt,
+    projectType,
+    subCategory,
+    experienceMode,
     createdAt,
     updatedAt,
   );
@@ -3331,6 +3461,9 @@ class Project extends DataClass implements Insertable<Project> {
           other.setupTranscriptJson == this.setupTranscriptJson &&
           other.projectSummaryMd == this.projectSummaryMd &&
           other.summaryUpdatedAt == this.summaryUpdatedAt &&
+          other.projectType == this.projectType &&
+          other.subCategory == this.subCategory &&
+          other.experienceMode == this.experienceMode &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -3351,6 +3484,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
   final Value<String?> setupTranscriptJson;
   final Value<String?> projectSummaryMd;
   final Value<DateTime?> summaryUpdatedAt;
+  final Value<String> projectType;
+  final Value<String?> subCategory;
+  final Value<String> experienceMode;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   const ProjectsCompanion({
@@ -3369,6 +3505,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     this.setupTranscriptJson = const Value.absent(),
     this.projectSummaryMd = const Value.absent(),
     this.summaryUpdatedAt = const Value.absent(),
+    this.projectType = const Value.absent(),
+    this.subCategory = const Value.absent(),
+    this.experienceMode = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
@@ -3388,6 +3527,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     this.setupTranscriptJson = const Value.absent(),
     this.projectSummaryMd = const Value.absent(),
     this.summaryUpdatedAt = const Value.absent(),
+    this.projectType = const Value.absent(),
+    this.subCategory = const Value.absent(),
+    this.experienceMode = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   }) : client_fk = Value(client_fk),
@@ -3408,6 +3550,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     Expression<String>? setupTranscriptJson,
     Expression<String>? projectSummaryMd,
     Expression<DateTime>? summaryUpdatedAt,
+    Expression<String>? projectType,
+    Expression<String>? subCategory,
+    Expression<String>? experienceMode,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
   }) {
@@ -3429,6 +3574,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
         'setup_transcript_json': setupTranscriptJson,
       if (projectSummaryMd != null) 'project_summary_md': projectSummaryMd,
       if (summaryUpdatedAt != null) 'summary_updated_at': summaryUpdatedAt,
+      if (projectType != null) 'project_type': projectType,
+      if (subCategory != null) 'sub_category': subCategory,
+      if (experienceMode != null) 'experience_mode': experienceMode,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
@@ -3450,6 +3598,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     Value<String?>? setupTranscriptJson,
     Value<String?>? projectSummaryMd,
     Value<DateTime?>? summaryUpdatedAt,
+    Value<String>? projectType,
+    Value<String?>? subCategory,
+    Value<String>? experienceMode,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
   }) {
@@ -3470,6 +3621,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
       setupTranscriptJson: setupTranscriptJson ?? this.setupTranscriptJson,
       projectSummaryMd: projectSummaryMd ?? this.projectSummaryMd,
       summaryUpdatedAt: summaryUpdatedAt ?? this.summaryUpdatedAt,
+      projectType: projectType ?? this.projectType,
+      subCategory: subCategory ?? this.subCategory,
+      experienceMode: experienceMode ?? this.experienceMode,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -3527,6 +3681,15 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     if (summaryUpdatedAt.present) {
       map['summary_updated_at'] = Variable<DateTime>(summaryUpdatedAt.value);
     }
+    if (projectType.present) {
+      map['project_type'] = Variable<String>(projectType.value);
+    }
+    if (subCategory.present) {
+      map['sub_category'] = Variable<String>(subCategory.value);
+    }
+    if (experienceMode.present) {
+      map['experience_mode'] = Variable<String>(experienceMode.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -3554,6 +3717,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
           ..write('setupTranscriptJson: $setupTranscriptJson, ')
           ..write('projectSummaryMd: $projectSummaryMd, ')
           ..write('summaryUpdatedAt: $summaryUpdatedAt, ')
+          ..write('projectType: $projectType, ')
+          ..write('subCategory: $subCategory, ')
+          ..write('experienceMode: $experienceMode, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -11841,6 +12007,702 @@ class LibraryVerificationsCompanion
   }
 }
 
+class $CallSystemsTable extends CallSystems
+    with TableInfo<$CallSystemsTable, CallSystem> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CallSystemsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _call_system_pkMeta = const VerificationMeta(
+    'call_system_pk',
+  );
+  @override
+  late final GeneratedColumn<int> call_system_pk = GeneratedColumn<int>(
+    'call_system_pk',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _project_fkMeta = const VerificationMeta(
+    'project_fk',
+  );
+  @override
+  late final GeneratedColumn<int> project_fk = GeneratedColumn<int>(
+    'project_fk',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES projects (project_pk)',
+    ),
+  );
+  static const VerificationMeta _jsonMeta = const VerificationMeta('json');
+  @override
+  late final GeneratedColumn<String> json = GeneratedColumn<String>(
+    'json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    call_system_pk,
+    project_fk,
+    json,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'call_systems';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CallSystem> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('call_system_pk')) {
+      context.handle(
+        _call_system_pkMeta,
+        call_system_pk.isAcceptableOrUnknown(
+          data['call_system_pk']!,
+          _call_system_pkMeta,
+        ),
+      );
+    }
+    if (data.containsKey('project_fk')) {
+      context.handle(
+        _project_fkMeta,
+        project_fk.isAcceptableOrUnknown(data['project_fk']!, _project_fkMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_project_fkMeta);
+    }
+    if (data.containsKey('json')) {
+      context.handle(
+        _jsonMeta,
+        json.isAcceptableOrUnknown(data['json']!, _jsonMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {call_system_pk};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {project_fk},
+  ];
+  @override
+  CallSystem map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CallSystem(
+      call_system_pk: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}call_system_pk'],
+      )!,
+      project_fk: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}project_fk'],
+      )!,
+      json: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}json'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CallSystemsTable createAlias(String alias) {
+    return $CallSystemsTable(attachedDatabase, alias);
+  }
+}
+
+class CallSystem extends DataClass implements Insertable<CallSystem> {
+  final int call_system_pk;
+  final int project_fk;
+
+  /// Serialized CallSystemProject.toJson().
+  final String json;
+  final DateTime updatedAt;
+  const CallSystem({
+    required this.call_system_pk,
+    required this.project_fk,
+    required this.json,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['call_system_pk'] = Variable<int>(call_system_pk);
+    map['project_fk'] = Variable<int>(project_fk);
+    map['json'] = Variable<String>(json);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  CallSystemsCompanion toCompanion(bool nullToAbsent) {
+    return CallSystemsCompanion(
+      call_system_pk: Value(call_system_pk),
+      project_fk: Value(project_fk),
+      json: Value(json),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory CallSystem.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CallSystem(
+      call_system_pk: serializer.fromJson<int>(json['call_system_pk']),
+      project_fk: serializer.fromJson<int>(json['project_fk']),
+      json: serializer.fromJson<String>(json['json']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'call_system_pk': serializer.toJson<int>(call_system_pk),
+      'project_fk': serializer.toJson<int>(project_fk),
+      'json': serializer.toJson<String>(json),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  CallSystem copyWith({
+    int? call_system_pk,
+    int? project_fk,
+    String? json,
+    DateTime? updatedAt,
+  }) => CallSystem(
+    call_system_pk: call_system_pk ?? this.call_system_pk,
+    project_fk: project_fk ?? this.project_fk,
+    json: json ?? this.json,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  CallSystem copyWithCompanion(CallSystemsCompanion data) {
+    return CallSystem(
+      call_system_pk: data.call_system_pk.present
+          ? data.call_system_pk.value
+          : this.call_system_pk,
+      project_fk: data.project_fk.present
+          ? data.project_fk.value
+          : this.project_fk,
+      json: data.json.present ? data.json.value : this.json,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CallSystem(')
+          ..write('call_system_pk: $call_system_pk, ')
+          ..write('project_fk: $project_fk, ')
+          ..write('json: $json, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(call_system_pk, project_fk, json, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CallSystem &&
+          other.call_system_pk == this.call_system_pk &&
+          other.project_fk == this.project_fk &&
+          other.json == this.json &&
+          other.updatedAt == this.updatedAt);
+}
+
+class CallSystemsCompanion extends UpdateCompanion<CallSystem> {
+  final Value<int> call_system_pk;
+  final Value<int> project_fk;
+  final Value<String> json;
+  final Value<DateTime> updatedAt;
+  const CallSystemsCompanion({
+    this.call_system_pk = const Value.absent(),
+    this.project_fk = const Value.absent(),
+    this.json = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  CallSystemsCompanion.insert({
+    this.call_system_pk = const Value.absent(),
+    required int project_fk,
+    this.json = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  }) : project_fk = Value(project_fk);
+  static Insertable<CallSystem> custom({
+    Expression<int>? call_system_pk,
+    Expression<int>? project_fk,
+    Expression<String>? json,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (call_system_pk != null) 'call_system_pk': call_system_pk,
+      if (project_fk != null) 'project_fk': project_fk,
+      if (json != null) 'json': json,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  CallSystemsCompanion copyWith({
+    Value<int>? call_system_pk,
+    Value<int>? project_fk,
+    Value<String>? json,
+    Value<DateTime>? updatedAt,
+  }) {
+    return CallSystemsCompanion(
+      call_system_pk: call_system_pk ?? this.call_system_pk,
+      project_fk: project_fk ?? this.project_fk,
+      json: json ?? this.json,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (call_system_pk.present) {
+      map['call_system_pk'] = Variable<int>(call_system_pk.value);
+    }
+    if (project_fk.present) {
+      map['project_fk'] = Variable<int>(project_fk.value);
+    }
+    if (json.present) {
+      map['json'] = Variable<String>(json.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CallSystemsCompanion(')
+          ..write('call_system_pk: $call_system_pk, ')
+          ..write('project_fk: $project_fk, ')
+          ..write('json: $json, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SetupFlowsTable extends SetupFlows
+    with TableInfo<$SetupFlowsTable, SetupFlow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SetupFlowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _setup_flow_pkMeta = const VerificationMeta(
+    'setup_flow_pk',
+  );
+  @override
+  late final GeneratedColumn<int> setup_flow_pk = GeneratedColumn<int>(
+    'setup_flow_pk',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _projectTypeMeta = const VerificationMeta(
+    'projectType',
+  );
+  @override
+  late final GeneratedColumn<String> projectType = GeneratedColumn<String>(
+    'project_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _subCategoryMeta = const VerificationMeta(
+    'subCategory',
+  );
+  @override
+  late final GeneratedColumn<String> subCategory = GeneratedColumn<String>(
+    'sub_category',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _jsonMeta = const VerificationMeta('json');
+  @override
+  late final GeneratedColumn<String> json = GeneratedColumn<String>(
+    'json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    setup_flow_pk,
+    projectType,
+    subCategory,
+    json,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'setup_flows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SetupFlow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('setup_flow_pk')) {
+      context.handle(
+        _setup_flow_pkMeta,
+        setup_flow_pk.isAcceptableOrUnknown(
+          data['setup_flow_pk']!,
+          _setup_flow_pkMeta,
+        ),
+      );
+    }
+    if (data.containsKey('project_type')) {
+      context.handle(
+        _projectTypeMeta,
+        projectType.isAcceptableOrUnknown(
+          data['project_type']!,
+          _projectTypeMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_projectTypeMeta);
+    }
+    if (data.containsKey('sub_category')) {
+      context.handle(
+        _subCategoryMeta,
+        subCategory.isAcceptableOrUnknown(
+          data['sub_category']!,
+          _subCategoryMeta,
+        ),
+      );
+    }
+    if (data.containsKey('json')) {
+      context.handle(
+        _jsonMeta,
+        json.isAcceptableOrUnknown(data['json']!, _jsonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_jsonMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {setup_flow_pk};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {projectType, subCategory},
+  ];
+  @override
+  SetupFlow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SetupFlow(
+      setup_flow_pk: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}setup_flow_pk'],
+      )!,
+      projectType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_type'],
+      )!,
+      subCategory: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sub_category'],
+      ),
+      json: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}json'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SetupFlowsTable createAlias(String alias) {
+    return $SetupFlowsTable(attachedDatabase, alias);
+  }
+}
+
+class SetupFlow extends DataClass implements Insertable<SetupFlow> {
+  final int setup_flow_pk;
+  final String projectType;
+  final String? subCategory;
+
+  /// Serialized SetupFlowDefinition.toJson().
+  final String json;
+  final DateTime updatedAt;
+  const SetupFlow({
+    required this.setup_flow_pk,
+    required this.projectType,
+    this.subCategory,
+    required this.json,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['setup_flow_pk'] = Variable<int>(setup_flow_pk);
+    map['project_type'] = Variable<String>(projectType);
+    if (!nullToAbsent || subCategory != null) {
+      map['sub_category'] = Variable<String>(subCategory);
+    }
+    map['json'] = Variable<String>(json);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  SetupFlowsCompanion toCompanion(bool nullToAbsent) {
+    return SetupFlowsCompanion(
+      setup_flow_pk: Value(setup_flow_pk),
+      projectType: Value(projectType),
+      subCategory: subCategory == null && nullToAbsent
+          ? const Value.absent()
+          : Value(subCategory),
+      json: Value(json),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory SetupFlow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SetupFlow(
+      setup_flow_pk: serializer.fromJson<int>(json['setup_flow_pk']),
+      projectType: serializer.fromJson<String>(json['projectType']),
+      subCategory: serializer.fromJson<String?>(json['subCategory']),
+      json: serializer.fromJson<String>(json['json']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'setup_flow_pk': serializer.toJson<int>(setup_flow_pk),
+      'projectType': serializer.toJson<String>(projectType),
+      'subCategory': serializer.toJson<String?>(subCategory),
+      'json': serializer.toJson<String>(json),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  SetupFlow copyWith({
+    int? setup_flow_pk,
+    String? projectType,
+    Value<String?> subCategory = const Value.absent(),
+    String? json,
+    DateTime? updatedAt,
+  }) => SetupFlow(
+    setup_flow_pk: setup_flow_pk ?? this.setup_flow_pk,
+    projectType: projectType ?? this.projectType,
+    subCategory: subCategory.present ? subCategory.value : this.subCategory,
+    json: json ?? this.json,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  SetupFlow copyWithCompanion(SetupFlowsCompanion data) {
+    return SetupFlow(
+      setup_flow_pk: data.setup_flow_pk.present
+          ? data.setup_flow_pk.value
+          : this.setup_flow_pk,
+      projectType: data.projectType.present
+          ? data.projectType.value
+          : this.projectType,
+      subCategory: data.subCategory.present
+          ? data.subCategory.value
+          : this.subCategory,
+      json: data.json.present ? data.json.value : this.json,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SetupFlow(')
+          ..write('setup_flow_pk: $setup_flow_pk, ')
+          ..write('projectType: $projectType, ')
+          ..write('subCategory: $subCategory, ')
+          ..write('json: $json, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(setup_flow_pk, projectType, subCategory, json, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SetupFlow &&
+          other.setup_flow_pk == this.setup_flow_pk &&
+          other.projectType == this.projectType &&
+          other.subCategory == this.subCategory &&
+          other.json == this.json &&
+          other.updatedAt == this.updatedAt);
+}
+
+class SetupFlowsCompanion extends UpdateCompanion<SetupFlow> {
+  final Value<int> setup_flow_pk;
+  final Value<String> projectType;
+  final Value<String?> subCategory;
+  final Value<String> json;
+  final Value<DateTime> updatedAt;
+  const SetupFlowsCompanion({
+    this.setup_flow_pk = const Value.absent(),
+    this.projectType = const Value.absent(),
+    this.subCategory = const Value.absent(),
+    this.json = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  SetupFlowsCompanion.insert({
+    this.setup_flow_pk = const Value.absent(),
+    required String projectType,
+    this.subCategory = const Value.absent(),
+    required String json,
+    this.updatedAt = const Value.absent(),
+  }) : projectType = Value(projectType),
+       json = Value(json);
+  static Insertable<SetupFlow> custom({
+    Expression<int>? setup_flow_pk,
+    Expression<String>? projectType,
+    Expression<String>? subCategory,
+    Expression<String>? json,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (setup_flow_pk != null) 'setup_flow_pk': setup_flow_pk,
+      if (projectType != null) 'project_type': projectType,
+      if (subCategory != null) 'sub_category': subCategory,
+      if (json != null) 'json': json,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  SetupFlowsCompanion copyWith({
+    Value<int>? setup_flow_pk,
+    Value<String>? projectType,
+    Value<String?>? subCategory,
+    Value<String>? json,
+    Value<DateTime>? updatedAt,
+  }) {
+    return SetupFlowsCompanion(
+      setup_flow_pk: setup_flow_pk ?? this.setup_flow_pk,
+      projectType: projectType ?? this.projectType,
+      subCategory: subCategory ?? this.subCategory,
+      json: json ?? this.json,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (setup_flow_pk.present) {
+      map['setup_flow_pk'] = Variable<int>(setup_flow_pk.value);
+    }
+    if (projectType.present) {
+      map['project_type'] = Variable<String>(projectType.value);
+    }
+    if (subCategory.present) {
+      map['sub_category'] = Variable<String>(subCategory.value);
+    }
+    if (json.present) {
+      map['json'] = Variable<String>(json.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SetupFlowsCompanion(')
+          ..write('setup_flow_pk: $setup_flow_pk, ')
+          ..write('projectType: $projectType, ')
+          ..write('subCategory: $subCategory, ')
+          ..write('json: $json, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$NexusDatabase extends GeneratedDatabase {
   _$NexusDatabase(QueryExecutor e) : super(e);
   $NexusDatabaseManager get managers => $NexusDatabaseManager(this);
@@ -11862,6 +12724,8 @@ abstract class _$NexusDatabase extends GeneratedDatabase {
   late final $ProjectTagsTable projectTags = $ProjectTagsTable(this);
   late final $LibraryVerificationsTable libraryVerifications =
       $LibraryVerificationsTable(this);
+  late final $CallSystemsTable callSystems = $CallSystemsTable(this);
+  late final $SetupFlowsTable setupFlows = $SetupFlowsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -11882,6 +12746,8 @@ abstract class _$NexusDatabase extends GeneratedDatabase {
     chatMessages,
     projectTags,
     libraryVerifications,
+    callSystems,
+    setupFlows,
   ];
 }
 
@@ -14554,6 +15420,9 @@ typedef $$ProjectsTableCreateCompanionBuilder =
       Value<String?> setupTranscriptJson,
       Value<String?> projectSummaryMd,
       Value<DateTime?> summaryUpdatedAt,
+      Value<String> projectType,
+      Value<String?> subCategory,
+      Value<String> experienceMode,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -14574,6 +15443,9 @@ typedef $$ProjectsTableUpdateCompanionBuilder =
       Value<String?> setupTranscriptJson,
       Value<String?> projectSummaryMd,
       Value<DateTime?> summaryUpdatedAt,
+      Value<String> projectType,
+      Value<String?> subCategory,
+      Value<String> experienceMode,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -14759,6 +15631,29 @@ final class $$ProjectsTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$CallSystemsTable, List<CallSystem>>
+  _callSystemsRefsTable(_$NexusDatabase db) => MultiTypedResultKey.fromTable(
+    db.callSystems,
+    aliasName: $_aliasNameGenerator(
+      db.projects.project_pk,
+      db.callSystems.project_fk,
+    ),
+  );
+
+  $$CallSystemsTableProcessedTableManager get callSystemsRefs {
+    final manager = $$CallSystemsTableTableManager($_db, $_db.callSystems)
+        .filter(
+          (f) => f.project_fk.project_pk.sqlEquals(
+            $_itemColumn<int>('project_pk')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_callSystemsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$ProjectsTableFilterComposer
@@ -14832,6 +15727,21 @@ class $$ProjectsTableFilterComposer
 
   ColumnFilters<DateTime> get summaryUpdatedAt => $composableBuilder(
     column: $table.summaryUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get projectType => $composableBuilder(
+    column: $table.projectType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get subCategory => $composableBuilder(
+    column: $table.subCategory,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get experienceMode => $composableBuilder(
+    column: $table.experienceMode,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -15040,6 +15950,31 @@ class $$ProjectsTableFilterComposer
     );
     return f(composer);
   }
+
+  Expression<bool> callSystemsRefs(
+    Expression<bool> Function($$CallSystemsTableFilterComposer f) f,
+  ) {
+    final $$CallSystemsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.project_pk,
+      referencedTable: $db.callSystems,
+      getReferencedColumn: (t) => t.project_fk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CallSystemsTableFilterComposer(
+            $db: $db,
+            $table: $db.callSystems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$ProjectsTableOrderingComposer
@@ -15113,6 +16048,21 @@ class $$ProjectsTableOrderingComposer
 
   ColumnOrderings<DateTime> get summaryUpdatedAt => $composableBuilder(
     column: $table.summaryUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get projectType => $composableBuilder(
+    column: $table.projectType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get subCategory => $composableBuilder(
+    column: $table.subCategory,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get experienceMode => $composableBuilder(
+    column: $table.experienceMode,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -15242,6 +16192,21 @@ class $$ProjectsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get summaryUpdatedAt => $composableBuilder(
     column: $table.summaryUpdatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get projectType => $composableBuilder(
+    column: $table.projectType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get subCategory => $composableBuilder(
+    column: $table.subCategory,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get experienceMode => $composableBuilder(
+    column: $table.experienceMode,
     builder: (column) => column,
   );
 
@@ -15446,6 +16411,31 @@ class $$ProjectsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> callSystemsRefs<T extends Object>(
+    Expression<T> Function($$CallSystemsTableAnnotationComposer a) f,
+  ) {
+    final $$CallSystemsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.project_pk,
+      referencedTable: $db.callSystems,
+      getReferencedColumn: (t) => t.project_fk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CallSystemsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.callSystems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$ProjectsTableTableManager
@@ -15470,6 +16460,7 @@ class $$ProjectsTableTableManager
             bool activityLogsRefs,
             bool ciRunsRefs,
             bool projectTagsRefs,
+            bool callSystemsRefs,
           })
         > {
   $$ProjectsTableTableManager(_$NexusDatabase db, $ProjectsTable table)
@@ -15500,6 +16491,9 @@ class $$ProjectsTableTableManager
                 Value<String?> setupTranscriptJson = const Value.absent(),
                 Value<String?> projectSummaryMd = const Value.absent(),
                 Value<DateTime?> summaryUpdatedAt = const Value.absent(),
+                Value<String> projectType = const Value.absent(),
+                Value<String?> subCategory = const Value.absent(),
+                Value<String> experienceMode = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => ProjectsCompanion(
@@ -15518,6 +16512,9 @@ class $$ProjectsTableTableManager
                 setupTranscriptJson: setupTranscriptJson,
                 projectSummaryMd: projectSummaryMd,
                 summaryUpdatedAt: summaryUpdatedAt,
+                projectType: projectType,
+                subCategory: subCategory,
+                experienceMode: experienceMode,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -15538,6 +16535,9 @@ class $$ProjectsTableTableManager
                 Value<String?> setupTranscriptJson = const Value.absent(),
                 Value<String?> projectSummaryMd = const Value.absent(),
                 Value<DateTime?> summaryUpdatedAt = const Value.absent(),
+                Value<String> projectType = const Value.absent(),
+                Value<String?> subCategory = const Value.absent(),
+                Value<String> experienceMode = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => ProjectsCompanion.insert(
@@ -15556,6 +16556,9 @@ class $$ProjectsTableTableManager
                 setupTranscriptJson: setupTranscriptJson,
                 projectSummaryMd: projectSummaryMd,
                 summaryUpdatedAt: summaryUpdatedAt,
+                projectType: projectType,
+                subCategory: subCategory,
+                experienceMode: experienceMode,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -15577,6 +16580,7 @@ class $$ProjectsTableTableManager
                 activityLogsRefs = false,
                 ciRunsRefs = false,
                 projectTagsRefs = false,
+                callSystemsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -15587,6 +16591,7 @@ class $$ProjectsTableTableManager
                     if (activityLogsRefs) db.activityLogs,
                     if (ciRunsRefs) db.ciRuns,
                     if (projectTagsRefs) db.projectTags,
+                    if (callSystemsRefs) db.callSystems,
                   ],
                   addJoins:
                       <
@@ -15761,6 +16766,27 @@ class $$ProjectsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (callSystemsRefs)
+                        await $_getPrefetchedData<
+                          Project,
+                          $ProjectsTable,
+                          CallSystem
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProjectsTableReferences
+                              ._callSystemsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProjectsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).callSystemsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.project_fk == item.project_pk,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -15790,6 +16816,7 @@ typedef $$ProjectsTableProcessedTableManager =
         bool activityLogsRefs,
         bool ciRunsRefs,
         bool projectTagsRefs,
+        bool callSystemsRefs,
       })
     >;
 typedef $$ChatSessionsTableCreateCompanionBuilder =
@@ -22254,6 +23281,499 @@ typedef $$LibraryVerificationsTableProcessedTableManager =
       LibraryVerification,
       PrefetchHooks Function()
     >;
+typedef $$CallSystemsTableCreateCompanionBuilder =
+    CallSystemsCompanion Function({
+      Value<int> call_system_pk,
+      required int project_fk,
+      Value<String> json,
+      Value<DateTime> updatedAt,
+    });
+typedef $$CallSystemsTableUpdateCompanionBuilder =
+    CallSystemsCompanion Function({
+      Value<int> call_system_pk,
+      Value<int> project_fk,
+      Value<String> json,
+      Value<DateTime> updatedAt,
+    });
+
+final class $$CallSystemsTableReferences
+    extends BaseReferences<_$NexusDatabase, $CallSystemsTable, CallSystem> {
+  $$CallSystemsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $ProjectsTable _project_fkTable(_$NexusDatabase db) =>
+      db.projects.createAlias(
+        $_aliasNameGenerator(db.callSystems.project_fk, db.projects.project_pk),
+      );
+
+  $$ProjectsTableProcessedTableManager get project_fk {
+    final $_column = $_itemColumn<int>('project_fk')!;
+
+    final manager = $$ProjectsTableTableManager(
+      $_db,
+      $_db.projects,
+    ).filter((f) => f.project_pk.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_project_fkTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$CallSystemsTableFilterComposer
+    extends Composer<_$NexusDatabase, $CallSystemsTable> {
+  $$CallSystemsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get call_system_pk => $composableBuilder(
+    column: $table.call_system_pk,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get json => $composableBuilder(
+    column: $table.json,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ProjectsTableFilterComposer get project_fk {
+    final $$ProjectsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.project_fk,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.project_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableFilterComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CallSystemsTableOrderingComposer
+    extends Composer<_$NexusDatabase, $CallSystemsTable> {
+  $$CallSystemsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get call_system_pk => $composableBuilder(
+    column: $table.call_system_pk,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get json => $composableBuilder(
+    column: $table.json,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ProjectsTableOrderingComposer get project_fk {
+    final $$ProjectsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.project_fk,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.project_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableOrderingComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CallSystemsTableAnnotationComposer
+    extends Composer<_$NexusDatabase, $CallSystemsTable> {
+  $$CallSystemsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get call_system_pk => $composableBuilder(
+    column: $table.call_system_pk,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get json =>
+      $composableBuilder(column: $table.json, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$ProjectsTableAnnotationComposer get project_fk {
+    final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.project_fk,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.project_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CallSystemsTableTableManager
+    extends
+        RootTableManager<
+          _$NexusDatabase,
+          $CallSystemsTable,
+          CallSystem,
+          $$CallSystemsTableFilterComposer,
+          $$CallSystemsTableOrderingComposer,
+          $$CallSystemsTableAnnotationComposer,
+          $$CallSystemsTableCreateCompanionBuilder,
+          $$CallSystemsTableUpdateCompanionBuilder,
+          (CallSystem, $$CallSystemsTableReferences),
+          CallSystem,
+          PrefetchHooks Function({bool project_fk})
+        > {
+  $$CallSystemsTableTableManager(_$NexusDatabase db, $CallSystemsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CallSystemsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CallSystemsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CallSystemsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> call_system_pk = const Value.absent(),
+                Value<int> project_fk = const Value.absent(),
+                Value<String> json = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => CallSystemsCompanion(
+                call_system_pk: call_system_pk,
+                project_fk: project_fk,
+                json: json,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> call_system_pk = const Value.absent(),
+                required int project_fk,
+                Value<String> json = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => CallSystemsCompanion.insert(
+                call_system_pk: call_system_pk,
+                project_fk: project_fk,
+                json: json,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$CallSystemsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({project_fk = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (project_fk) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.project_fk,
+                                referencedTable: $$CallSystemsTableReferences
+                                    ._project_fkTable(db),
+                                referencedColumn: $$CallSystemsTableReferences
+                                    ._project_fkTable(db)
+                                    .project_pk,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$CallSystemsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$NexusDatabase,
+      $CallSystemsTable,
+      CallSystem,
+      $$CallSystemsTableFilterComposer,
+      $$CallSystemsTableOrderingComposer,
+      $$CallSystemsTableAnnotationComposer,
+      $$CallSystemsTableCreateCompanionBuilder,
+      $$CallSystemsTableUpdateCompanionBuilder,
+      (CallSystem, $$CallSystemsTableReferences),
+      CallSystem,
+      PrefetchHooks Function({bool project_fk})
+    >;
+typedef $$SetupFlowsTableCreateCompanionBuilder =
+    SetupFlowsCompanion Function({
+      Value<int> setup_flow_pk,
+      required String projectType,
+      Value<String?> subCategory,
+      required String json,
+      Value<DateTime> updatedAt,
+    });
+typedef $$SetupFlowsTableUpdateCompanionBuilder =
+    SetupFlowsCompanion Function({
+      Value<int> setup_flow_pk,
+      Value<String> projectType,
+      Value<String?> subCategory,
+      Value<String> json,
+      Value<DateTime> updatedAt,
+    });
+
+class $$SetupFlowsTableFilterComposer
+    extends Composer<_$NexusDatabase, $SetupFlowsTable> {
+  $$SetupFlowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get setup_flow_pk => $composableBuilder(
+    column: $table.setup_flow_pk,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get projectType => $composableBuilder(
+    column: $table.projectType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get subCategory => $composableBuilder(
+    column: $table.subCategory,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get json => $composableBuilder(
+    column: $table.json,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SetupFlowsTableOrderingComposer
+    extends Composer<_$NexusDatabase, $SetupFlowsTable> {
+  $$SetupFlowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get setup_flow_pk => $composableBuilder(
+    column: $table.setup_flow_pk,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get projectType => $composableBuilder(
+    column: $table.projectType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get subCategory => $composableBuilder(
+    column: $table.subCategory,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get json => $composableBuilder(
+    column: $table.json,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SetupFlowsTableAnnotationComposer
+    extends Composer<_$NexusDatabase, $SetupFlowsTable> {
+  $$SetupFlowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get setup_flow_pk => $composableBuilder(
+    column: $table.setup_flow_pk,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get projectType => $composableBuilder(
+    column: $table.projectType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get subCategory => $composableBuilder(
+    column: $table.subCategory,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get json =>
+      $composableBuilder(column: $table.json, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$SetupFlowsTableTableManager
+    extends
+        RootTableManager<
+          _$NexusDatabase,
+          $SetupFlowsTable,
+          SetupFlow,
+          $$SetupFlowsTableFilterComposer,
+          $$SetupFlowsTableOrderingComposer,
+          $$SetupFlowsTableAnnotationComposer,
+          $$SetupFlowsTableCreateCompanionBuilder,
+          $$SetupFlowsTableUpdateCompanionBuilder,
+          (
+            SetupFlow,
+            BaseReferences<_$NexusDatabase, $SetupFlowsTable, SetupFlow>,
+          ),
+          SetupFlow,
+          PrefetchHooks Function()
+        > {
+  $$SetupFlowsTableTableManager(_$NexusDatabase db, $SetupFlowsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SetupFlowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SetupFlowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SetupFlowsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> setup_flow_pk = const Value.absent(),
+                Value<String> projectType = const Value.absent(),
+                Value<String?> subCategory = const Value.absent(),
+                Value<String> json = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => SetupFlowsCompanion(
+                setup_flow_pk: setup_flow_pk,
+                projectType: projectType,
+                subCategory: subCategory,
+                json: json,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> setup_flow_pk = const Value.absent(),
+                required String projectType,
+                Value<String?> subCategory = const Value.absent(),
+                required String json,
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => SetupFlowsCompanion.insert(
+                setup_flow_pk: setup_flow_pk,
+                projectType: projectType,
+                subCategory: subCategory,
+                json: json,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SetupFlowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$NexusDatabase,
+      $SetupFlowsTable,
+      SetupFlow,
+      $$SetupFlowsTableFilterComposer,
+      $$SetupFlowsTableOrderingComposer,
+      $$SetupFlowsTableAnnotationComposer,
+      $$SetupFlowsTableCreateCompanionBuilder,
+      $$SetupFlowsTableUpdateCompanionBuilder,
+      (SetupFlow, BaseReferences<_$NexusDatabase, $SetupFlowsTable, SetupFlow>),
+      SetupFlow,
+      PrefetchHooks Function()
+    >;
 
 class $NexusDatabaseManager {
   final _$NexusDatabase _db;
@@ -22288,4 +23808,8 @@ class $NexusDatabaseManager {
       $$ProjectTagsTableTableManager(_db, _db.projectTags);
   $$LibraryVerificationsTableTableManager get libraryVerifications =>
       $$LibraryVerificationsTableTableManager(_db, _db.libraryVerifications);
+  $$CallSystemsTableTableManager get callSystems =>
+      $$CallSystemsTableTableManager(_db, _db.callSystems);
+  $$SetupFlowsTableTableManager get setupFlows =>
+      $$SetupFlowsTableTableManager(_db, _db.setupFlows);
 }

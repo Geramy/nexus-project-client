@@ -10,6 +10,8 @@ import 'package:nexus_projects_client/infrastructure/database/nexus_database.dar
 import 'package:nexus_projects_client/infrastructure/lemonade/providers/lemonade_servers_provider.dart';
 import 'package:nexus_projects_client/features/onboarding/widgets/create_with_packs_dialog.dart';
 import 'package:nexus_projects_client/features/onboarding/project_setup_dialog.dart';
+import 'package:nexus_projects_client/features/projects/types/project_type.dart';
+import 'package:nexus_projects_client/features/projects/types/project_type_providers.dart';
 import 'package:nexus_projects_client/shared/ui/nexus_ui.dart';
 
 /// The eight primary navigation destinations, shared by the full sidebar and
@@ -19,11 +21,28 @@ const List<(MainView, IconData, IconData?, String)> _navDestinations = [
   (MainView.tasks, Icons.fact_check_outlined, Icons.fact_check, 'Tasks'),
   (MainView.agents, Icons.smart_toy_outlined, Icons.smart_toy, 'Agents'),
   (MainView.aiProviders, Icons.dns_outlined, Icons.dns, 'AI Providers'),
+  (MainView.callFlow, Icons.account_tree_outlined, Icons.account_tree, 'Call Flow'),
   (MainView.code, Icons.code_rounded, null, 'Code & Git'),
   (MainView.launch, Icons.rocket_launch_outlined, Icons.rocket_launch, 'Launch'),
   (MainView.activity, Icons.history_rounded, null, 'Activity'),
   (MainView.account, Icons.account_circle_outlined, Icons.account_circle, 'Account'),
 ];
+
+/// The capability a nav destination requires to be shown; null = always shown.
+/// Drives capability-gating so non-software project types hide Code/Launch and
+/// only call-systems projects show Call Flow.
+ProjectCapability? _navCapability(MainView view) => switch (view) {
+      MainView.code => ProjectCapability.git,
+      MainView.launch => ProjectCapability.deploy,
+      MainView.callFlow => ProjectCapability.callFlow,
+      _ => null,
+    };
+
+/// Whether [view] should appear for the given project [type].
+bool _navVisible(MainView view, ProjectType type) {
+  final cap = _navCapability(view);
+  return cap == null || type.has(cap);
+}
 
 class LeftSidebar extends ConsumerWidget {
   final MainView currentView;
@@ -41,7 +60,10 @@ class LeftSidebar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (collapsed) return _buildRail(context);
+    // Gate nav by the current project's type capabilities (e.g. hide Code/Launch
+    // for non-software projects, show Call Flow only for call-systems projects).
+    final projectType = ref.watch(currentProjectTypeProvider);
+    if (collapsed) return _buildRail(context, projectType);
 
     final clientsAsync = ref.watch(allClientsProvider);
 
@@ -224,13 +246,14 @@ class LeftSidebar extends ConsumerWidget {
           const SizedBox(height: 8),
 
           for (final (view, icon, activeIcon, label) in _navDestinations)
-            _NavItem(
-              icon: icon,
-              activeIcon: activeIcon,
-              label: label,
-              selected: currentView == view,
-              onTap: () => onViewChanged(view),
-            ),
+            if (_navVisible(view, projectType))
+              _NavItem(
+                icon: icon,
+                activeIcon: activeIcon,
+                label: label,
+                selected: currentView == view,
+                onTap: () => onViewChanged(view),
+              ),
 
                   const SizedBox(height: 12),
                 ],
@@ -264,7 +287,7 @@ class LeftSidebar extends ConsumerWidget {
   }
 
   /// Collapsed icon-only rail shown when the mouse isn't over the sidebar.
-  Widget _buildRail(BuildContext context) {
+  Widget _buildRail(BuildContext context, ProjectType projectType) {
     return Container(
       color: Theme.of(context).colorScheme.surface,
       child: Column(
@@ -280,6 +303,7 @@ class LeftSidebar extends ConsumerWidget {
             ),
           const SizedBox(height: 8),
           for (final (view, icon, activeIcon, label) in _navDestinations)
+            if (_navVisible(view, projectType))
             _NavItem(
               icon: icon,
               activeIcon: activeIcon,

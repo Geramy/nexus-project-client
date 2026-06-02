@@ -76,7 +76,7 @@ class PlanGenerator {
     for (final layer in resolved.layers) {
       final langs = resolved
           .tagsForLayer(layer)
-          .where((t) => t.category == TagCategory.languages)
+          .where((t) => t.knownCategory == TagCategory.languages)
           .map((t) => t.value)
           .toSet()
           .join(', ');
@@ -96,23 +96,23 @@ class PlanGenerator {
   String _layerDoc(Layer layer, List<ProjectTag> tags, ResolvedStack resolved) {
     final layerTags = resolved.tagsForLayer(layer);
     final langs = layerTags
-        .where((t) => t.category == TagCategory.languages)
+        .where((t) => t.knownCategory == TagCategory.languages)
         .map((t) => t.value)
         .toSet()
         .toList();
     final frameworks = <String>{
       ...layerTags
-          .where((t) => t.category == TagCategory.frameworks)
+          .where((t) => t.knownCategory == TagCategory.frameworks)
           .map((t) => t.value),
       ...tags
           .where((t) =>
-              t.category == TagCategory.frameworks && t.layerKey == layer.key)
+              t.knownCategory == TagCategory.frameworks && t.layerKey == layer.key)
           .map((t) => t.value),
     }.toList();
     final langSet = langs.map((l) => l.toLowerCase()).toSet();
     final libraries = tags
         .where((t) =>
-            t.category == TagCategory.libraries &&
+            t.knownCategory == TagCategory.libraries &&
             (t.layerKey == layer.key ||
                 (t.forLanguage != null &&
                     langSet.contains(t.forLanguage!.toLowerCase())) ||
@@ -193,7 +193,7 @@ class PlanGenerator {
   // ==================== Helpers ====================
 
   List<String> _values(List<ProjectTag> tags, TagCategory category) => tags
-      .where((t) => t.category == category)
+      .where((t) => t.knownCategory == category)
       .map((t) => t.value)
       .toSet()
       .toList();

@@ -41,11 +41,11 @@ class StackResolver {
   ResolvedStack resolve(List<ProjectTag> tags) {
     final active = tags.where((t) => !t.isRejected).toList();
     final objectives = active
-        .where((t) => t.category == TagCategory.objectives)
+        .where((t) => t.knownCategory == TagCategory.objectives)
         .map((t) => t.value.toLowerCase())
         .toSet();
     final platforms = active
-        .where((t) => t.category == TagCategory.platforms)
+        .where((t) => t.knownCategory == TagCategory.platforms)
         .map((t) => t.value.toLowerCase())
         .toSet();
 
@@ -57,7 +57,7 @@ class StackResolver {
 
     void add(TagCategory category, String value, Layer layer, String why) {
       resolved.add(ProjectTag(
-        category: category,
+        category: category.wire,
         value: value,
         source: TagSource.ai,
         origin: 'setup',

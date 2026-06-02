@@ -13,8 +13,7 @@ import 'package:nexus_projects_client/features/projects/widgets/project_orchestr
 import 'package:nexus_projects_client/features/projects/workspace_nav.dart';
 import 'package:nexus_projects_client/features/project_plans/plan_workspace.dart';
 import 'package:nexus_projects_client/features/project_setup/providers/tag_providers.dart';
-import 'package:nexus_projects_client/features/project_setup/setup_chat_controller.dart';
-import 'package:nexus_projects_client/features/project_setup/setup_tab.dart';
+import 'package:nexus_projects_client/features/project_setup/project_setup_wizard.dart';
 import 'package:nexus_projects_client/features/project_setup/summary_tab.dart';
 
 /// Which detail panel the project-workspace RIGHT outer panel should show,
@@ -41,23 +40,20 @@ class ProjectWorkspaceView extends ConsumerStatefulWidget {
 class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
-  // Tab order is dynamic. While setup is unfinished it sits at index 1 so a
-  // fresh project lands on it: Chat(0), Setup(1), Summary(2), Overview(3),
-  // Plan(4). Once setup is complete it moves to the LAST slot and the rest
-  // shift up: Chat(0), Summary(1), Overview(2), Plan(3), Setup(4). Kept in
-  // sync by build() so the listeners below target the right tabs.
-  int _setupTabIndex = 1;
-  int _planTabIndex = 4;
+  // Setup is no longer a tab — it's a full-screen wizard (auto-opened on a fresh
+  // project, resumable from Summary). Tabs: Chat(0), Summary(1), Overview(2),
+  // Plan(3).
+  static const int _planTabIndex = 3;
+  static const int _overviewTabIndex = 2;
 
-  /// The project we've already auto-jumped to Setup for, so we don't fight the
-  /// user when they navigate away — but DO re-gate when they switch to a
-  /// different, not-yet-set-up project.
-  int? _gatedProjectId;
+  /// The project we've already auto-opened the setup wizard for, so we don't
+  /// re-open it on every rebuild — but DO open it for a different fresh project.
+  int? _wizardOpenedForProject;
 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 5, vsync: this);
+    _tabs = TabController(length: 4, vsync: this);
     // Publish whether Setup is the active tab so the MainShell right outer
     // panel can swap to the interview chat (instead of the Plan explorer).
     _tabs.addListener(_publishSetupMode);
@@ -68,18 +64,11 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
 
   void _publishSetupMode() {
     if (!mounted) return;
-    final idx = _tabs.index;
-    final isSetup = idx == _setupTabIndex;
-    if (ref.read(projectSetupModeProvider) != isSetup) {
-      ref.read(projectSetupModeProvider.notifier).state = isSetup;
-    }
-    // Drive the right outer panel from the active tab: Setup → interview,
-    // Plan → plans explorer, everything else (Chat/Summary/Overview) → history.
-    final panel = isSetup
-        ? WorkspaceRightPanel.setupInterview
-        : (idx == _planTabIndex
-            ? WorkspaceRightPanel.planExplorer
-            : WorkspaceRightPanel.chatHistory);
+    // Drive the right outer panel from the active tab: Plan → plans explorer,
+    // everything else (Chat/Summary/Overview) → chat-session history.
+    final panel = _tabs.index == _planTabIndex
+        ? WorkspaceRightPanel.planExplorer
+        : WorkspaceRightPanel.chatHistory;
     if (ref.read(workspaceRightPanelProvider) != panel) {
       ref.read(workspaceRightPanelProvider.notifier).state = panel;
     }
@@ -131,50 +120,32 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
       orElse: () => 'Project',
     );
 
-    // Setup status drives gating (land a fresh project on Setup), tab order,
-    // and the skip banner. Once 'complete', Setup slides to the last slot.
+    // Setup is now a resumable full-screen WIZARD (not a tab). On a fresh
+    // project we auto-open it once; it's also reachable from the Summary tab.
     final setupStatus =
         ref.watch(projectRowProvider(projectId)).valueOrNull?.setupStatus;
-    final setupComplete = setupStatus == 'complete';
-    _setupTabIndex = setupComplete ? 4 : 1;
-    _planTabIndex = setupComplete ? 3 : 4;
-    // Overview sits before Plan in both layouts: Chat,[Setup],Summary,Overview.
-    final overviewTabIndex = setupComplete ? 2 : 3;
 
-    // External nudges (e.g. the setup "Done" dialog) can ask us to surface the
+    // External nudges (e.g. the setup "Done" flow) can ask us to surface the
     // Overview tab, where the orchestration Start button lives.
     ref.listen<int>(requestOverviewTabProvider, (prev, next) {
-      if (next != (prev ?? 0) && _tabs.index != overviewTabIndex) {
-        _tabs.animateTo(overviewTabIndex);
+      if (next != (prev ?? 0) && _tabs.index != _overviewTabIndex) {
+        _tabs.animateTo(_overviewTabIndex);
       }
     });
 
-    if (_gatedProjectId != projectId &&
-        (setupStatus == 'notStarted' ||
-            setupStatus == 'inProgress' ||
-            setupStatus == 'refining')) {
-      _gatedProjectId = projectId;
+    if (_wizardOpenedForProject != projectId && setupStatus == 'notStarted') {
+      _wizardOpenedForProject = projectId;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _tabs.index != _setupTabIndex) {
-          _tabs.animateTo(_setupTabIndex);
-        }
+        if (mounted) showProjectSetupWizard(context, projectId, clientId);
       });
     }
 
     const chatTab = Tab(icon: Icon(Icons.forum_outlined, size: 18), text: 'Chat');
-    const setupTab =
-        Tab(icon: Icon(Icons.checklist_rtl, size: 18), text: 'Setup');
     const summaryTab =
         Tab(icon: Icon(Icons.summarize_outlined, size: 18), text: 'Summary');
     const overviewTab = Tab(icon: Icon(Icons.tune, size: 18), text: 'Overview');
     const planTab =
         Tab(icon: Icon(Icons.description_outlined, size: 18), text: 'Plan');
-
-    final setupView = SetupTab(
-      key: ValueKey('project-setup-$projectId'),
-      projectId: projectId,
-      clientId: clientId,
-    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -183,18 +154,17 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
           controller: _tabs,
           isScrollable: true,
           tabAlignment: TabAlignment.start,
-          tabs: [
-            chatTab,
-            if (!setupComplete) setupTab,
-            summaryTab,
-            overviewTab,
-            planTab,
-            if (setupComplete) setupTab,
-          ],
+          tabs: const [chatTab, summaryTab, overviewTab, planTab],
         ),
         const Divider(height: 1),
-        if (setupStatus == 'skipped')
-          _FinishSetupBanner(onFinish: () => _tabs.animateTo(_setupTabIndex)),
+        if (setupStatus == 'notStarted' ||
+            setupStatus == 'inProgress' ||
+            setupStatus == 'refining' ||
+            setupStatus == 'skipped')
+          _FinishSetupBanner(
+            onFinish: () =>
+                showProjectSetupWizard(context, projectId, clientId),
+          ),
         Expanded(
           child: TabBarView(
             controller: _tabs,
@@ -207,7 +177,6 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
                 projectId: projectId,
                 projectName: projectName,
               ),
-              if (!setupComplete) setupView,
               SummaryTab(
                 key: ValueKey('project-summary-$projectId'),
                 projectId: projectId,
@@ -215,7 +184,6 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
               ),
               _ProjectOverviewTab(projectId: projectId, clientId: clientId),
               const PlanWorkspaceView(),
-              if (setupComplete) setupView,
             ],
           ),
         ),

@@ -7,6 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/database_provider.dart';
 import '../../infrastructure/database/nexus_database.dart';
+import '../../shared/ui/nexus_ui.dart';
+import 'project_setup_wizard.dart';
+import 'providers/tag_providers.dart';
 import 'summary_service.dart';
 
 /// Project Summary tab: shows the AI-compiled, plain-language summary of all
@@ -77,6 +80,7 @@ class _SummaryTabState extends ConsumerState<SummaryTab> {
           ),
         ),
         const Divider(height: 1),
+        _SetupCard(projectId: widget.projectId, clientId: widget.clientId),
         if (_error != null)
           Container(
             width: double.infinity,
@@ -124,6 +128,45 @@ class _SummaryTabState extends ConsumerState<SummaryTab> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Setup entry point on the Summary: shows status and opens the resumable
+/// full-screen setup wizard (start / resume / review).
+class _SetupCard extends ConsumerWidget {
+  const _SetupCard({required this.projectId, required this.clientId});
+  final int projectId;
+  final int clientId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final status =
+        ref.watch(projectRowProvider(projectId)).valueOrNull?.setupStatus ??
+            'notStarted';
+    final (label, action, icon) = switch (status) {
+      'complete' => ('Setup complete', 'Review & edit', Icons.fact_check_outlined),
+      'inProgress' || 'refining' => ('Setup in progress', 'Resume setup', Icons.play_circle_outline),
+      'skipped' => ('Setup skipped', 'Finish setup', Icons.checklist_rtl),
+      _ => ('Setup not started', 'Start setup', Icons.checklist_rtl),
+    };
+    return Container(
+      width: double.infinity,
+      color: theme.colorScheme.surfaceContainerHighest,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: theme.colorScheme.primary),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(child: Text(label, style: theme.textTheme.bodyMedium)),
+          FilledButton.tonalIcon(
+            onPressed: () => showProjectSetupWizard(context, projectId, clientId),
+            icon: const Icon(Icons.open_in_full, size: 16),
+            label: Text(action),
+          ),
+        ],
+      ),
     );
   }
 }

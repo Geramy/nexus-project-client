@@ -15,6 +15,15 @@ import 'package:nexus_projects_client/infrastructure/database/nexus_database.dar
 /// (and picking an agent pack), so a fresh install starts clean instead of with
 /// a confusing placeholder project.
 Future<void> seedInitialData(NexusDatabase db) async {
+  // Configurable setup-interview flows are global + idempotent — seed them
+  // every launch (independent of the Default-client check below) so new built-in
+  // flows (e.g. new IVR sub-categories) appear without a DB reset.
+  try {
+    await db.seedSetupFlows();
+  } catch (e) {
+    debugPrint('Seeder: setup flows warning (non-fatal): $e');
+  }
+
   final existingDefault = await db.getDefaultClient();
   if (existingDefault != null) return; // Already have a Default client.
 
