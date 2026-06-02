@@ -123,6 +123,34 @@ jobs:
       - name: Build macOS (release)
         run: flutter build macos --release --build-name=${{ env.APP_VERSION }} --build-number=${{ github.run_number }}
 
+      # git2dart_binaries ships libgit2/libssh2 as CocoaPods 'vendored_libraries'.
+      # Those get LINKED into the app (the binary references @rpath/libgit2.dylib +
+      # @rpath/libssh2.1.dylib) but older versions did not COPY them into the
+      # bundle — so the app crashed at launch with "Library not loaded:
+      # @rpath/libgit2…dylib". Current binaries do embed them; this step embeds any
+      # that are missing and then HARD-FAILS if the binary still references a native
+      # lib that isn't bundled, so a broken build can never ship again.
+      - name: Verify & embed native libraries (macOS)
+        run: |
+          set -euo pipefail
+          APP="build/macos/Build/Products/Release/${APP_NAME}.app"
+          FW="$APP/Contents/Frameworks"
+          mkdir -p "$FW"
+          GBDIR="$(dirname "$(find "${PUB_CACHE:-$HOME/.pub-cache}" -path '*git2dart_binaries*/macos/libgit2.dylib' 2>/dev/null | head -1)")"
+          for lib in libgit2.dylib libssh2.1.dylib; do
+            if [ ! -f "$FW/$lib" ]; then
+              echo "Embedding missing $lib from $GBDIR"
+              cp -f "$GBDIR/$lib" "$FW/$lib"
+            fi
+          done
+          echo "Bundled native libs:"; ls -1 "$FW" | grep -iE 'git2|ssh2' || true
+          missing=0
+          for ref in $(otool -L "$APP/Contents/MacOS/${APP_NAME}" | awk '/@rpath\/lib(git2|ssh2)/{print $1}'); do
+            f="${ref#@rpath/}"
+            if [ ! -f "$FW/$f" ]; then echo "::error::$f is referenced but not bundled"; missing=1; fi
+          done
+          [ "$missing" = 0 ] || { echo "Native libraries missing from bundle"; exit 1; }
+
       - name: Sign, package (.pkg) and notarize
         env:
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -160,6 +188,11 @@ jobs:
           INST_ID="$(security find-identity -v "$KEYCHAIN" | awk -F'"' '/Developer ID Installer/{print $2; exit}')"
           echo "App identity:       $APP_ID"
           echo "Installer identity: $INST_ID"
+
+          # --- sign nested native dylibs first (inside-out), then the app ---
+          for lib in "$APP/Contents/Frameworks/libssh2.1.dylib" "$APP/Contents/Frameworks/libgit2.dylib"; do
+            [ -f "$lib" ] && codesign --force --options runtime --timestamp --sign "$APP_ID" "$lib"
+          done
 
           # --- sign the .app with hardened runtime ---
           codesign --force --deep --options runtime --timestamp \
@@ -225,14 +258,22 @@ jobs:
       # git2dart_binaries' linux/CMakeLists.txt bundles a versioned filename
       # (libgit2-1.6.2.so) but the package actually ships libgit2.so, so the
       # native build fails copying a non-existent file. Point it at the real name.
-      - name: Patch git2dart_binaries native lib name (Linux)
+      - name: Patch git2dart_binaries native lib names (Linux)
         run: |
           set -euo pipefail
           CM="$(find "${PUB_CACHE:-$HOME/.pub-cache}" -path '*git2dart_binaries*/linux/CMakeLists.txt' 2>/dev/null | head -1)"
           if [ -z "$CM" ]; then echo "git2dart_binaries linux/CMakeLists.txt not found" >&2; exit 1; fi
+          DIR="$(dirname "$CM")"
           echo "Patching $CM"
+          # The upstream bundled list hard-codes a versioned libgit2 name the package
+          # no longer ships, and omits libssh2.so — which libgit2 depends on, so the
+          # Linux app would crash at launch the same way macOS did. Fix the name and
+          # add libssh2.so so both get bundled.
           sed -i 's#libgit2-1\.6\.2\.so#libgit2.so#g' "$CM"
-          grep -n -A4 bundled_libraries "$CM" || true
+          if [ -f "$DIR/libssh2.so" ] && ! grep -q 'libssh2\.so' "$CM"; then
+            sed -i 's#\(.*CMAKE_CURRENT_SOURCE_DIR}/libgit2\.so".*\)#\1\n  "${CMAKE_CURRENT_SOURCE_DIR}/libssh2.so"#' "$CM"
+          fi
+          grep -n -A6 bundled_libraries "$CM" || true
 
       - name: Generate code
         run: dart run build_runner build --delete-conflicting-outputs
