@@ -125,49 +125,55 @@ jobs:
             -e 's/DEVELOPMENT_TEAM = YBQ9BU6Q6F;/DEVELOPMENT_TEAM = "";/g' \
             "$PBX"
 
-      # The GitHub runner ships Homebrew's libgit2, built with the experimental
-      # SHA256 API (install name @rpath/libgit2-experimental.1.9.dylib). With it on
-      # the linker search path, the git2dart_binaries pod links THAT instead of its
-      # vendored libgit2.dylib — and the experimental dylib isn't bundled, so the
-      # app crashes at launch. Remove it so the build links the vendored copy
-      # (@rpath/libgit2.dylib), which the next step embeds + verifies.
-      - name: Remove Homebrew libgit2 so the pod links its vendored copy (macOS)
-        run: |
-          set -euo pipefail
-          brew uninstall --ignore-dependencies libgit2 2>/dev/null || true
-          sudo rm -f /opt/homebrew/lib/libgit2*.dylib \
-                     /opt/homebrew/opt/libgit2/lib/libgit2*.dylib 2>/dev/null || true
-          echo "Remaining brew libgit2 dylibs:"
-          ls -1 /opt/homebrew/lib/libgit2* 2>/dev/null || echo "  none (good)"
-
       - name: Build macOS (release)
         run: flutter build macos --release --build-name=${{ env.APP_VERSION }} --build-number=${{ github.run_number }}
 
-      # git2dart_binaries ships libgit2/libssh2 as CocoaPods 'vendored_libraries'.
-      # Those get LINKED into the app (the binary references @rpath/libgit2.dylib +
-      # @rpath/libssh2.1.dylib) but older versions did not COPY them into the
-      # bundle — so the app crashed at launch with "Library not loaded:
-      # @rpath/libgit2…dylib". Current binaries do embed them; this step embeds any
-      # that are missing and then HARD-FAILS if the binary still references a native
-      # lib that isn't bundled, so a broken build can never ship again.
-      - name: Verify & embed native libraries (macOS)
+      # git2dart ships libgit2 (built with -DGIT_EXPERIMENTAL_SHA256=ON) + libssh2
+      # as CocoaPods 'vendored_libraries'. The runner's linker records libgit2 under
+      # its ORIGINAL experimental install name (@rpath/libgit2-experimental.1.9.dylib)
+      # rather than the vendored @rpath/libgit2.dylib — the same library, different
+      # recorded name — and that name isn't bundled, so the app crashes at launch
+      # ("Library not loaded: @rpath/libgit2-experimental…dylib").
+      # Fix: bundle the vendored dylibs, then rewrite every experimental libgit2
+      # reference across the app's Mach-O binaries back to the bundled @rpath/libgit2.dylib.
+      - name: Embed & normalize native libraries (macOS)
         run: |
           set -euo pipefail
           APP="build/macos/Build/Products/Release/${APP_NAME}.app"
           FW="$APP/Contents/Frameworks"
+          EXE="$APP/Contents/MacOS/${APP_NAME}"
           mkdir -p "$FW"
           GBDIR="$(dirname "$(find "${PUB_CACHE:-$HOME/.pub-cache}" -path '*git2dart_binaries*/macos/libgit2.dylib' 2>/dev/null | head -1)")"
+
+          # Bundle the vendored dylibs under their canonical @rpath names.
           for lib in libgit2.dylib libssh2.1.dylib; do
-            if [ ! -f "$FW/$lib" ]; then
-              echo "Embedding missing $lib from $GBDIR"
-              cp -f "$GBDIR/$lib" "$FW/$lib"
-            fi
+            [ -f "$FW/$lib" ] || { echo "Embedding $lib"; cp -f "$GBDIR/$lib" "$FW/$lib"; }
           done
+
+          # Collect the Mach-O binaries to scan (main exe + bundled dylibs + framework binaries).
+          bins=("$EXE")
+          for d in "$FW"/*.dylib; do [ -f "$d" ] && bins+=("$d"); done
+          for f in "$FW"/*.framework/Versions/*/*; do
+            [ -f "$f" ] && file "$f" 2>/dev/null | grep -q 'Mach-O' && bins+=("$f")
+          done
+
+          # Rewrite any experimental libgit2 reference -> the bundled vendored copy.
+          for bin in "${bins[@]}"; do
+            otool -L "$bin" 2>/dev/null | awk '/@rpath\/libgit2-experimental/{print $1}' | sort -u | while read -r ref; do
+              echo "Rewriting $ref -> @rpath/libgit2.dylib in $(basename "$bin")"
+              install_name_tool -change "$ref" "@rpath/libgit2.dylib" "$bin"
+            done
+          done
+
           echo "Bundled native libs:"; ls -1 "$FW" | grep -iE 'git2|ssh2' || true
+
+          # Hard-fail if any native lib reference is still unbundled.
           missing=0
-          for ref in $(otool -L "$APP/Contents/MacOS/${APP_NAME}" | awk '/@rpath\/lib(git2|ssh2)/{print $1}'); do
-            f="${ref#@rpath/}"
-            if [ ! -f "$FW/$f" ]; then echo "::error::$f is referenced but not bundled"; missing=1; fi
+          for bin in "${bins[@]}"; do
+            for ref in $(otool -L "$bin" 2>/dev/null | awk '/@rpath\/lib(git2|ssh2)/{print $1}'); do
+              f="${ref#@rpath/}"
+              [ -f "$FW/$f" ] || { echo "::error::$f referenced by $(basename "$bin") but not bundled"; missing=1; }
+            done
           done
           [ "$missing" = 0 ] || { echo "Native libraries missing from bundle"; exit 1; }
 
@@ -210,7 +216,7 @@ jobs:
           echo "Installer identity: $INST_ID"
 
           # --- sign nested native dylibs first (inside-out), then the app ---
-          for lib in "$APP/Contents/Frameworks/libssh2.1.dylib" "$APP/Contents/Frameworks/libgit2.dylib"; do
+          for lib in "$APP/Contents/Frameworks/"*.dylib; do
             [ -f "$lib" ] && codesign --force --options runtime --timestamp --sign "$APP_ID" "$lib"
           done
 
