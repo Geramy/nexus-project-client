@@ -4,3 +4,11 @@
 // Raised for the 'vad' plugin (and its onnxruntime dependency) which requires 13.3+.
 // Matches the minimum deployment target declared by the lemonade_mobile-aligned vad package.
 MACOSX_DEPLOYMENT_TARGET = 13.3
+
+// git2dart_binaries ships arm64-ONLY macOS dylibs (libgit2 / libssh2). A
+// universal (x86_64 + arm64) build therefore produces a broken x86_64 slice
+// that can't load libgit2 and crashes at launch ("Library not loaded:
+// @rpath/libgit2…dylib"). Build arm64-only — macOS 26 is Apple Silicon only.
+ARCHS = arm64
+EXCLUDED_ARCHS = x86_64
+ONLY_ACTIVE_ARCH = NO
