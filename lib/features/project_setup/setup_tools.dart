@@ -299,22 +299,27 @@ class SetupToolExecutor {
 
     for (final entry in raw) {
       if (entry is! Map) continue;
-      final category = TagCategoryX.fromWire(entry['category']?.toString());
+      // Category is a setup-flow stage key (raw string). For known software
+      // categories we keep the legacy enum semantics (closed-vocab, library
+      // verification); non-software (IVR) categories pass through as-is.
+      final catStr = (entry['category'] ?? '').toString().trim();
       final value = (entry['value'] ?? '').toString().trim();
-      if (category == null || value.isEmpty) continue;
+      if (catStr.isEmpty || value.isEmpty) continue;
+      final known = TagCategoryX.fromWire(catStr);
 
-      // Enforce closed vocab for languages/platforms (anti-hallucination).
-      if (category.vocab == VocabKind.closed &&
-          !category.vocabulary
+      // Enforce closed vocab for known closed categories (languages/platforms).
+      if (known != null &&
+          known.vocab == VocabKind.closed &&
+          !known.vocabulary
               .map((v) => v.toLowerCase())
               .contains(value.toLowerCase())) {
-        skipped.add('$value (not an allowed ${category.label} value)');
+        skipped.add('$value (not an allowed ${known.label} value)');
         continue;
       }
 
       // Libraries can attach to the language they're used with (closed vocab).
       String? forLanguage;
-      if (category == TagCategory.libraries) {
+      if (known == TagCategory.libraries) {
         final raw = entry['forLanguage']?.toString().trim();
         if (raw != null && raw.isNotEmpty) {
           for (final lang in kLanguages) {
@@ -330,7 +335,7 @@ class SetupToolExecutor {
       String? verdict;
       DateTime? verifiedAt;
       final sourceUrl = entry['sourceUrl']?.toString();
-      if (category == TagCategory.libraries) {
+      if (known == TagCategory.libraries) {
         try {
           final eco = (sourceUrl != null && sourceUrl.contains('github.com'))
               ? 'github'
@@ -342,7 +347,7 @@ class SetupToolExecutor {
       }
 
       await controller.upsert(ProjectTag(
-        category: category,
+        category: catStr,
         value: value,
         source: TagSource.ai,
         origin: 'setup',
@@ -368,8 +373,7 @@ class SetupToolExecutor {
     final uiTags = tags
         .map((row) => ProjectTag(
               tagPk: row.tag_pk,
-              category: TagCategoryX.fromWire(row.category) ??
-                  TagCategory.objectives,
+              category: row.category,
               value: row.value,
               source: TagSourceX.fromWire(row.source),
               origin: row.origin,

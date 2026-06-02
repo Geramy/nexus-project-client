@@ -8,16 +8,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/database_provider.dart';
 import '../../../infrastructure/database/nexus_database.dart' as db_lib;
 import '../models/project_tag.dart';
-import '../models/tag_category.dart';
 
-/// Maps a Drift [ProjectTag] row → the UI model. Rows whose category is not one
-/// of the six known sections are dropped (defensive against stray data).
-ProjectTag? _fromRow(db_lib.ProjectTag row) {
-  final category = TagCategoryX.fromWire(row.category);
-  if (category == null) return null;
+/// Maps a Drift [ProjectTag] row → the UI model. The category is kept as the
+/// raw section key (a setup-flow stage key) so non-software flows (IVR) round-
+/// trip; software consumers use [ProjectTag.knownCategory].
+ProjectTag _fromRow(db_lib.ProjectTag row) {
   return ProjectTag(
     tagPk: row.tag_pk,
-    category: category,
+    category: row.category,
     value: row.value,
     source: TagSourceX.fromWire(row.source),
     origin: row.origin,
@@ -47,9 +45,9 @@ final projectTagsProvider =
       );
 });
 
-/// Tags for one section, excluding rejected — the consumer-facing view.
+/// Tags for one section (by raw category key), excluding rejected.
 final tagsForCategoryProvider = Provider.family<List<ProjectTag>,
-    ({int projectPk, TagCategory category})>((ref, args) {
+    ({int projectPk, String category})>((ref, args) {
   final all = ref.watch(projectTagsProvider(args.projectPk)).valueOrNull ?? [];
   return all
       .where((t) => t.category == args.category && !t.isRejected)
@@ -68,7 +66,7 @@ class TagController {
     return _db.upsertTag(
       db_lib.ProjectTagsCompanion(
         project_fk: Value(_projectPk),
-        category: Value(tag.category.wire),
+        category: Value(tag.category),
         value: Value(tag.value),
         source: Value(tag.source.wire),
         origin: Value(tag.origin),
@@ -85,7 +83,7 @@ class TagController {
 
   /// Manual add from the "+ Add" picker; user-sourced and immediately accepted.
   Future<int> addManual({
-    required TagCategory category,
+    required String category,
     required String value,
     String? layerKey,
   }) {

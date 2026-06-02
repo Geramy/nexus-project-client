@@ -32,7 +32,11 @@ extension TagSourceX on TagSource {
 /// Drift-generated row so the closed-vocab + status logic is testable.
 class ProjectTag {
   final int? tagPk;
-  final TagCategory category;
+
+  /// The tag's section key — a setup-flow stage key (e.g. 'industries',
+  /// 'callPurpose'). Stored raw so non-software flows (IVR) work; software
+  /// consumers use [knownCategory] for enum semantics.
+  final String category;
   final String value;
   final TagSource source;
   final String origin; // setup|plan|agent|workspace
@@ -59,6 +63,11 @@ class ProjectTag {
     this.verifiedAt,
   });
 
+  /// The known software [TagCategory] for this tag, or null for a non-software
+  /// (flow-defined) category. Software-only consumers (stack resolver, plan
+  /// generator) use this; the board groups by the raw [category] string.
+  TagCategory? get knownCategory => TagCategoryX.fromWire(category);
+
   /// True when the user has neither confirmed nor rejected — shown as a ghost
   /// chip that survives untouched per the agreed semantics.
   bool get isProposed => status == TagStatus.proposed;
@@ -67,7 +76,7 @@ class ProjectTag {
 
   ProjectTag copyWith({
     int? tagPk,
-    TagCategory? category,
+    String? category,
     String? value,
     TagSource? source,
     String? origin,

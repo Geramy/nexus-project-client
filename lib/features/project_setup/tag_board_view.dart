@@ -5,14 +5,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'config/setup_flow.dart';
+import 'config/setup_flow_providers.dart';
 import 'models/project_tag.dart';
-import 'models/tag_category.dart';
 import 'providers/tag_providers.dart';
 import 'stack_resolver.dart';
 
-/// The Tag Board: the project-profile sections of chips (one per TagCategory). Each
-/// chip can be accepted (✓) or rejected (✗); untouched chips stay `proposed`.
-/// All state is DB-backed via [tagControllerProvider] so edits persist.
+/// The Setup board: one section per stage of the project's RESOLVED setup flow —
+/// the SAME [SetupFlowDefinition] the interview prompt follows, so the steps the
+/// AI runs and the sections shown never diverge (software → Industries/…/
+/// Libraries; IVR → Business Context/Call Purpose/Routing/…). Chips can be
+/// accepted (✓) or rejected (✗); state is DB-backed via [tagControllerProvider].
 class TagBoardView extends ConsumerWidget {
   const TagBoardView({super.key, required this.projectPk});
 
@@ -20,37 +23,73 @@ class TagBoardView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final flowAsync = ref.watch(setupFlowForProjectProvider(projectPk));
     final tagsAsync = ref.watch(projectTagsProvider(projectPk));
 
-    return tagsAsync.when(
+    return flowAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Failed to load tags: $e')),
-      data: (tags) => _board(context, ref, tags),
+      error: (e, _) => Center(child: Text('Failed to load setup flow: $e')),
+      data: (flow) => tagsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Failed to load tags: $e')),
+        data: (tags) => _board(context, ref, flow, tags),
+      ),
     );
   }
 
-  Widget _board(BuildContext context, WidgetRef ref, List<ProjectTag> tags) {
-    final byCategory = <TagCategory, List<ProjectTag>>{
-      for (final c in TagCategory.values) c: [],
+  Widget _board(BuildContext context, WidgetRef ref,
+      SetupFlowDefinition flow, List<ProjectTag> tags) {
+    final byCategory = <String, List<ProjectTag>>{
+      for (final s in flow.stages) s.key: [],
     };
     for (final t in tags) {
-      byCategory[t.category]!.add(t);
+      (byCategory[t.category] ??= []).add(t);
     }
+    // Orphan categories (tags whose section isn't in the current flow, e.g. a
+    // legacy software tag on a re-typed project) get shown last so nothing is
+    // silently hidden.
+    final orphans = byCategory.keys
+        .where((k) => !flow.stages.any((s) => s.key == k))
+        .toList();
+
+    // The deterministic Client↔Server↔DB resolver is software-only; show its bar
+    // only when this flow has the derived `languages` stage.
+    final isSoftware = flow.stages.any((s) => s.key == 'languages');
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _ResolveBar(projectPk: projectPk),
-        const SizedBox(height: 8),
-        for (final category in TagCategory.values)
+        if (isSoftware) ...[
+          _ResolveBar(projectPk: projectPk),
+          const SizedBox(height: 8),
+        ],
+        for (final s in flow.stages)
           _TagSection(
             projectPk: projectPk,
-            category: category,
-            tags: byCategory[category]!,
+            sectionKey: s.key,
+            title: s.title,
+            suggestions: s.suggestions,
+            closed: s.vocab == SetupVocab.closed,
+            tags: byCategory[s.key] ?? const [],
+          ),
+        for (final k in orphans)
+          _TagSection(
+            projectPk: projectPk,
+            sectionKey: k,
+            title: _prettify(k),
+            suggestions: const [],
+            closed: false,
+            tags: byCategory[k] ?? const [],
           ),
       ],
     );
   }
+
+  static String _prettify(String key) => key.isEmpty
+      ? key
+      : key[0].toUpperCase() +
+          key.substring(1).replaceAllMapped(
+              RegExp('([A-Z])'), (m) => ' ${m.group(1)}');
 }
 
 /// Runs the deterministic resolver over the current intent tags and upserts the
@@ -121,12 +160,18 @@ class _ResolveBarState extends ConsumerState<_ResolveBar> {
 class _TagSection extends ConsumerWidget {
   const _TagSection({
     required this.projectPk,
-    required this.category,
+    required this.sectionKey,
+    required this.title,
+    required this.suggestions,
+    required this.closed,
     required this.tags,
   });
 
   final int projectPk;
-  final TagCategory category;
+  final String sectionKey;
+  final String title;
+  final List<String> suggestions;
+  final bool closed;
   final List<ProjectTag> tags;
 
   @override
@@ -139,7 +184,7 @@ class _TagSection extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Text(category.label,
+              Text(title,
                   style: theme.textTheme.titleMedium
                       ?.copyWith(fontWeight: FontWeight.w600)),
               const SizedBox(width: 8),
@@ -177,10 +222,11 @@ class _TagSection extends ConsumerWidget {
     final controller = ref.read(tagControllerProvider(projectPk));
     final value = await showDialog<String>(
       context: context,
-      builder: (_) => _AddTagDialog(category: category),
+      builder: (_) =>
+          _AddTagDialog(title: title, suggestions: suggestions, closed: closed),
     );
     if (value == null || value.trim().isEmpty) return;
-    await controller.addManual(category: category, value: value.trim());
+    await controller.addManual(category: sectionKey, value: value.trim());
   }
 }
 
@@ -365,8 +411,14 @@ class _VerdictDot extends StatelessWidget {
 /// Add-tag dialog. Closed/curated categories show their vocabulary as choices;
 /// curated + open also allow a free-text entry.
 class _AddTagDialog extends StatefulWidget {
-  const _AddTagDialog({required this.category});
-  final TagCategory category;
+  const _AddTagDialog({
+    required this.title,
+    required this.suggestions,
+    required this.closed,
+  });
+  final String title;
+  final List<String> suggestions;
+  final bool closed;
 
   @override
   State<_AddTagDialog> createState() => _AddTagDialogState();
@@ -383,12 +435,11 @@ class _AddTagDialogState extends State<_AddTagDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final vocab = widget.category.vocabulary;
-    final kind = widget.category.vocab;
-    final allowsFreeText = kind != VocabKind.closed;
+    final vocab = widget.suggestions;
+    final allowsFreeText = !widget.closed;
 
     return AlertDialog(
-      title: Text('Add to ${widget.category.label}'),
+      title: Text('Add to ${widget.title}'),
       content: SizedBox(
         width: 380,
         child: Column(
@@ -412,11 +463,9 @@ class _AddTagDialogState extends State<_AddTagDialog> {
               TextField(
                 controller: _ctrl,
                 autofocus: vocab.isEmpty,
-                decoration: InputDecoration(
-                  labelText: kind == VocabKind.open
-                      ? 'Package / repo name'
-                      : 'Custom value',
-                  border: const OutlineInputBorder(),
+                decoration: const InputDecoration(
+                  labelText: 'Custom value',
+                  border: OutlineInputBorder(),
                 ),
                 onSubmitted: (v) => Navigator.of(context).pop(v),
               ),
