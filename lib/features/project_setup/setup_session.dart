@@ -214,10 +214,14 @@ How to work:
         });
 
         if (toolCalls.isEmpty) {
-          // A turn that produced neither a tool call nor spoken text is a stall
-          // (the model "thought" but didn't act). Auto-nudge it to continue —
-          // up to twice — so the user doesn't have to type "?" to unstick it.
-          if (content.trim().isEmpty && emptyRounds < 2) {
+          // The bounded interview is tool-driven: the host should ALWAYS act via
+          // a tool (ask_question / propose_tags / lookup_package / finalize). A
+          // turn that ends with NO tool call — whether empty or just narration
+          // ("Let me set that up…") — is a stall; auto-nudge it to take the next
+          // step, up to twice, so the user never has to type "?" to unstick it.
+          // The refine phase is open conversation, so plain-text replies there
+          // are legitimate and we don't nudge.
+          if (phase == SetupPhase.interview && emptyRounds < 2) {
             emptyRounds++;
             _history.add({'role': 'user', 'content': _continueNudge});
             continue;
