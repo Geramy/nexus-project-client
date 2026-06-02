@@ -5,16 +5,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:nexus_projects_client/core/providers/auth_skipped_provider.dart';
 import 'package:nexus_projects_client/features/account/widgets/account_auth_forms.dart';
 import 'package:nexus_projects_client/features/main/main_shell.dart';
 import 'package:nexus_projects_client/infrastructure/nexus/providers/nexus_account_providers.dart';
 import 'package:nexus_projects_client/shared/ui/nexus_ui.dart';
-
-/// Set when the user taps "Skip for now" on the login screen: lets them into the
-/// app without signing in (they can sign in later from the Account screen). Not
-/// persisted — a fresh launch shows the login screen again until they skip or
-/// sign in.
-final authSkippedProvider = StateProvider<bool>((ref) => false);
 
 /// Top-level auth gate. Routes unauthenticated users to a full-screen
 /// login/register page and signed-in users to the main workspace. While the
@@ -31,7 +26,7 @@ class AuthGate extends ConsumerWidget {
     if (auth.busy && auth.token == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    if (!auth.isSignedIn && !ref.watch(authSkippedProvider)) {
+    if (!auth.isSignedIn && !ref.watch(authSkippedNotifierProvider)) {
       return const _LoginScreen();
     }
     return const MainShell();
@@ -79,7 +74,7 @@ class _LoginScreen extends ConsumerWidget {
                 ),
                 AccountAuthForms(
                   onSkip: () =>
-                      ref.read(authSkippedProvider.notifier).state = true,
+                      ref.read(authSkippedNotifierProvider.notifier).skip(),
                 ),
               ],
             ),
