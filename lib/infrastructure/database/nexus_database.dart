@@ -29,6 +29,7 @@ import '../models/database/tables/chat_session.dart';
 import '../models/database/tables/chat_message.dart';
 import '../models/database/tables/project_tag.dart';
 import '../models/database/tables/library_verification.dart';
+import '../models/database/tables/call_system.dart';
 import '../../features/agents/agent_role.dart';
 import '../../features/agents/agent_role_policy.dart';
 import '../../features/agents/packs/agent_pack.dart';
@@ -57,7 +58,7 @@ class TaskCompletedEvent {
 /// All tables use integer auto-increment primary keys named `<entity>_pk`
 /// (client_pk, project_pk, task_pk, agent_pk, server_pk, session_pk, …) and
 /// foreign keys named `<ref>_fk` (client_fk, project_fk, task_parent_fk, …).
-@DriftDatabase(tables: [Clients, Projects, Tasks, InferenceServers, AgentPersonas, Skills, Deployments, ActivityLogs, CiRuns, CiJobs, CiSteps, ChatSessions, ChatMessages, ProjectTags, LibraryVerifications])
+@DriftDatabase(tables: [Clients, Projects, Tasks, InferenceServers, AgentPersonas, Skills, Deployments, ActivityLogs, CiRuns, CiJobs, CiSteps, ChatSessions, ChatMessages, ProjectTags, LibraryVerifications, CallSystems])
 class NexusDatabase extends _$NexusDatabase {
   NexusDatabase() : super(_openConnection()) {
     _initDriftOptions();
@@ -72,7 +73,7 @@ class NexusDatabase extends _$NexusDatabase {
       _taskCompletedController.stream;
 
   @override
-  int get schemaVersion => 27;
+  int get schemaVersion => 28;
 
   @override
   MigrationStrategy get migration {
@@ -165,6 +166,10 @@ class NexusDatabase extends _$NexusDatabase {
           await m.addColumn(projects, projects.projectType);
           await m.addColumn(projects, projects.subCategory);
           await m.addColumn(projects, projects.experienceMode);
+        }
+        // v27 → v28: per-project IVR/Call-Systems document (portable JSON).
+        if (from < 28) {
+          await m.createTable(callSystems);
         }
       },
     );
@@ -320,6 +325,34 @@ class NexusDatabase extends _$NexusDatabase {
   }
 
   Future<int> createProject(ProjectsCompanion entry) => into(projects).insert(entry);
+
+  // ==================== Call Systems (IVR) ====================
+  /// Reactive call-system document for a project (null until first saved).
+  Stream<CallSystem?> watchCallSystem(int projectPk) =>
+      (select(callSystems)..where((c) => c.project_fk.equals(projectPk)))
+          .watchSingleOrNull();
+
+  Future<CallSystem?> getCallSystem(int projectPk) =>
+      (select(callSystems)..where((c) => c.project_fk.equals(projectPk)))
+          .getSingleOrNull();
+
+  /// Insert-or-update the portable call-system JSON for a project (one per
+  /// project; upsert keyed on project_fk).
+  Future<void> upsertCallSystem(int projectPk, String json) async {
+    final existing = await getCallSystem(projectPk);
+    if (existing == null) {
+      await into(callSystems).insert(
+        CallSystemsCompanion.insert(project_fk: projectPk, json: Value(json)),
+      );
+    } else {
+      await (update(callSystems)
+            ..where((c) => c.call_system_pk.equals(existing.call_system_pk)))
+          .write(CallSystemsCompanion(
+        json: Value(json),
+        updatedAt: Value(DateTime.now()),
+      ));
+    }
+  }
 
   /// Deletes a project and all its tasks + chat sessions.
   Future<bool> deleteProject(int projectPk) async {

@@ -12007,6 +12007,326 @@ class LibraryVerificationsCompanion
   }
 }
 
+class $CallSystemsTable extends CallSystems
+    with TableInfo<$CallSystemsTable, CallSystem> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CallSystemsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _call_system_pkMeta = const VerificationMeta(
+    'call_system_pk',
+  );
+  @override
+  late final GeneratedColumn<int> call_system_pk = GeneratedColumn<int>(
+    'call_system_pk',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _project_fkMeta = const VerificationMeta(
+    'project_fk',
+  );
+  @override
+  late final GeneratedColumn<int> project_fk = GeneratedColumn<int>(
+    'project_fk',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES projects (project_pk)',
+    ),
+  );
+  static const VerificationMeta _jsonMeta = const VerificationMeta('json');
+  @override
+  late final GeneratedColumn<String> json = GeneratedColumn<String>(
+    'json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    call_system_pk,
+    project_fk,
+    json,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'call_systems';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CallSystem> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('call_system_pk')) {
+      context.handle(
+        _call_system_pkMeta,
+        call_system_pk.isAcceptableOrUnknown(
+          data['call_system_pk']!,
+          _call_system_pkMeta,
+        ),
+      );
+    }
+    if (data.containsKey('project_fk')) {
+      context.handle(
+        _project_fkMeta,
+        project_fk.isAcceptableOrUnknown(data['project_fk']!, _project_fkMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_project_fkMeta);
+    }
+    if (data.containsKey('json')) {
+      context.handle(
+        _jsonMeta,
+        json.isAcceptableOrUnknown(data['json']!, _jsonMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {call_system_pk};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {project_fk},
+  ];
+  @override
+  CallSystem map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CallSystem(
+      call_system_pk: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}call_system_pk'],
+      )!,
+      project_fk: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}project_fk'],
+      )!,
+      json: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}json'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CallSystemsTable createAlias(String alias) {
+    return $CallSystemsTable(attachedDatabase, alias);
+  }
+}
+
+class CallSystem extends DataClass implements Insertable<CallSystem> {
+  final int call_system_pk;
+  final int project_fk;
+
+  /// Serialized CallSystemProject.toJson().
+  final String json;
+  final DateTime updatedAt;
+  const CallSystem({
+    required this.call_system_pk,
+    required this.project_fk,
+    required this.json,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['call_system_pk'] = Variable<int>(call_system_pk);
+    map['project_fk'] = Variable<int>(project_fk);
+    map['json'] = Variable<String>(json);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  CallSystemsCompanion toCompanion(bool nullToAbsent) {
+    return CallSystemsCompanion(
+      call_system_pk: Value(call_system_pk),
+      project_fk: Value(project_fk),
+      json: Value(json),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory CallSystem.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CallSystem(
+      call_system_pk: serializer.fromJson<int>(json['call_system_pk']),
+      project_fk: serializer.fromJson<int>(json['project_fk']),
+      json: serializer.fromJson<String>(json['json']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'call_system_pk': serializer.toJson<int>(call_system_pk),
+      'project_fk': serializer.toJson<int>(project_fk),
+      'json': serializer.toJson<String>(json),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  CallSystem copyWith({
+    int? call_system_pk,
+    int? project_fk,
+    String? json,
+    DateTime? updatedAt,
+  }) => CallSystem(
+    call_system_pk: call_system_pk ?? this.call_system_pk,
+    project_fk: project_fk ?? this.project_fk,
+    json: json ?? this.json,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  CallSystem copyWithCompanion(CallSystemsCompanion data) {
+    return CallSystem(
+      call_system_pk: data.call_system_pk.present
+          ? data.call_system_pk.value
+          : this.call_system_pk,
+      project_fk: data.project_fk.present
+          ? data.project_fk.value
+          : this.project_fk,
+      json: data.json.present ? data.json.value : this.json,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CallSystem(')
+          ..write('call_system_pk: $call_system_pk, ')
+          ..write('project_fk: $project_fk, ')
+          ..write('json: $json, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(call_system_pk, project_fk, json, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CallSystem &&
+          other.call_system_pk == this.call_system_pk &&
+          other.project_fk == this.project_fk &&
+          other.json == this.json &&
+          other.updatedAt == this.updatedAt);
+}
+
+class CallSystemsCompanion extends UpdateCompanion<CallSystem> {
+  final Value<int> call_system_pk;
+  final Value<int> project_fk;
+  final Value<String> json;
+  final Value<DateTime> updatedAt;
+  const CallSystemsCompanion({
+    this.call_system_pk = const Value.absent(),
+    this.project_fk = const Value.absent(),
+    this.json = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  CallSystemsCompanion.insert({
+    this.call_system_pk = const Value.absent(),
+    required int project_fk,
+    this.json = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  }) : project_fk = Value(project_fk);
+  static Insertable<CallSystem> custom({
+    Expression<int>? call_system_pk,
+    Expression<int>? project_fk,
+    Expression<String>? json,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (call_system_pk != null) 'call_system_pk': call_system_pk,
+      if (project_fk != null) 'project_fk': project_fk,
+      if (json != null) 'json': json,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  CallSystemsCompanion copyWith({
+    Value<int>? call_system_pk,
+    Value<int>? project_fk,
+    Value<String>? json,
+    Value<DateTime>? updatedAt,
+  }) {
+    return CallSystemsCompanion(
+      call_system_pk: call_system_pk ?? this.call_system_pk,
+      project_fk: project_fk ?? this.project_fk,
+      json: json ?? this.json,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (call_system_pk.present) {
+      map['call_system_pk'] = Variable<int>(call_system_pk.value);
+    }
+    if (project_fk.present) {
+      map['project_fk'] = Variable<int>(project_fk.value);
+    }
+    if (json.present) {
+      map['json'] = Variable<String>(json.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CallSystemsCompanion(')
+          ..write('call_system_pk: $call_system_pk, ')
+          ..write('project_fk: $project_fk, ')
+          ..write('json: $json, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$NexusDatabase extends GeneratedDatabase {
   _$NexusDatabase(QueryExecutor e) : super(e);
   $NexusDatabaseManager get managers => $NexusDatabaseManager(this);
@@ -12028,6 +12348,7 @@ abstract class _$NexusDatabase extends GeneratedDatabase {
   late final $ProjectTagsTable projectTags = $ProjectTagsTable(this);
   late final $LibraryVerificationsTable libraryVerifications =
       $LibraryVerificationsTable(this);
+  late final $CallSystemsTable callSystems = $CallSystemsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -12048,6 +12369,7 @@ abstract class _$NexusDatabase extends GeneratedDatabase {
     chatMessages,
     projectTags,
     libraryVerifications,
+    callSystems,
   ];
 }
 
@@ -14931,6 +15253,29 @@ final class $$ProjectsTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$CallSystemsTable, List<CallSystem>>
+  _callSystemsRefsTable(_$NexusDatabase db) => MultiTypedResultKey.fromTable(
+    db.callSystems,
+    aliasName: $_aliasNameGenerator(
+      db.projects.project_pk,
+      db.callSystems.project_fk,
+    ),
+  );
+
+  $$CallSystemsTableProcessedTableManager get callSystemsRefs {
+    final manager = $$CallSystemsTableTableManager($_db, $_db.callSystems)
+        .filter(
+          (f) => f.project_fk.project_pk.sqlEquals(
+            $_itemColumn<int>('project_pk')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_callSystemsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$ProjectsTableFilterComposer
@@ -15219,6 +15564,31 @@ class $$ProjectsTableFilterComposer
           }) => $$ProjectTagsTableFilterComposer(
             $db: $db,
             $table: $db.projectTags,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> callSystemsRefs(
+    Expression<bool> Function($$CallSystemsTableFilterComposer f) f,
+  ) {
+    final $$CallSystemsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.project_pk,
+      referencedTable: $db.callSystems,
+      getReferencedColumn: (t) => t.project_fk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CallSystemsTableFilterComposer(
+            $db: $db,
+            $table: $db.callSystems,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -15663,6 +16033,31 @@ class $$ProjectsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> callSystemsRefs<T extends Object>(
+    Expression<T> Function($$CallSystemsTableAnnotationComposer a) f,
+  ) {
+    final $$CallSystemsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.project_pk,
+      referencedTable: $db.callSystems,
+      getReferencedColumn: (t) => t.project_fk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CallSystemsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.callSystems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$ProjectsTableTableManager
@@ -15687,6 +16082,7 @@ class $$ProjectsTableTableManager
             bool activityLogsRefs,
             bool ciRunsRefs,
             bool projectTagsRefs,
+            bool callSystemsRefs,
           })
         > {
   $$ProjectsTableTableManager(_$NexusDatabase db, $ProjectsTable table)
@@ -15806,6 +16202,7 @@ class $$ProjectsTableTableManager
                 activityLogsRefs = false,
                 ciRunsRefs = false,
                 projectTagsRefs = false,
+                callSystemsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -15816,6 +16213,7 @@ class $$ProjectsTableTableManager
                     if (activityLogsRefs) db.activityLogs,
                     if (ciRunsRefs) db.ciRuns,
                     if (projectTagsRefs) db.projectTags,
+                    if (callSystemsRefs) db.callSystems,
                   ],
                   addJoins:
                       <
@@ -15990,6 +16388,27 @@ class $$ProjectsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (callSystemsRefs)
+                        await $_getPrefetchedData<
+                          Project,
+                          $ProjectsTable,
+                          CallSystem
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProjectsTableReferences
+                              ._callSystemsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProjectsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).callSystemsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.project_fk == item.project_pk,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -16019,6 +16438,7 @@ typedef $$ProjectsTableProcessedTableManager =
         bool activityLogsRefs,
         bool ciRunsRefs,
         bool projectTagsRefs,
+        bool callSystemsRefs,
       })
     >;
 typedef $$ChatSessionsTableCreateCompanionBuilder =
@@ -22483,6 +22903,302 @@ typedef $$LibraryVerificationsTableProcessedTableManager =
       LibraryVerification,
       PrefetchHooks Function()
     >;
+typedef $$CallSystemsTableCreateCompanionBuilder =
+    CallSystemsCompanion Function({
+      Value<int> call_system_pk,
+      required int project_fk,
+      Value<String> json,
+      Value<DateTime> updatedAt,
+    });
+typedef $$CallSystemsTableUpdateCompanionBuilder =
+    CallSystemsCompanion Function({
+      Value<int> call_system_pk,
+      Value<int> project_fk,
+      Value<String> json,
+      Value<DateTime> updatedAt,
+    });
+
+final class $$CallSystemsTableReferences
+    extends BaseReferences<_$NexusDatabase, $CallSystemsTable, CallSystem> {
+  $$CallSystemsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $ProjectsTable _project_fkTable(_$NexusDatabase db) =>
+      db.projects.createAlias(
+        $_aliasNameGenerator(db.callSystems.project_fk, db.projects.project_pk),
+      );
+
+  $$ProjectsTableProcessedTableManager get project_fk {
+    final $_column = $_itemColumn<int>('project_fk')!;
+
+    final manager = $$ProjectsTableTableManager(
+      $_db,
+      $_db.projects,
+    ).filter((f) => f.project_pk.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_project_fkTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$CallSystemsTableFilterComposer
+    extends Composer<_$NexusDatabase, $CallSystemsTable> {
+  $$CallSystemsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get call_system_pk => $composableBuilder(
+    column: $table.call_system_pk,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get json => $composableBuilder(
+    column: $table.json,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ProjectsTableFilterComposer get project_fk {
+    final $$ProjectsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.project_fk,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.project_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableFilterComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CallSystemsTableOrderingComposer
+    extends Composer<_$NexusDatabase, $CallSystemsTable> {
+  $$CallSystemsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get call_system_pk => $composableBuilder(
+    column: $table.call_system_pk,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get json => $composableBuilder(
+    column: $table.json,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ProjectsTableOrderingComposer get project_fk {
+    final $$ProjectsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.project_fk,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.project_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableOrderingComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CallSystemsTableAnnotationComposer
+    extends Composer<_$NexusDatabase, $CallSystemsTable> {
+  $$CallSystemsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get call_system_pk => $composableBuilder(
+    column: $table.call_system_pk,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get json =>
+      $composableBuilder(column: $table.json, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$ProjectsTableAnnotationComposer get project_fk {
+    final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.project_fk,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.project_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CallSystemsTableTableManager
+    extends
+        RootTableManager<
+          _$NexusDatabase,
+          $CallSystemsTable,
+          CallSystem,
+          $$CallSystemsTableFilterComposer,
+          $$CallSystemsTableOrderingComposer,
+          $$CallSystemsTableAnnotationComposer,
+          $$CallSystemsTableCreateCompanionBuilder,
+          $$CallSystemsTableUpdateCompanionBuilder,
+          (CallSystem, $$CallSystemsTableReferences),
+          CallSystem,
+          PrefetchHooks Function({bool project_fk})
+        > {
+  $$CallSystemsTableTableManager(_$NexusDatabase db, $CallSystemsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CallSystemsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CallSystemsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CallSystemsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> call_system_pk = const Value.absent(),
+                Value<int> project_fk = const Value.absent(),
+                Value<String> json = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => CallSystemsCompanion(
+                call_system_pk: call_system_pk,
+                project_fk: project_fk,
+                json: json,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> call_system_pk = const Value.absent(),
+                required int project_fk,
+                Value<String> json = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => CallSystemsCompanion.insert(
+                call_system_pk: call_system_pk,
+                project_fk: project_fk,
+                json: json,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$CallSystemsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({project_fk = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (project_fk) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.project_fk,
+                                referencedTable: $$CallSystemsTableReferences
+                                    ._project_fkTable(db),
+                                referencedColumn: $$CallSystemsTableReferences
+                                    ._project_fkTable(db)
+                                    .project_pk,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$CallSystemsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$NexusDatabase,
+      $CallSystemsTable,
+      CallSystem,
+      $$CallSystemsTableFilterComposer,
+      $$CallSystemsTableOrderingComposer,
+      $$CallSystemsTableAnnotationComposer,
+      $$CallSystemsTableCreateCompanionBuilder,
+      $$CallSystemsTableUpdateCompanionBuilder,
+      (CallSystem, $$CallSystemsTableReferences),
+      CallSystem,
+      PrefetchHooks Function({bool project_fk})
+    >;
 
 class $NexusDatabaseManager {
   final _$NexusDatabase _db;
@@ -22517,4 +23233,6 @@ class $NexusDatabaseManager {
       $$ProjectTagsTableTableManager(_db, _db.projectTags);
   $$LibraryVerificationsTableTableManager get libraryVerifications =>
       $$LibraryVerificationsTableTableManager(_db, _db.libraryVerifications);
+  $$CallSystemsTableTableManager get callSystems =>
+      $$CallSystemsTableTableManager(_db, _db.callSystems);
 }
