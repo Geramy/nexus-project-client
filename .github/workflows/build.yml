@@ -145,42 +145,66 @@ jobs:
           mkdir -p "$FW"
           GBDIR="$(dirname "$(find "${PUB_CACHE:-$HOME/.pub-cache}" -path '*git2dart_binaries*/macos/libgit2.dylib' 2>/dev/null | head -1)")"
 
-          # Force-bundle the vendored dylibs (overwrite the pod's copy, whose own
-          # install name (LC_ID) is the experimental one) and normalize their IDs.
+          # 1) Force-bundle the vendored dylibs and normalize their install names.
           cp -f "$GBDIR/libgit2.dylib"   "$FW/libgit2.dylib"
           cp -f "$GBDIR/libssh2.1.dylib" "$FW/libssh2.1.dylib"
           chmod u+w "$FW/libgit2.dylib" "$FW/libssh2.1.dylib"
           install_name_tool -id "@rpath/libgit2.dylib"   "$FW/libgit2.dylib"
           install_name_tool -id "@rpath/libssh2.1.dylib" "$FW/libssh2.1.dylib"
 
-          # Collect the Mach-O binaries to scan (main exe + bundled dylibs + framework binaries).
-          bins=("$EXE")
-          for d in "$FW"/*.dylib; do [ -f "$d" ] && bins+=("$d"); done
-          for f in "$FW"/*.framework/Versions/*/*; do
-            [ -f "$f" ] && file "$f" 2>/dev/null | grep -q 'Mach-O' && bins+=("$f")
-          done
+          # All Mach-O binaries in the bundle (main exe + Frameworks dylibs + framework binaries).
+          machos() {
+            for b in "$EXE" "$FW"/*.dylib "$FW"/*.framework/Versions/*/*; do
+              [ -f "$b" ] || continue
+              file "$b" 2>/dev/null | grep -q 'Mach-O' && echo "$b"
+            done
+          }
 
-          # Rewrite any experimental libgit2 DEPENDENCY reference -> the bundled vendored copy.
-          for bin in "${bins[@]}"; do
+          # 2) Normalize the experimental libgit2 reference -> @rpath/libgit2.dylib.
+          while IFS= read -r bin; do
             chmod u+w "$bin" 2>/dev/null || true
             otool -L "$bin" 2>/dev/null | awk '/@rpath\/libgit2-experimental/{print $1}' | sort -u | while read -r ref; do
-              echo "Rewriting $ref -> @rpath/libgit2.dylib in $(basename "$bin")"
               install_name_tool -change "$ref" "@rpath/libgit2.dylib" "$bin" || true
             done
+          done < <(machos)
+
+          # 3) Recursively vendor every NON-system absolute dependency (e.g. Homebrew
+          #    libcrypto) into Frameworks and rewrite the reference to @rpath.
+          is_external() { case "$1" in /usr/lib/*|/System/*) return 1;; /*) return 0;; *) return 1;; esac; }
+          queue=(); while IFS= read -r b; do queue+=("$b"); done < <(machos)
+          i=0
+          while [ $i -lt ${#queue[@]} ]; do
+            bin="${queue[$i]}"; i=$((i+1))
+            [ -f "$bin" ] || continue
+            chmod u+w "$bin" 2>/dev/null || true
+            while IFS= read -r dep; do
+              is_external "$dep" || continue
+              base="$(basename "$dep")"
+              if [ ! -f "$FW/$base" ]; then
+                src="$dep"; [ -f "$src" ] || src="$(ls $dep 2>/dev/null | head -1 || true)"
+                [ -f "$src" ] || { echo "::error::external dependency not found: $dep"; exit 1; }
+                echo "Vendoring $dep -> Frameworks/$base"
+                cp -f "$src" "$FW/$base"; chmod u+w "$FW/$base"
+                install_name_tool -id "@rpath/$base" "$FW/$base"
+                queue+=("$FW/$base")
+              fi
+              install_name_tool -change "$dep" "@rpath/$base" "$bin"
+            done < <(otool -L "$bin" 2>/dev/null | tail -n +2 | awk '{print $1}')
           done
 
-          echo "Bundled native libs:"; ls -1 "$FW" | grep -iE 'git2|ssh2' || true
-          echo "libgit2.dylib id: $(otool -D "$FW/libgit2.dylib" | tail -1)"
+          echo "Frameworks now contains:"; ls -1 "$FW"
 
-          # Hard-fail if any native lib reference is still unbundled.
-          missing=0
-          for bin in "${bins[@]}"; do
-            for ref in $(otool -L "$bin" 2>/dev/null | awk '/@rpath\/lib(git2|ssh2)/{print $1}'); do
-              f="${ref#@rpath/}"
-              [ -f "$FW/$f" ] || { echo "::error::$f referenced by $(basename "$bin") but not bundled"; missing=1; }
+          # 4) Verify the bundle is self-contained (no external paths) and complete.
+          bad=0
+          while IFS= read -r bin; do
+            ext="$(otool -L "$bin" 2>/dev/null | tail -n +2 | awk '{print $1}' | grep -E '^/opt/homebrew|^/usr/local' || true)"
+            if [ -n "$ext" ]; then echo "::error::$(basename "$bin") still links external:"; echo "$ext"; bad=1; fi
+            for ref in $(otool -L "$bin" 2>/dev/null | tail -n +2 | awk '{print $1}' | grep -E '^@rpath/lib' || true); do
+              f="${ref#@rpath/}"; [ -f "$FW/$f" ] || { echo "::error::$f referenced by $(basename "$bin") not bundled"; bad=1; }
             done
-          done
-          [ "$missing" = 0 ] || { echo "Native libraries missing from bundle"; exit 1; }
+          done < <(machos)
+          [ "$bad" = 0 ] || { echo "Bundle is NOT self-contained (see errors above)."; exit 1; }
+          echo "Self-contained: no /opt/homebrew or /usr/local references in the bundle."
 
       - name: Sign, package (.pkg) and notarize
         env:
