@@ -6,6 +6,7 @@ import 'dart:convert';
 
 import '../../core/agents/loop_guard.dart';
 import '../../infrastructure/inference/inference_backend.dart';
+import 'config/setup_flow.dart';
 import 'setup_tools.dart';
 
 /// Two stages of the setup host: the bounded multiple-choice [interview], and
@@ -24,6 +25,7 @@ class SetupSession {
     required this.model,
     required this.projectName,
     required this.executor,
+    required this.flow,
     this.maxToolRounds = 40,
     this.enableThinking,
   });
@@ -32,6 +34,11 @@ class SetupSession {
   final String model;
   final String projectName;
   final SetupToolExecutor executor;
+
+  /// The configurable, DB-resolved interview definition (stages + guidance) for
+  /// this project's type + sub-category. Drives the interview prompt + the
+  /// `propose_tags` categories.
+  final SetupFlowDefinition flow;
   final int maxToolRounds;
   /// Effective enable_thinking for this session (null omits the param). Resolved
   /// from the project agent's ThinkingMode.
@@ -63,57 +70,39 @@ class SetupSession {
   String _systemPrompt() =>
       phase == SetupPhase.refine ? _refinePrompt() : _interviewPrompt();
 
-  String _interviewPrompt() {
-    return '''
-You are the Project Setup host for the project "$projectName". Your job is to
-interview the user with SHORT, BOUNDED questions and build a structured project
-profile of tags across seven sections: Applicable Industries, Platforms,
-Objectives, Features, Languages, Frameworks, Libraries.
+  /// Categories the active flow proposes into (its stage keys) — drives the
+  /// `propose_tags` schema so each project type proposes its own sections.
+  List<String> get tagCategories => flow.stages.map((s) => s.key).toList();
 
+  String _interviewPrompt() {
+    final stages = StringBuffer();
+    for (var i = 0; i < flow.stages.length; i++) {
+      final s = flow.stages[i];
+      stages.writeln('${i + 1}. ${s.title} (category `${s.key}`): ${s.guidance}');
+      if (s.vocab == SetupVocab.closed && s.suggestions.isNotEmpty) {
+        stages.writeln('   Allowed values ONLY: ${s.suggestions.join(', ')}.');
+      } else if (s.suggestions.isNotEmpty) {
+        stages.writeln('   Suggested: ${s.suggestions.join(', ')}.');
+      }
+    }
+    return '''
+You are the Project Setup host for the project "$projectName" (${flow.name}).
+
+${flow.intro}
+
+Stages — drive them in order, finishing each before moving on:
+$stages
 Rules:
-- Ask ONE question at a time via the `ask_question` tool. The user answers by
-  picking options you supply — never expect free text.
-- MANDATORY LOOP for every question you ask: after the user answers (the tool
-  result will say "User selected: …"), your VERY NEXT tool call MUST be
-  `propose_tags` for that answer, before you ask anything else. Never ask two
-  questions in a row without a `propose_tags` between them. If the user
-  skipped, you may skip the propose for that question only. This is how tags
-  reach the board — if you forget, the user sees questions but no tags.
-- Drive the interview in this fixed order, finishing each stage before moving
-  on: Industries → Platforms → Objectives → Features → Libraries.
-  • Features (second-to-last) are the concrete capabilities the app must ship
-    (e.g. "client portal", "geofencing", "invoicing"); propose them as
-    `features` tags.
-  • Libraries are the LAST stage: only after features are settled, suggest
-    specific packages that implement them (each verified via `lookup_package`).
-    For EACH library, set `forLanguage` to the language it's used with (e.g. a
-    pub.dev package → "Dart", a NuGet package → "C#") using only allowed
-    Languages values, so it attaches to the right side of the stack.
-  Keep it to a handful of questions per stage; do not interrogate.
-- END-OF-STAGE CHECK: before moving from one stage to the next, ask the user
-  with `ask_question` whether they're done with the current stage or want to
-  add/adjust more (options like "Looks good — continue" / "Add more"). Only
-  advance to the next stage when they choose to continue; if they want more,
-  keep refining the current stage. This lets the user keep defining each step.
-- NEVER ask the user about programming languages or frameworks — not as a
-  question, not as options, not even to confirm. The stack is chosen
-  AUTOMATICALLY from the industries, platforms, objectives, and features. You
-  derive and propose it yourself (as `languages`/`frameworks` tags right after
-  features); you do not interview for it. The deterministic resolver finalizes
-  it. Default stack you apply unless the features clearly demand otherwise:
-  • Any UI / client surface → Flutter + Dart.
-  • Server / API tier → C# / ASP.NET Core + Entity Framework Core.
-  • Database → PostgreSQL.
-  • Only deviate for hard requirements: heavy computation / highly distributed
-    / ML → C/C++ (Drogon) API tier; memory-safety-critical → Rust (last
-    resort). When unsure, use the default above — do NOT ask.
-- Before proposing ANY library, call `lookup_package` and only propose it if it
-  is not dead/archived. Prefer trusted orgs (flutter, dart-lang, google,
-  facebook/meta, etc.).
-- Tags are saved as `proposed` for the user to accept/reject — say so when you
-  spend a spoken turn on it. Languages and platforms must use allowed values
-  only (the `propose_tags` tool will silently drop off-vocab values).
-- When the user is satisfied, call `finalize_setup` to generate the plan files.
+- Ask ONE question at a time via `ask_question`; the user picks from options you
+  supply (unless a stage is free-form). After each answer, your VERY NEXT call
+  MUST be `propose_tags` using that stage's `category` — that is how answers
+  reach the board. Never ask two questions without a `propose_tags` between.
+- END-OF-STAGE CHECK: before advancing a stage, ask the user (via
+  `ask_question`) whether they're done with it or want to add/adjust more
+  ("Looks good — continue" / "Add more"). Only advance when they choose to
+  continue; otherwise keep refining the current stage.
+- Use ONLY these `propose_tags` categories: ${tagCategories.join(', ')}.
+- ${flow.finalizeGuidance}
 - Keep spoken replies to 1-3 sentences. Be concrete and friendly.
 ''';
   }
@@ -181,7 +170,7 @@ How to work:
         ];
         final tools = phase == SetupPhase.refine
             ? SetupTools.buildRefineToolSchemas()
-            : SetupTools.buildToolSchemas();
+            : SetupTools.buildToolSchemas(categories: tagCategories);
 
         final resp = await _completeWithRetry(messages, tools);
         final msg = resp.choices.isNotEmpty ? resp.choices.first.message : null;

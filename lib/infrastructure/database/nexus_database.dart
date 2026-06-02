@@ -30,6 +30,8 @@ import '../models/database/tables/chat_message.dart';
 import '../models/database/tables/project_tag.dart';
 import '../models/database/tables/library_verification.dart';
 import '../models/database/tables/call_system.dart';
+import '../models/database/tables/setup_flow.dart';
+import '../../features/project_setup/config/setup_flow_catalog.dart' as setup_cat;
 import '../../features/agents/agent_role.dart';
 import '../../features/agents/agent_role_policy.dart';
 import '../../features/agents/packs/agent_pack.dart';
@@ -58,7 +60,7 @@ class TaskCompletedEvent {
 /// All tables use integer auto-increment primary keys named `<entity>_pk`
 /// (client_pk, project_pk, task_pk, agent_pk, server_pk, session_pk, …) and
 /// foreign keys named `<ref>_fk` (client_fk, project_fk, task_parent_fk, …).
-@DriftDatabase(tables: [Clients, Projects, Tasks, InferenceServers, AgentPersonas, Skills, Deployments, ActivityLogs, CiRuns, CiJobs, CiSteps, ChatSessions, ChatMessages, ProjectTags, LibraryVerifications, CallSystems])
+@DriftDatabase(tables: [Clients, Projects, Tasks, InferenceServers, AgentPersonas, Skills, Deployments, ActivityLogs, CiRuns, CiJobs, CiSteps, ChatSessions, ChatMessages, ProjectTags, LibraryVerifications, CallSystems, SetupFlows])
 class NexusDatabase extends _$NexusDatabase {
   NexusDatabase() : super(_openConnection()) {
     _initDriftOptions();
@@ -73,7 +75,7 @@ class NexusDatabase extends _$NexusDatabase {
       _taskCompletedController.stream;
 
   @override
-  int get schemaVersion => 28;
+  int get schemaVersion => 29;
 
   @override
   MigrationStrategy get migration {
@@ -171,8 +173,77 @@ class NexusDatabase extends _$NexusDatabase {
         if (from < 28) {
           await m.createTable(callSystems);
         }
+        // v28 → v29: configurable, DB-stored setup-interview flows.
+        if (from < 29) {
+          await m.createTable(setupFlows);
+        }
       },
     );
+  }
+
+  // ==================== Setup flows (configurable interviews) ===========
+  /// Idempotently seed the built-in setup flows (software + IVR sub-categories).
+  /// Editable in the DB afterward; safe to call on every launch.
+  Future<void> seedSetupFlows() async {
+    for (final flow in setup_cat.kBuiltinSetupFlows) {
+      final existing = await (select(setupFlows)
+            ..where((f) =>
+                f.projectType.equals(flow.projectType) &
+                (flow.subCategory == null
+                    ? f.subCategory.isNull()
+                    : f.subCategory.equals(flow.subCategory!))))
+          .getSingleOrNull();
+      if (existing != null) continue;
+      await into(setupFlows).insert(SetupFlowsCompanion.insert(
+        projectType: flow.projectType,
+        subCategory: Value(flow.subCategory),
+        json: jsonEncode(flow.toJson()),
+      ));
+    }
+  }
+
+  /// Resolve the setup-flow JSON for a project (exact type+subCategory → type-
+  /// generic → null if neither stored). The provider layer falls back to the
+  /// built-in catalog when this returns null.
+  Future<String?> resolveSetupFlowJson(
+      String projectType, String? subCategory) async {
+    if (subCategory != null) {
+      final exact = await (select(setupFlows)
+            ..where((f) =>
+                f.projectType.equals(projectType) &
+                f.subCategory.equals(subCategory)))
+          .getSingleOrNull();
+      if (exact != null) return exact.json;
+    }
+    final generic = await (select(setupFlows)
+          ..where((f) =>
+              f.projectType.equals(projectType) & f.subCategory.isNull()))
+        .getSingleOrNull();
+    return generic?.json;
+  }
+
+  /// Persist/override a setup flow definition (upsert on type+subCategory).
+  Future<void> upsertSetupFlow(
+      String projectType, String? subCategory, String json) async {
+    final existing = await (select(setupFlows)
+          ..where((f) =>
+              f.projectType.equals(projectType) &
+              (subCategory == null
+                  ? f.subCategory.isNull()
+                  : f.subCategory.equals(subCategory))))
+        .getSingleOrNull();
+    if (existing == null) {
+      await into(setupFlows).insert(SetupFlowsCompanion.insert(
+        projectType: projectType,
+        subCategory: Value(subCategory),
+        json: json,
+      ));
+    } else {
+      await (update(setupFlows)
+            ..where((f) => f.setup_flow_pk.equals(existing.setup_flow_pk)))
+          .write(SetupFlowsCompanion(
+              json: Value(json), updatedAt: Value(DateTime.now())));
+    }
   }
 
   // ==================== Clients ====================

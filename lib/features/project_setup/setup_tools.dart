@@ -17,7 +17,20 @@ import 'providers/tag_providers.dart';
 /// `proposed`), or finalize (resolve stack + generate plans). It can never
 /// invent a freshness verdict or silently mutate the confirmed stack.
 class SetupTools {
-  static List<Map<String, dynamic>> buildToolSchemas() {
+  /// [categories] are the tag categories the active setup flow proposes into
+  /// (the flow's stage keys). Defaults to the software profile's seven sections.
+  static List<Map<String, dynamic>> buildToolSchemas({List<String>? categories}) {
+    final cats = (categories == null || categories.isEmpty)
+        ? const [
+            'industries',
+            'platforms',
+            'objectives',
+            'features',
+            'languages',
+            'frameworks',
+            'libraries',
+          ]
+        : categories;
     return [
       {
         'type': 'function',
@@ -87,15 +100,7 @@ class SetupTools {
                   'properties': {
                     'category': {
                       'type': 'string',
-                      'enum': [
-                        'industries',
-                        'platforms',
-                        'objectives',
-                        'features',
-                        'languages',
-                        'frameworks',
-                        'libraries',
-                      ],
+                      'enum': cats,
                     },
                     'value': {'type': 'string'},
                     'layerKey': {

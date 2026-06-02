@@ -12327,6 +12327,382 @@ class CallSystemsCompanion extends UpdateCompanion<CallSystem> {
   }
 }
 
+class $SetupFlowsTable extends SetupFlows
+    with TableInfo<$SetupFlowsTable, SetupFlow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SetupFlowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _setup_flow_pkMeta = const VerificationMeta(
+    'setup_flow_pk',
+  );
+  @override
+  late final GeneratedColumn<int> setup_flow_pk = GeneratedColumn<int>(
+    'setup_flow_pk',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _projectTypeMeta = const VerificationMeta(
+    'projectType',
+  );
+  @override
+  late final GeneratedColumn<String> projectType = GeneratedColumn<String>(
+    'project_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _subCategoryMeta = const VerificationMeta(
+    'subCategory',
+  );
+  @override
+  late final GeneratedColumn<String> subCategory = GeneratedColumn<String>(
+    'sub_category',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _jsonMeta = const VerificationMeta('json');
+  @override
+  late final GeneratedColumn<String> json = GeneratedColumn<String>(
+    'json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    setup_flow_pk,
+    projectType,
+    subCategory,
+    json,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'setup_flows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SetupFlow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('setup_flow_pk')) {
+      context.handle(
+        _setup_flow_pkMeta,
+        setup_flow_pk.isAcceptableOrUnknown(
+          data['setup_flow_pk']!,
+          _setup_flow_pkMeta,
+        ),
+      );
+    }
+    if (data.containsKey('project_type')) {
+      context.handle(
+        _projectTypeMeta,
+        projectType.isAcceptableOrUnknown(
+          data['project_type']!,
+          _projectTypeMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_projectTypeMeta);
+    }
+    if (data.containsKey('sub_category')) {
+      context.handle(
+        _subCategoryMeta,
+        subCategory.isAcceptableOrUnknown(
+          data['sub_category']!,
+          _subCategoryMeta,
+        ),
+      );
+    }
+    if (data.containsKey('json')) {
+      context.handle(
+        _jsonMeta,
+        json.isAcceptableOrUnknown(data['json']!, _jsonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_jsonMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {setup_flow_pk};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {projectType, subCategory},
+  ];
+  @override
+  SetupFlow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SetupFlow(
+      setup_flow_pk: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}setup_flow_pk'],
+      )!,
+      projectType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_type'],
+      )!,
+      subCategory: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sub_category'],
+      ),
+      json: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}json'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SetupFlowsTable createAlias(String alias) {
+    return $SetupFlowsTable(attachedDatabase, alias);
+  }
+}
+
+class SetupFlow extends DataClass implements Insertable<SetupFlow> {
+  final int setup_flow_pk;
+  final String projectType;
+  final String? subCategory;
+
+  /// Serialized SetupFlowDefinition.toJson().
+  final String json;
+  final DateTime updatedAt;
+  const SetupFlow({
+    required this.setup_flow_pk,
+    required this.projectType,
+    this.subCategory,
+    required this.json,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['setup_flow_pk'] = Variable<int>(setup_flow_pk);
+    map['project_type'] = Variable<String>(projectType);
+    if (!nullToAbsent || subCategory != null) {
+      map['sub_category'] = Variable<String>(subCategory);
+    }
+    map['json'] = Variable<String>(json);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  SetupFlowsCompanion toCompanion(bool nullToAbsent) {
+    return SetupFlowsCompanion(
+      setup_flow_pk: Value(setup_flow_pk),
+      projectType: Value(projectType),
+      subCategory: subCategory == null && nullToAbsent
+          ? const Value.absent()
+          : Value(subCategory),
+      json: Value(json),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory SetupFlow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SetupFlow(
+      setup_flow_pk: serializer.fromJson<int>(json['setup_flow_pk']),
+      projectType: serializer.fromJson<String>(json['projectType']),
+      subCategory: serializer.fromJson<String?>(json['subCategory']),
+      json: serializer.fromJson<String>(json['json']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'setup_flow_pk': serializer.toJson<int>(setup_flow_pk),
+      'projectType': serializer.toJson<String>(projectType),
+      'subCategory': serializer.toJson<String?>(subCategory),
+      'json': serializer.toJson<String>(json),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  SetupFlow copyWith({
+    int? setup_flow_pk,
+    String? projectType,
+    Value<String?> subCategory = const Value.absent(),
+    String? json,
+    DateTime? updatedAt,
+  }) => SetupFlow(
+    setup_flow_pk: setup_flow_pk ?? this.setup_flow_pk,
+    projectType: projectType ?? this.projectType,
+    subCategory: subCategory.present ? subCategory.value : this.subCategory,
+    json: json ?? this.json,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  SetupFlow copyWithCompanion(SetupFlowsCompanion data) {
+    return SetupFlow(
+      setup_flow_pk: data.setup_flow_pk.present
+          ? data.setup_flow_pk.value
+          : this.setup_flow_pk,
+      projectType: data.projectType.present
+          ? data.projectType.value
+          : this.projectType,
+      subCategory: data.subCategory.present
+          ? data.subCategory.value
+          : this.subCategory,
+      json: data.json.present ? data.json.value : this.json,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SetupFlow(')
+          ..write('setup_flow_pk: $setup_flow_pk, ')
+          ..write('projectType: $projectType, ')
+          ..write('subCategory: $subCategory, ')
+          ..write('json: $json, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(setup_flow_pk, projectType, subCategory, json, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SetupFlow &&
+          other.setup_flow_pk == this.setup_flow_pk &&
+          other.projectType == this.projectType &&
+          other.subCategory == this.subCategory &&
+          other.json == this.json &&
+          other.updatedAt == this.updatedAt);
+}
+
+class SetupFlowsCompanion extends UpdateCompanion<SetupFlow> {
+  final Value<int> setup_flow_pk;
+  final Value<String> projectType;
+  final Value<String?> subCategory;
+  final Value<String> json;
+  final Value<DateTime> updatedAt;
+  const SetupFlowsCompanion({
+    this.setup_flow_pk = const Value.absent(),
+    this.projectType = const Value.absent(),
+    this.subCategory = const Value.absent(),
+    this.json = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  SetupFlowsCompanion.insert({
+    this.setup_flow_pk = const Value.absent(),
+    required String projectType,
+    this.subCategory = const Value.absent(),
+    required String json,
+    this.updatedAt = const Value.absent(),
+  }) : projectType = Value(projectType),
+       json = Value(json);
+  static Insertable<SetupFlow> custom({
+    Expression<int>? setup_flow_pk,
+    Expression<String>? projectType,
+    Expression<String>? subCategory,
+    Expression<String>? json,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (setup_flow_pk != null) 'setup_flow_pk': setup_flow_pk,
+      if (projectType != null) 'project_type': projectType,
+      if (subCategory != null) 'sub_category': subCategory,
+      if (json != null) 'json': json,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  SetupFlowsCompanion copyWith({
+    Value<int>? setup_flow_pk,
+    Value<String>? projectType,
+    Value<String?>? subCategory,
+    Value<String>? json,
+    Value<DateTime>? updatedAt,
+  }) {
+    return SetupFlowsCompanion(
+      setup_flow_pk: setup_flow_pk ?? this.setup_flow_pk,
+      projectType: projectType ?? this.projectType,
+      subCategory: subCategory ?? this.subCategory,
+      json: json ?? this.json,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (setup_flow_pk.present) {
+      map['setup_flow_pk'] = Variable<int>(setup_flow_pk.value);
+    }
+    if (projectType.present) {
+      map['project_type'] = Variable<String>(projectType.value);
+    }
+    if (subCategory.present) {
+      map['sub_category'] = Variable<String>(subCategory.value);
+    }
+    if (json.present) {
+      map['json'] = Variable<String>(json.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SetupFlowsCompanion(')
+          ..write('setup_flow_pk: $setup_flow_pk, ')
+          ..write('projectType: $projectType, ')
+          ..write('subCategory: $subCategory, ')
+          ..write('json: $json, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$NexusDatabase extends GeneratedDatabase {
   _$NexusDatabase(QueryExecutor e) : super(e);
   $NexusDatabaseManager get managers => $NexusDatabaseManager(this);
@@ -12349,6 +12725,7 @@ abstract class _$NexusDatabase extends GeneratedDatabase {
   late final $LibraryVerificationsTable libraryVerifications =
       $LibraryVerificationsTable(this);
   late final $CallSystemsTable callSystems = $CallSystemsTable(this);
+  late final $SetupFlowsTable setupFlows = $SetupFlowsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -12370,6 +12747,7 @@ abstract class _$NexusDatabase extends GeneratedDatabase {
     projectTags,
     libraryVerifications,
     callSystems,
+    setupFlows,
   ];
 }
 
@@ -23199,6 +23577,203 @@ typedef $$CallSystemsTableProcessedTableManager =
       CallSystem,
       PrefetchHooks Function({bool project_fk})
     >;
+typedef $$SetupFlowsTableCreateCompanionBuilder =
+    SetupFlowsCompanion Function({
+      Value<int> setup_flow_pk,
+      required String projectType,
+      Value<String?> subCategory,
+      required String json,
+      Value<DateTime> updatedAt,
+    });
+typedef $$SetupFlowsTableUpdateCompanionBuilder =
+    SetupFlowsCompanion Function({
+      Value<int> setup_flow_pk,
+      Value<String> projectType,
+      Value<String?> subCategory,
+      Value<String> json,
+      Value<DateTime> updatedAt,
+    });
+
+class $$SetupFlowsTableFilterComposer
+    extends Composer<_$NexusDatabase, $SetupFlowsTable> {
+  $$SetupFlowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get setup_flow_pk => $composableBuilder(
+    column: $table.setup_flow_pk,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get projectType => $composableBuilder(
+    column: $table.projectType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get subCategory => $composableBuilder(
+    column: $table.subCategory,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get json => $composableBuilder(
+    column: $table.json,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SetupFlowsTableOrderingComposer
+    extends Composer<_$NexusDatabase, $SetupFlowsTable> {
+  $$SetupFlowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get setup_flow_pk => $composableBuilder(
+    column: $table.setup_flow_pk,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get projectType => $composableBuilder(
+    column: $table.projectType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get subCategory => $composableBuilder(
+    column: $table.subCategory,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get json => $composableBuilder(
+    column: $table.json,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SetupFlowsTableAnnotationComposer
+    extends Composer<_$NexusDatabase, $SetupFlowsTable> {
+  $$SetupFlowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get setup_flow_pk => $composableBuilder(
+    column: $table.setup_flow_pk,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get projectType => $composableBuilder(
+    column: $table.projectType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get subCategory => $composableBuilder(
+    column: $table.subCategory,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get json =>
+      $composableBuilder(column: $table.json, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$SetupFlowsTableTableManager
+    extends
+        RootTableManager<
+          _$NexusDatabase,
+          $SetupFlowsTable,
+          SetupFlow,
+          $$SetupFlowsTableFilterComposer,
+          $$SetupFlowsTableOrderingComposer,
+          $$SetupFlowsTableAnnotationComposer,
+          $$SetupFlowsTableCreateCompanionBuilder,
+          $$SetupFlowsTableUpdateCompanionBuilder,
+          (
+            SetupFlow,
+            BaseReferences<_$NexusDatabase, $SetupFlowsTable, SetupFlow>,
+          ),
+          SetupFlow,
+          PrefetchHooks Function()
+        > {
+  $$SetupFlowsTableTableManager(_$NexusDatabase db, $SetupFlowsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SetupFlowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SetupFlowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SetupFlowsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> setup_flow_pk = const Value.absent(),
+                Value<String> projectType = const Value.absent(),
+                Value<String?> subCategory = const Value.absent(),
+                Value<String> json = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => SetupFlowsCompanion(
+                setup_flow_pk: setup_flow_pk,
+                projectType: projectType,
+                subCategory: subCategory,
+                json: json,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> setup_flow_pk = const Value.absent(),
+                required String projectType,
+                Value<String?> subCategory = const Value.absent(),
+                required String json,
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => SetupFlowsCompanion.insert(
+                setup_flow_pk: setup_flow_pk,
+                projectType: projectType,
+                subCategory: subCategory,
+                json: json,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SetupFlowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$NexusDatabase,
+      $SetupFlowsTable,
+      SetupFlow,
+      $$SetupFlowsTableFilterComposer,
+      $$SetupFlowsTableOrderingComposer,
+      $$SetupFlowsTableAnnotationComposer,
+      $$SetupFlowsTableCreateCompanionBuilder,
+      $$SetupFlowsTableUpdateCompanionBuilder,
+      (SetupFlow, BaseReferences<_$NexusDatabase, $SetupFlowsTable, SetupFlow>),
+      SetupFlow,
+      PrefetchHooks Function()
+    >;
 
 class $NexusDatabaseManager {
   final _$NexusDatabase _db;
@@ -23235,4 +23810,6 @@ class $NexusDatabaseManager {
       $$LibraryVerificationsTableTableManager(_db, _db.libraryVerifications);
   $$CallSystemsTableTableManager get callSystems =>
       $$CallSystemsTableTableManager(_db, _db.callSystems);
+  $$SetupFlowsTableTableManager get setupFlows =>
+      $$SetupFlowsTableTableManager(_db, _db.setupFlows);
 }

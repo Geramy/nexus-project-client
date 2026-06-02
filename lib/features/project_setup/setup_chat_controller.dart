@@ -16,6 +16,8 @@ import '../../services/audio/coordinator_duplex_voice_session.dart' show VoiceSt
 import '../../services/audio/setup_voice_session.dart';
 import '../../services/audio/tts_service.dart';
 import '../project_plans/plan_store.dart';
+import 'config/setup_flow.dart';
+import 'config/setup_flow_catalog.dart';
 import 'plan_task_sync.dart';
 import 'setup_inference.dart';
 import 'setup_session.dart';
@@ -136,11 +138,22 @@ class SetupChatController extends ChangeNotifier {
       askQuestion: _askQuestion,
       onPlansChanged: _bumpWorkspace,
     );
+    // Resolve the configurable setup flow for this project's type + sub-category
+    // (DB-stored, falling back to the built-in catalog).
+    final proj = await db.watchProject(projectId).first;
+    final flowType = proj?.projectType ?? 'application-development';
+    final flowSub = proj?.subCategory;
+    final flowJson = await db.resolveSetupFlowJson(flowType, flowSub);
+    final flow = flowJson != null
+        ? SetupFlowDefinition.fromJson(
+            jsonDecode(flowJson) as Map<String, dynamic>)
+        : resolveBuiltinSetupFlow(flowType, flowSub);
     _session = SetupSession(
       client: resolved.backend,
       model: resolved.model,
       projectName: 'Project',
       executor: executor,
+      flow: flow,
       enableThinking: resolved.enableThinking,
     );
     // If we resumed into refinement (or already finalized), start in refine.
