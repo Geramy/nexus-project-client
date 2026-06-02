@@ -12,6 +12,8 @@ import 'package:path_provider/path_provider.dart';
 import '../../core/providers/app_shell_provider.dart';
 import '../project_setup/setup_inference.dart';
 import 'call_system_editor.dart';
+import 'model/call_flow.dart';
+import 'model/call_node.dart';
 import 'model/call_system_project.dart';
 
 /// AI assistance for the call-system builder, over the SAME Omni inference the
@@ -102,7 +104,11 @@ Keep it focused and valid.''';
       queues: generated.queues,
       voicemailBoxes: generated.voicemailBoxes,
       timeConditions: generated.timeConditions,
-      flows: generated.flows.isNotEmpty ? generated.flows : current.flows,
+      // AI-generated nodes arrive as `proposed` so they appear ghosted on the
+      // tree for the user to review/approve (the entry node stays structural).
+      flows: generated.flows.isNotEmpty
+          ? generated.flows.map(_markProposed).toList()
+          : current.flows,
       prompts: generated.prompts,
       variables: {...current.variables, ...generated.variables},
     );
@@ -156,6 +162,15 @@ Keep it focused and valid.''';
     }
   }
 }
+
+/// Mark every non-entry node of a flow `proposed` (awaiting approval).
+CallFlow _markProposed(CallFlow f) => f.copyWith(
+      nodes: f.nodes
+          .map((n) => n.type == CallNodeType.entry
+              ? n
+              : n.copyWith(status: NodeStatus.proposed))
+          .toList(),
+    );
 
 final callSystemAiServiceProvider =
     Provider.family<CallSystemAiService, int>((ref, projectId) {

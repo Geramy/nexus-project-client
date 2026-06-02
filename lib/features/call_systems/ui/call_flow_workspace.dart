@@ -116,8 +116,50 @@ class CallFlowWorkspace extends ConsumerWidget {
           ),
         ),
         const Divider(height: 1),
+        _ReviewBanner(projectId: projectId),
         Expanded(child: CallFlowCanvas(projectId: projectId)),
       ],
+    );
+  }
+}
+
+/// Shown when AI-proposed nodes are awaiting the user's approval. The tree is the
+/// review surface: approve nodes in place, or accept the lot here.
+class _ReviewBanner extends ConsumerWidget {
+  const _ReviewBanner({required this.projectId});
+  final int projectId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final project = ref.watch(callSystemProjectProvider(projectId));
+    final flow = project.flows.isEmpty ? null : project.flows.first;
+    final pending = flow?.nodes.where((n) => n.isProposed).length ?? 0;
+    if (pending == 0) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFD9920B).withValues(alpha: 0.12),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
+      child: Row(
+        children: [
+          const Icon(Icons.rate_review_outlined,
+              size: 18, color: Color(0xFFB47708)),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              '$pending ${pending == 1 ? 'step is' : 'steps are'} proposed — '
+              'review on the tree (▶ listen, ✓ approve, ✗ reject) or accept all.',
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+          TextButton(
+            onPressed: () =>
+                ref.read(callSystemEditorProvider(projectId)).approveAll(),
+            child: const Text('Approve all'),
+          ),
+        ],
+      ),
     );
   }
 }

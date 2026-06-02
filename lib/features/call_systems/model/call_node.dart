@@ -117,6 +117,14 @@ CallNodeType callNodeTypeFromKey(String key) =>
     CallNodeType.values.firstWhere((t) => t.key == key,
         orElse: () => CallNodeType.playPrompt);
 
+/// Approval state of a node. AI-generated nodes start [proposed] (ghosted on the
+/// canvas, awaiting the user's ✓); manually-added nodes are [approved]. Legacy
+/// nodes without a stored status deserialize to [approved].
+enum NodeStatus { proposed, approved }
+
+NodeStatus nodeStatusFromKey(String? key) =>
+    key == 'proposed' ? NodeStatus.proposed : NodeStatus.approved;
+
 /// A single node in a [CallFlow]. Type-specific parameters live in [config]
 /// (e.g. `promptId`, `variable`, `target`, `digits`) so the model stays flat and
 /// serializable; typed editors read/write those keys. [outputs] maps each output
@@ -134,6 +142,9 @@ class CallNode {
   final Map<String, dynamic> config;
   final Map<String, String?> outputs;
 
+  /// Approval state — proposed nodes (AI-generated) await the user's ✓.
+  final NodeStatus status;
+
   const CallNode({
     required this.id,
     required this.type,
@@ -142,7 +153,10 @@ class CallNode {
     this.y = 0,
     this.config = const {},
     this.outputs = const {},
+    this.status = NodeStatus.approved,
   });
+
+  bool get isProposed => status == NodeStatus.proposed;
 
   CallNode copyWith({
     String? label,
@@ -150,6 +164,7 @@ class CallNode {
     double? y,
     Map<String, dynamic>? config,
     Map<String, String?>? outputs,
+    NodeStatus? status,
   }) =>
       CallNode(
         id: id,
@@ -159,6 +174,7 @@ class CallNode {
         y: y ?? this.y,
         config: config ?? this.config,
         outputs: outputs ?? this.outputs,
+        status: status ?? this.status,
       );
 
   Map<String, dynamic> toJson() => {
@@ -169,6 +185,7 @@ class CallNode {
         'y': y,
         'config': config,
         'outputs': outputs,
+        'status': status.name,
       };
 
   factory CallNode.fromJson(Map<String, dynamic> json) => CallNode(
@@ -182,5 +199,6 @@ class CallNode {
               (k, v) => MapEntry(k as String, v as String?),
             ) ??
             const {},
+        status: nodeStatusFromKey(json['status'] as String?),
       );
 }

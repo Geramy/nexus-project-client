@@ -79,6 +79,12 @@ class _CallFlowCanvasState extends ConsumerState<CallFlowCanvas> {
                   child: _NodeCard(
                     node: node,
                     selected: node.id == selected,
+                    onApprove: node.isProposed
+                        ? () => editor.approveNode(node.id)
+                        : null,
+                    onReject: node.isProposed
+                        ? () => editor.rejectNode(node.id)
+                        : null,
                     onTap: () => ref
                         .read(selectedCallNodeProvider(widget.projectId).notifier)
                         .state = node.id,
@@ -119,6 +125,8 @@ class _NodeCard extends StatelessWidget {
     required this.onPanStart,
     required this.onPanUpdate,
     required this.onPanEnd,
+    this.onApprove,
+    this.onReject,
   });
 
   final CallNode node;
@@ -128,67 +136,126 @@ class _NodeCard extends StatelessWidget {
   final ValueChanged<Offset> onPanUpdate;
   final VoidCallback onPanEnd;
 
+  /// Non-null only for `proposed` (AI-generated) nodes awaiting the user's ✓.
+  final VoidCallback? onApprove;
+  final VoidCallback? onReject;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final color = colorForNodeType(node.type, scheme);
+    final proposed = node.isProposed;
+    final borderColor = proposed
+        ? const Color(0xFFD9920B) // amber = awaiting approval
+        : (selected ? color : scheme.outlineVariant);
+
     return GestureDetector(
       onTap: onTap,
       onPanStart: (_) => onPanStart(),
       onPanUpdate: (d) => onPanUpdate(d.delta),
       onPanEnd: (_) => onPanEnd(),
-      child: SizedBox(
-        width: kNodeWidth,
-        height: kNodeHeight,
-        child: Material(
-          elevation: selected ? 6 : 2,
-          borderRadius: BorderRadius.circular(10),
-          color: scheme.surface,
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: selected ? color : scheme.outlineVariant,
-                width: selected ? 2 : 1,
+      child: Opacity(
+        opacity: proposed ? 0.9 : 1,
+        child: SizedBox(
+          width: kNodeWidth,
+          height: kNodeHeight,
+          child: Material(
+            elevation: selected ? 6 : 2,
+            borderRadius: BorderRadius.circular(10),
+            color: scheme.surface,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: borderColor,
+                  width: (selected || proposed) ? 2 : 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: double.infinity,
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: const BorderRadius.horizontal(
+                          left: Radius.circular(9)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(iconForNodeType(node.type), size: 20, color: color),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(node.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 13, fontWeight: FontWeight.w600)),
+                        Text(
+                            proposed
+                                ? 'Proposed · review'
+                                : titleForNodeType(node.type),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 10.5,
+                                color: proposed
+                                    ? const Color(0xFFD9920B)
+                                    : scheme.onSurfaceVariant)),
+                      ],
+                    ),
+                  ),
+                  if (proposed) ...[
+                    _MiniBtn(
+                      icon: Icons.check,
+                      color: const Color(0xFF2E9E5B),
+                      tooltip: 'Approve',
+                      onTap: onApprove,
+                    ),
+                    _MiniBtn(
+                      icon: Icons.close,
+                      color: scheme.error,
+                      tooltip: 'Reject',
+                      onTap: onReject,
+                    ),
+                    const SizedBox(width: 4),
+                  ] else
+                    const SizedBox(width: 6),
+                ],
               ),
             ),
-            child: Row(
-              children: [
-                Container(
-                  width: 8,
-                  height: double.infinity,
-                  decoration: BoxDecoration(
-                    color: color,
-                    borderRadius: const BorderRadius.horizontal(
-                        left: Radius.circular(9)),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Icon(iconForNodeType(node.type), size: 20, color: color),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(node.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              fontSize: 13, fontWeight: FontWeight.w600)),
-                      Text(titleForNodeType(node.type),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              fontSize: 10.5,
-                              color: scheme.onSurfaceVariant)),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 6),
-              ],
-            ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniBtn extends StatelessWidget {
+  const _MiniBtn(
+      {required this.icon,
+      required this.color,
+      required this.tooltip,
+      required this.onTap});
+  final IconData icon;
+  final Color color;
+  final String tooltip;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkResponse(
+        onTap: onTap,
+        radius: 16,
+        child: Padding(
+          padding: const EdgeInsets.all(3),
+          child: Icon(icon, size: 18, color: color),
         ),
       ),
     );

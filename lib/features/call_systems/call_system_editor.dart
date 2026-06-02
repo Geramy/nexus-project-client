@@ -113,6 +113,34 @@ class CallSystemEditor {
     }
   }
 
+  // ── Approval (AI-proposed nodes) ────────────────────────────────────
+
+  /// Mark a proposed node approved (it goes solid on the canvas).
+  Future<void> approveNode(String nodeId) async {
+    final flow = _flow;
+    final node = flow?.nodeById(nodeId);
+    if (flow == null || node == null || !node.isProposed) return;
+    await _replaceFlow(
+        flow.upsertNode(node.copyWith(status: NodeStatus.approved)));
+  }
+
+  /// Approve every proposed node in the active flow.
+  Future<void> approveAll() async {
+    final flow = _flow;
+    if (flow == null) return;
+    var next = flow;
+    for (final n in flow.nodes.where((n) => n.isProposed)) {
+      next = next.upsertNode(n.copyWith(status: NodeStatus.approved));
+    }
+    await _replaceFlow(next);
+  }
+
+  /// Reject (delete) a proposed node.
+  Future<void> rejectNode(String nodeId) => removeNode(nodeId);
+
+  int get pendingCount =>
+      _flow?.nodes.where((n) => n.isProposed).length ?? 0;
+
   /// Wire [fromNodeId]'s [port] to [targetId] (null disconnects).
   Future<void> connect(String fromNodeId, String port, String? targetId) async {
     final flow = _flow;
