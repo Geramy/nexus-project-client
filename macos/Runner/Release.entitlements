@@ -8,13 +8,10 @@
 	<true/>
 	<key>com.apple.security.device.audio-input</key>
 	<true/>
-	<!-- Lets the signed/notarized release use the modern data-protection keychain
-	     silently (no "wants to use your keychain" prompt). Team-id-prefixed group;
-	     must match the Developer ID signing team. NOT added to DebugProfile because
-	     ad-hoc debug builds can't carry it (AMFI SIGKILLs at launch). -->
-	<key>keychain-access-groups</key>
-	<array>
-		<string>YBQ9BU6Q6F.com.nexusprojects.nexusProjectsClient</string>
-	</array>
+	<!-- No keychain-access-groups / data-protection keychain entitlement: it is
+	     fragile for Developer-ID apps distributed outside the App Store (can cause
+	     launch rejection) and ad-hoc/debug builds can't carry it. Account
+	     credentials use the legacy file-based keychain instead (see
+	     nexus_account_store.dart), matching the app's other secure stores. -->
 </dict>
 </plist>

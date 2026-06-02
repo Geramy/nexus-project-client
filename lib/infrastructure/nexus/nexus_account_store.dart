@@ -10,72 +10,27 @@
 ///
 /// The token NEVER touches SharedPreferences or Drift — only the keychain.
 /// The token is never logged.
+///
+/// Storage uses the LEGACY file-based keychain (useDataProtectionKeyChain:
+/// false) — no `keychain-access-groups` / data-protection entitlement. That
+/// entitlement is fragile for Developer-ID apps distributed outside the App
+/// Store (it can make macOS reject the app at launch), and an ad-hoc/debug build
+/// can't carry it at all. A properly signed + notarized app reads its own
+/// file-based items silently; this matches SecureKeyStore + GithubTokenStore.
 library;
 
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show kReleaseMode;
-import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'models/nexus_account_models.dart';
 
 class NexusAccountStore {
-  /// Team-id-prefixed keychain access group. MUST match the
-  /// `keychain-access-groups` entitlement in macos/Runner/Release.entitlements
-  /// AND the Developer ID signing team (YBQ9BU6Q6F).
-  static const _macAccessGroup =
-      'YBQ9BU6Q6F.com.nexusprojects.nexusProjectsClient';
-
-  /// SILENT path — the modern data-protection keychain, scoped to our access
-  /// group. macOS reads/writes it without the "…wants to use your keychain"
-  /// prompt, but it only works in a properly Developer-ID-signed + entitled
-  /// build (the shipped release). Ad-hoc/debug builds can't carry the
-  /// entitlement, so this is used in RELEASE only.
-  static final FlutterSecureStorage _dataProtection = FlutterSecureStorage(
-    aOptions: const AndroidOptions(encryptedSharedPreferences: true),
-    iOptions:
-        const IOSOptions(accessibility: KeychainAccessibility.first_unlock),
-    mOptions: const MacOsOptions(
-      useDataProtectionKeyChain: true,
-      accessibility: KeychainAccessibility.first_unlock,
-      groupId: _macAccessGroup,
-    ),
+  static const FlutterSecureStorage _store = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+    mOptions: MacOsOptions(useDataProtectionKeyChain: false),
   );
-
-  /// FALLBACK path — the legacy file-based keychain. Needs no entitlement and
-  /// works in ad-hoc-signed debug/local builds (where the data-protection
-  /// keychain would SIGKILL at launch or throw errSecMissingEntitlement). It
-  /// prompts for access on macOS, which is why release prefers the silent path.
-  static final FlutterSecureStorage _fileBased = FlutterSecureStorage(
-    aOptions: const AndroidOptions(encryptedSharedPreferences: true),
-    iOptions:
-        const IOSOptions(accessibility: KeychainAccessibility.first_unlock),
-    mOptions: const MacOsOptions(useDataProtectionKeyChain: false),
-  );
-
-  /// Preferred store: the silent keychain in release builds, file-based in debug.
-  static FlutterSecureStorage _store =
-      kReleaseMode ? _dataProtection : _fileBased;
-  static bool _fellBack = false;
-
-  /// Runs a keychain op against the preferred store. If the data-protection
-  /// keychain isn't usable on this build (e.g. an unentitled build throws
-  /// errSecMissingEntitlement), fall back to the file-based keychain for the
-  /// rest of the session so authentication never hard-breaks.
-  static Future<T> _op<T>(
-      Future<T> Function(FlutterSecureStorage s) run) async {
-    try {
-      return await run(_store);
-    } on PlatformException {
-      if (!_fellBack && identical(_store, _dataProtection)) {
-        _fellBack = true;
-        _store = _fileBased;
-        return await run(_fileBased);
-      }
-      rethrow;
-    }
-  }
 
   static const _tokenKey = 'nexus/account_token';
   static const _identityKey = 'nexus/account_identity';
@@ -83,12 +38,12 @@ class NexusAccountStore {
 
   // ── Token ───────────────────────────────────────────────────────────
 
-  static Future<String?> readToken() => _op((s) => s.read(key: _tokenKey));
+  static Future<String?> readToken() => _store.read(key: _tokenKey);
 
   static Future<void> writeToken(String token) =>
-      _op((s) => s.write(key: _tokenKey, value: token));
+      _store.write(key: _tokenKey, value: token);
 
-  static Future<void> deleteToken() => _op((s) => s.delete(key: _tokenKey));
+  static Future<void> deleteToken() => _store.delete(key: _tokenKey);
 
   // ── Cached identity (user + client) ─────────────────────────────────
 
@@ -98,12 +53,12 @@ class NexusAccountStore {
       'user': user.toJson(),
       'client': client.toJson(),
     });
-    return _op((s) => s.write(key: _identityKey, value: json));
+    return _store.write(key: _identityKey, value: json);
   }
 
   /// Reads the cached identity, or null if absent/corrupt.
   static Future<({NexusUser user, NexusClient client})?> readIdentity() async {
-    final raw = await _op((s) => s.read(key: _identityKey));
+    final raw = await _store.read(key: _identityKey);
     if (raw == null || raw.isEmpty) return null;
     try {
       final decoded = jsonDecode(raw);
@@ -118,16 +73,14 @@ class NexusAccountStore {
     return null;
   }
 
-  static Future<void> deleteIdentity() =>
-      _op((s) => s.delete(key: _identityKey));
+  static Future<void> deleteIdentity() => _store.delete(key: _identityKey);
 
   // ── Gateway base URL override (optional) ────────────────────────────
 
-  static Future<String?> readGatewayBaseUrl() =>
-      _op((s) => s.read(key: _gatewayKey));
+  static Future<String?> readGatewayBaseUrl() => _store.read(key: _gatewayKey);
 
   static Future<void> writeGatewayBaseUrl(String url) =>
-      _op((s) => s.write(key: _gatewayKey, value: url));
+      _store.write(key: _gatewayKey, value: url);
 
   /// Clear all account credentials on sign-out.
   static Future<void> clear() async {
