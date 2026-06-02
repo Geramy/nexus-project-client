@@ -101,8 +101,15 @@ final projectInferenceProvider = FutureProvider.family<ResolvedInference?,
   String? ttsVoice;
   if (persona != null) {
     ttsVoice = persona.ttsVoice;
+    // Default to an Omni collection (the product's LMX-Omni-52B-Halo when the
+    // server advertises it, else the first collection it lists) when the persona
+    // hasn't picked one — so voice gets real STT/TTS components instead of null.
+    var omniCollection = persona.omniCollectionModel;
+    if (omniCollection == null || omniCollection.trim().isEmpty) {
+      omniCollection = defaultOmniCollectionId(serverModels);
+    }
     final resolved = resolvePersonaModels(
-      omniCollectionModel: persona.omniCollectionModel,
+      omniCollectionModel: omniCollection,
       llmModel: persona.llmModel,
       sttModel: persona.sttModel,
       ttsModel: persona.ttsModel,
@@ -114,6 +121,11 @@ final projectInferenceProvider = FutureProvider.family<ResolvedInference?,
     sttModel = resolved.stt;
     ttsModel = resolved.tts;
   }
+  // Safety net (any path, incl. no persona): never let voice fall back to the
+  // backend's `whisper-1` / empty TTS defaults, which 404 on Lemonade servers.
+  // Resolve the server's own transcription/speech models instead.
+  sttModel ??= firstAudioModelId(serverModels);
+  ttsModel ??= firstTtsModelId(serverModels);
 
   final selected = chosen.selectedModel;
   final candidate = resolvedChatModel ??

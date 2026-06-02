@@ -162,14 +162,13 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
       String? resolvedChatModel;
       if (persona != null) {
         ttsVoice = persona.ttsVoice;
-        // On the subscription (Nexus Router) server, default to the first omni
-        // collection the server advertises when the persona hasn't picked one,
-        // so routed agents get full voice/vision/image capability out of the box.
+        // Default to an Omni collection (the product's LMX-Omni-52B-Halo when
+        // the server advertises it, else the first collection it lists) when the
+        // persona hasn't picked one — so agents get full voice/vision/image
+        // capability out of the box, on local AND routed servers.
         var omniCollection = persona.omniCollectionModel;
-        if ((omniCollection == null || omniCollection.trim().isEmpty) &&
-            isRoutedProviderType(chosen.providerType)) {
-          final firstOmni = serverModels.where((m) => m.isCollection).toList();
-          if (firstOmni.isNotEmpty) omniCollection = firstOmni.first.id;
+        if (omniCollection == null || omniCollection.trim().isEmpty) {
+          omniCollection = defaultOmniCollectionId(serverModels);
         }
         final resolved = resolvePersonaModels(
           omniCollectionModel: omniCollection,
@@ -184,6 +183,10 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
         sttModel = resolved.stt;
         ttsModel = resolved.tts;
       }
+      // Safety net (any path): never let voice fall back to the backend's
+      // `whisper-1` / empty TTS defaults, which 404 on Lemonade servers.
+      sttModel ??= firstAudioModelId(serverModels);
+      ttsModel ??= firstTtsModelId(serverModels);
 
       // Chat model: agent's resolved LLM → server's selected → first live → first cached.
       final chatCandidate = resolvedChatModel ??

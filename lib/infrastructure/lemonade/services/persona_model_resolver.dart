@@ -4,6 +4,12 @@
 
 import 'package:nexus_projects_client/infrastructure/lemonade/api/types/model_info.dart';
 
+/// The product's default Omni Collection. Seeded onto the built-in personas and
+/// used as the preferred fallback when a persona (or server) hasn't picked a
+/// collection, so voice/vision/image work out of the box. Decomposes into its
+/// component STT/TTS/LLM models via [resolvePersonaModels].
+const String kDefaultOmniCollection = 'LMX-Omni-52B-Halo';
+
 /// The concrete model id to use for each modality, resolved from a persona's
 /// saved configuration.
 ///
@@ -67,6 +73,40 @@ String? firstChatModelId(List<ApiModelInfo> models) {
     if (!m.isCollection) return m.id;
   }
   return null;
+}
+
+/// First transcription/audio (STT) model id on the server, or null. Used as the
+/// safety net so a voice turn never sends OpenAI's `whisper-1` (which Lemonade
+/// servers 404 on) when a persona/collection didn't resolve an STT model.
+String? firstAudioModelId(List<ApiModelInfo> models) {
+  for (final m in models) {
+    if (m.isCollection) continue;
+    if (_isAudio(m)) return m.id;
+  }
+  return null;
+}
+
+/// First text-to-speech (TTS) model id on the server, or null. Safety net so a
+/// spoken reply never posts an empty model id (which 404s) when nothing resolved.
+String? firstTtsModelId(List<ApiModelInfo> models) {
+  for (final m in models) {
+    if (m.isCollection) continue;
+    if (_isTts(m)) return m.id;
+  }
+  return null;
+}
+
+/// The Omni Collection id to use when a persona hasn't chosen one: the product
+/// default [kDefaultOmniCollection] if the server advertises it, otherwise the
+/// first collection the server lists. Null when the server exposes none.
+String? defaultOmniCollectionId(List<ApiModelInfo> models) {
+  ApiModelInfo? first;
+  for (final m in models) {
+    if (!m.isCollection) continue;
+    first ??= m;
+    if (m.id == kDefaultOmniCollection) return m.id;
+  }
+  return first?.id;
 }
 
 bool _nameHasAny(String id, List<String> needles) {

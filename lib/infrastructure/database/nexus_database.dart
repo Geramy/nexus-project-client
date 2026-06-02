@@ -13,6 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
 import '../inference/routed_server.dart' show kRoutedProviderType;
+import '../lemonade/services/persona_model_resolver.dart' show kDefaultOmniCollection;
 import '../models/database/tables/client.dart';
 import '../models/database/tables/project.dart';
 import '../models/database/tables/task.dart';
@@ -257,6 +258,9 @@ class NexusDatabase extends _$NexusDatabase {
           description: Value(role.description),
           capabilitiesJson: Value(jsonEncode(defaultSkillNames(role))),
           configJson: Value(defaultConfigJson(role)),
+          // Default to the product Omni Collection so voice/vision/image work
+          // out of the box; it decomposes into per-modality (STT/TTS/LLM) models.
+          omniCollectionModel: const Value(kDefaultOmniCollection),
           isPrefab: const Value(true),
         ),
       );
