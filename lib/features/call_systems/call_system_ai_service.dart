@@ -3,13 +3,11 @@
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
 import '../../core/providers/app_shell_provider.dart';
+import '../../infrastructure/workspace/workspace_provider.dart';
 import '../project_setup/setup_inference.dart';
 import 'call_system_editor.dart';
 import 'model/call_flow.dart';
@@ -116,16 +114,16 @@ Keep it focused and valid.''';
   }
 
   /// Synthesize audio for every prompt that has text but no audio yet, using the
-  /// resolved kokoro TTS model/voice; writes WAV/MP3 files under app support and
-  /// records each prompt's audioAssetPath. Returns the number synthesized.
+  /// resolved kokoro TTS model/voice. Audio is written INTO the project workspace
+  /// (our git-backed sandbox storage) under `call-system/audio/`, so it travels
+  /// with the repo + the "Download .zip" export, and each prompt's
+  /// audioAssetPath references the workspace-relative path. Returns the count.
   Future<int> synthesizePrompts({bool force = false}) async {
     final resolved = await _resolveInference();
     if (resolved == null) {
       throw StateError('No inference is configured for speech synthesis.');
     }
-    final dir = await getApplicationSupportDirectory();
-    final outDir = Directory(p.join(dir.path, 'call_audio', '$projectId'));
-    await outDir.create(recursive: true);
+    final ws = await _ref.read(workspaceFsProvider(projectId).future);
 
     var count = 0;
     for (final prompt in _editor.current.prompts) {
@@ -137,13 +135,39 @@ Keep it focused and valid.''';
         voice: prompt.voice ?? resolved.ttsVoice ?? 'af_heart',
       );
       final ext = speech.contentType.contains('wav') ? 'wav' : 'mp3';
-      final rel = p.join('call_audio', '$projectId', '${prompt.id}.$ext');
-      final file = File(p.join(dir.path, rel));
-      await file.writeAsBytes(speech.audioBytes);
+      final rel = 'call-system/audio/${prompt.id}.$ext';
+      await ws.writeBytes('/$rel', speech.audioBytes);
       await _editor.upsertPrompt(prompt.copyWith(audioAssetPath: rel));
       count++;
     }
     return count;
+  }
+
+  /// Delete synthesized audio files in the workspace that no prompt references
+  /// anymore — e.g. after a prompt id changed or audio was regenerated under a
+  /// new name. Keeps the git-backed repo (and the exported zip) free of orphaned
+  /// clips. Returns the number of files removed.
+  Future<int> pruneOrphanAudio() async {
+    final ws = await _ref.read(workspaceFsProvider(projectId).future);
+    const dir = '/call-system/audio';
+    if (!await ws.exists(dir)) return 0;
+
+    String norm(String s) => s.startsWith('/') ? s.substring(1) : s;
+    final referenced = <String>{
+      for (final pr in _editor.current.prompts)
+        if (pr.audioAssetPath != null && pr.audioAssetPath!.isNotEmpty)
+          norm(pr.audioAssetPath!),
+    };
+
+    var removed = 0;
+    for (final e in await ws.list(dir)) {
+      if (e.isDirectory) continue;
+      if (!referenced.contains(norm(e.path))) {
+        await ws.delete(e.path);
+        removed++;
+      }
+    }
+    return removed;
   }
 
   /// Pull the first JSON object out of a model reply (tolerating code fences /
