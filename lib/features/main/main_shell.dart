@@ -15,8 +15,8 @@ import 'package:nexus_projects_client/features/task_detail/task_detail_panel.dar
 import 'package:nexus_projects_client/features/tasks/tasks_view.dart';
 import 'package:nexus_projects_client/features/projects/project_workspace_view.dart';
 import 'package:nexus_projects_client/features/project_plans/plan_explorer.dart';
-import 'package:nexus_projects_client/features/project_setup/setup_chat_controller.dart';
 import 'package:nexus_projects_client/features/project_setup/setup_interview_panel.dart';
+import 'package:nexus_projects_client/features/main/widgets/chat_sessions_sidebar.dart';
 import 'package:nexus_projects_client/features/agents/agents_hub_view.dart';
 import 'package:nexus_projects_client/features/agents/persona_bulk_select.dart';
 import 'package:nexus_projects_client/features/agents/bulk_edit_personas_panel.dart';
@@ -306,15 +306,20 @@ class _MainShellState extends ConsumerState<MainShell> {
   Widget _buildRightPanel(MainView currentView, WidgetRef ref) {
     switch (currentView) {
       case MainView.projectPlans:
-        // While the Setup tab is active, the right outer panel hosts the AI
-        // interview chat; otherwise the virtual file explorer of the plans.
-        if (ref.watch(projectSetupModeProvider)) {
-          return SetupInterviewPanel(
-            projectId: ref.watch(currentProjectIdProvider),
-            clientId: ref.watch(currentClientIdProvider),
-          );
+        // The right outer panel follows the active workspace tab: Setup → the AI
+        // interview chat, Plan → the plans file explorer, Chat (and other tabs) →
+        // the chat-session history.
+        switch (ref.watch(workspaceRightPanelProvider)) {
+          case WorkspaceRightPanel.setupInterview:
+            return SetupInterviewPanel(
+              projectId: ref.watch(currentProjectIdProvider),
+              clientId: ref.watch(currentClientIdProvider),
+            );
+          case WorkspaceRightPanel.planExplorer:
+            return const PlanExplorer();
+          case WorkspaceRightPanel.chatHistory:
+            return const ChatSessionsSidebar();
         }
-        return const PlanExplorer();
 
       case MainView.aiProviders:
         final selected = ref.watch(selectedLemonadeServerProvider);

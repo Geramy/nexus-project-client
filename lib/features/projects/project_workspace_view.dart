@@ -17,6 +17,14 @@ import 'package:nexus_projects_client/features/project_setup/setup_chat_controll
 import 'package:nexus_projects_client/features/project_setup/setup_tab.dart';
 import 'package:nexus_projects_client/features/project_setup/summary_tab.dart';
 
+/// Which detail panel the project-workspace RIGHT outer panel should show,
+/// published by the active workspace tab: Chat → chat-session history, Plan →
+/// the plans file explorer, Setup → the interview chat.
+enum WorkspaceRightPanel { chatHistory, planExplorer, setupInterview }
+
+final workspaceRightPanelProvider =
+    StateProvider<WorkspaceRightPanel>((ref) => WorkspaceRightPanel.chatHistory);
+
 /// Center pane for a project: a tabbed workspace.
 ///   • Chat — the project Coordinator (first tab, the human's main surface).
 ///   • Overview — project settings: assigned agent, orchestration Start/Pause,
@@ -60,9 +68,20 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
 
   void _publishSetupMode() {
     if (!mounted) return;
-    final isSetup = _tabs.index == _setupTabIndex;
+    final idx = _tabs.index;
+    final isSetup = idx == _setupTabIndex;
     if (ref.read(projectSetupModeProvider) != isSetup) {
       ref.read(projectSetupModeProvider.notifier).state = isSetup;
+    }
+    // Drive the right outer panel from the active tab: Setup → interview,
+    // Plan → plans explorer, everything else (Chat/Summary/Overview) → history.
+    final panel = isSetup
+        ? WorkspaceRightPanel.setupInterview
+        : (idx == _planTabIndex
+            ? WorkspaceRightPanel.planExplorer
+            : WorkspaceRightPanel.chatHistory);
+    if (ref.read(workspaceRightPanelProvider) != panel) {
+      ref.read(workspaceRightPanelProvider.notifier).state = panel;
     }
   }
 
