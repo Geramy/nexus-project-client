@@ -209,20 +209,33 @@ Set<String> get _allKnownTools => {
 /// The skill names granted to [role].
 List<String> defaultSkillNames(AgentRole role) => kRoleSkills[role] ?? const [];
 
-/// Builds the full default tool-permission map for [role]: every known tool
-/// gets an explicit grant/ask/deny, so the resolved permission never falls back
-/// to a lenient default. Tools outside the role's skills are denied.
-Map<String, ToolPerm> defaultToolPermissions(AgentRole role) {
+/// Builds a full default-deny tool-permission map and then grants whatever the
+/// given [skills] allow. Every known tool gets an explicit grant/ask/deny, so a
+/// resolved permission never falls back to a lenient default; tools outside the
+/// granted skills are denied. This is the skill-list primitive that both the
+/// role engine and the agent-pack catalog (incl. non-software domains, which
+/// have no [AgentRole]) build on.
+Map<String, ToolPerm> toolPermissionsForSkills(Iterable<String> skills) {
   final perms = <String, ToolPerm>{
     for (final tool in _allKnownTools) tool: ToolPerm.deny,
   };
-  for (final skill in defaultSkillNames(role)) {
+  for (final skill in skills) {
     final tools = kSkillCatalog[skill];
     if (tools == null) continue;
     tools.forEach((tool, perm) => perms[tool] = perm);
   }
   return perms;
 }
+
+/// Serializes a skill list into a `configJson` string, ready to store on a
+/// seeded persona (the executor reads `configJson.toolPermissions`).
+String configJsonForSkills(Iterable<String> skills) =>
+    AgentToolPermissions.writeIntoConfigJson(null, toolPermissionsForSkills(skills));
+
+/// Builds the full default tool-permission map for [role]. Tools outside the
+/// role's skills are denied.
+Map<String, ToolPerm> defaultToolPermissions(AgentRole role) =>
+    toolPermissionsForSkills(defaultSkillNames(role));
 
 /// Serializes [role]'s default permissions into a `configJson` string, ready to
 /// store on a seeded persona (the executor reads `configJson.toolPermissions`).

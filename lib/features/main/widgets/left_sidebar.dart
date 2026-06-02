@@ -8,6 +8,8 @@ import 'package:nexus_projects_client/core/providers/app_shell_provider.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart';
 import 'package:nexus_projects_client/infrastructure/lemonade/providers/lemonade_servers_provider.dart';
+import 'package:nexus_projects_client/features/agents/packs/agent_pack_catalog.dart';
+import 'package:nexus_projects_client/features/onboarding/widgets/create_with_packs_dialog.dart';
 import 'package:nexus_projects_client/shared/ui/nexus_ui.dart';
 
 /// The eight primary navigation destinations, shared by the full sidebar and
@@ -135,21 +137,18 @@ class LeftSidebar extends ConsumerWidget {
 
                 TextButton.icon(
                   onPressed: () async {
-                    final ctrl = TextEditingController(text: 'New Client');
-                    final name = await showDialog<String>(
-                      context: context,
-                      builder: (c) => AlertDialog(
-                        title: const Text('New Client'),
-                        content: TextField(controller: ctrl, autofocus: true),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
-                          FilledButton(onPressed: () => Navigator.pop(c, ctrl.text.trim()), child: const Text('Create')),
-                        ],
-                      ),
+                    final result = await showCreateWithPacksDialog(
+                      context,
+                      title: 'New Client',
+                      nameLabel: 'Client name',
+                      defaultName: 'New Client',
                     );
-                    if (name != null && name.isNotEmpty) {
+                    if (result != null) {
                       final db = ref.read(nexusDatabaseProvider);
-                      final id = await db.createClientWithDefaults(name: name);
+                      final id = await db.createClientWithDefaults(
+                        name: result.name,
+                        packKeys: result.packKeys.toList(),
+                      );
                       ref.read(currentClientIdProvider.notifier).selectClient(id);
                     }
                   },
@@ -206,22 +205,21 @@ class LeftSidebar extends ConsumerWidget {
 
                 TextButton.icon(
                   onPressed: () async {
-                    final ctrl = TextEditingController(text: 'New Project');
-                    final name = await showDialog<String>(
-                      context: context,
-                      builder: (c) => AlertDialog(
-                        title: const Text('New Project'),
-                        content: TextField(controller: ctrl, autofocus: true),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
-                          FilledButton(onPressed: () => Navigator.pop(c, ctrl.text.trim()), child: const Text('Create')),
-                        ],
-                      ),
+                    final result = await showCreateWithPacksDialog(
+                      context,
+                      title: 'New Project',
+                      nameLabel: 'Project name',
+                      defaultName: 'New Project',
                     );
-                    if (name != null && name.isNotEmpty) {
+                    if (result != null) {
                       final db = ref.read(nexusDatabaseProvider);
                       final clientId = ref.read(currentClientIdProvider);
-                      final id = await db.createProject(ProjectsCompanion.insert(client_fk: clientId, name: name));
+                      final id = await db.createProject(
+                          ProjectsCompanion.insert(client_fk: clientId, name: result.name));
+                      // Provision the chosen pack(s) into this project's client
+                      // (dedupes against agents the client already has).
+                      await db.provisionAgentPack(
+                          clientId, agentsForPackKeys(result.packKeys));
                       ref.read(currentProjectIdProvider.notifier).selectProject(id);
                     }
                   },

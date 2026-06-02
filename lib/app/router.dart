@@ -3,14 +3,15 @@
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
 import 'package:go_router/go_router.dart';
-import 'package:nexus_projects_client/app/auth_gate.dart';
+import 'package:nexus_projects_client/features/onboarding/onboarding_gate.dart';
 
 final appRouter = GoRouter(
   initialLocation: '/',
   routes: [
     GoRoute(
       path: '/',
-      builder: (context, state) => const AuthGate(),
+      // OnboardingGate runs the first-run wizard, then hands off to AuthGate.
+      builder: (context, state) => const OnboardingGate(),
     ),
     // Future routes for deep linking (tasks, agents, etc.) will go here
   ],

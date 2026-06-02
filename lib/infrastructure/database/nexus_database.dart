@@ -31,6 +31,8 @@ import '../models/database/tables/project_tag.dart';
 import '../models/database/tables/library_verification.dart';
 import '../../features/agents/agent_role.dart';
 import '../../features/agents/agent_role_policy.dart';
+import '../../features/agents/packs/agent_pack.dart';
+import '../../features/agents/packs/agent_pack_catalog.dart';
 import '../../features/projects/task_workflow.dart';
 
 part 'nexus_database.g.dart';
@@ -176,6 +178,17 @@ class NexusDatabase extends _$NexusDatabase {
     return (select(clients)..where((c) => c.isDefault.equals(true))).getSingleOrNull();
   }
 
+  /// Heuristic for "this install has already been used": any project exists, or
+  /// there's more than the single built-in Default client. Used to auto-skip
+  /// first-run onboarding for existing users (a fresh install seeds only the
+  /// Default client and no projects).
+  Future<bool> hasExistingUserContent() async {
+    final anyProject = await (select(projects)..limit(1)).get();
+    if (anyProject.isNotEmpty) return true;
+    final allClients = await select(clients).get();
+    return allClients.length > 1;
+  }
+
   /// Inserts a client and returns its new integer pk.
   Future<int> createClient(ClientsCompanion entry) => into(clients).insert(entry);
 
@@ -203,7 +216,14 @@ class NexusDatabase extends _$NexusDatabase {
 
   /// Creates a client and seeds a default Inference Server + starter personas.
   /// Returns the new client pk.
-  Future<int> createClientWithDefaults({required String name, bool isDefault = false}) async {
+  /// Creates a client with its built-in infrastructure: a Local Lemonade server,
+  /// the reusable Skill prefabs, and the agents from the chosen [packKeys]
+  /// (defaulting to the [kDefaultAgentPackKey] pack when none are given).
+  Future<int> createClientWithDefaults({
+    required String name,
+    bool isDefault = false,
+    List<String>? packKeys,
+  }) async {
     final clientPk = await createClient(
       ClientsCompanion.insert(name: name, isDefault: Value(isDefault)),
     );
@@ -219,18 +239,20 @@ class NexusDatabase extends _$NexusDatabase {
       ),
     );
 
-    await seedDefaultAgentsAndSkills(clientPk);
+    await seedSkillPrefabs(clientPk);
+
+    final keys = (packKeys == null || packKeys.isEmpty)
+        ? const [kDefaultAgentPackKey]
+        : packKeys;
+    await provisionAgentPack(clientPk, agentsForPackKeys(keys));
 
     return clientPk;
   }
 
-  /// Seeds the reusable Skill prefabs and the eight default role-based agent
-  /// personas (Project Manager, Coordinator, the five SDE workers, and the
-  /// Verification Agent). Each persona's title is its [AgentRole.key], and its
-  /// tool permissions + skills are derived from the rule engine in
-  /// agent_role_policy.dart so they stay consistent with role policy.
-  Future<void> seedDefaultAgentsAndSkills(int clientPk) async {
-    // Skill prefabs — one row per bundle in the catalog.
+  /// Seeds the reusable Skill prefabs (one row per bundle in [kSkillCatalog]).
+  /// These are the tool bundles agent packs grant; they're client-scoped so each
+  /// client owns its own prefab library.
+  Future<void> seedSkillPrefabs(int clientPk) async {
     for (final entry in kSkillCatalog.entries) {
       final meta = kSkillMeta[entry.key];
       await createSkill(
@@ -247,23 +269,33 @@ class NexusDatabase extends _$NexusDatabase {
         ),
       );
     }
+  }
 
-    // Role personas — title-driven, permissions + skills from the rule engine.
-    for (final role in AgentRole.values) {
+  /// Provisions a set of pack agents into a client as prefab personas. Dedupes
+  /// against the client's existing personas by `title`, so re-provisioning or
+  /// selecting overlapping packs (which may share a role) never duplicates an
+  /// agent. Each persona defaults to the product Omni Collection so voice/
+  /// vision/image work out of the box (it decomposes into per-modality models).
+  Future<void> provisionAgentPack(int clientPk, List<PackAgent> agents) async {
+    final existing = await (select(agentPersonas)
+          ..where((p) => p.client_fk.equals(clientPk)))
+        .get();
+    final titles = <String?>{for (final p in existing) p.title};
+    for (final a in agents) {
+      if (titles.contains(a.title)) continue;
       await createAgentPersona(
         AgentPersonasCompanion.insert(
           client_fk: clientPk,
-          name: role.displayTitle,
-          title: Value(role.key),
-          description: Value(role.description),
-          capabilitiesJson: Value(jsonEncode(defaultSkillNames(role))),
-          configJson: Value(defaultConfigJson(role)),
-          // Default to the product Omni Collection so voice/vision/image work
-          // out of the box; it decomposes into per-modality (STT/TTS/LLM) models.
+          name: a.name,
+          title: Value(a.title),
+          description: Value(a.description),
+          capabilitiesJson: Value(jsonEncode(a.skills)),
+          configJson: Value(a.configJson),
           omniCollectionModel: const Value(kDefaultOmniCollection),
           isPrefab: const Value(true),
         ),
       );
+      titles.add(a.title);
     }
   }
 
