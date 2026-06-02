@@ -8,5 +8,13 @@
 	<true/>
 	<key>com.apple.security.device.audio-input</key>
 	<true/>
+	<!-- Lets the signed/notarized release use the modern data-protection keychain
+	     silently (no "wants to use your keychain" prompt). Team-id-prefixed group;
+	     must match the Developer ID signing team. NOT added to DebugProfile because
+	     ad-hoc debug builds can't carry it (AMFI SIGKILLs at launch). -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>YBQ9BU6Q6F.com.nexusprojects.nexusProjectsClient</string>
+	</array>
 </dict>
 </plist>
