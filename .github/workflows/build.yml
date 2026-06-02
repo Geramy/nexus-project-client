@@ -145,10 +145,13 @@ jobs:
           mkdir -p "$FW"
           GBDIR="$(dirname "$(find "${PUB_CACHE:-$HOME/.pub-cache}" -path '*git2dart_binaries*/macos/libgit2.dylib' 2>/dev/null | head -1)")"
 
-          # Bundle the vendored dylibs under their canonical @rpath names.
-          for lib in libgit2.dylib libssh2.1.dylib; do
-            [ -f "$FW/$lib" ] || { echo "Embedding $lib"; cp -f "$GBDIR/$lib" "$FW/$lib"; }
-          done
+          # Force-bundle the vendored dylibs (overwrite the pod's copy, whose own
+          # install name (LC_ID) is the experimental one) and normalize their IDs.
+          cp -f "$GBDIR/libgit2.dylib"   "$FW/libgit2.dylib"
+          cp -f "$GBDIR/libssh2.1.dylib" "$FW/libssh2.1.dylib"
+          chmod u+w "$FW/libgit2.dylib" "$FW/libssh2.1.dylib"
+          install_name_tool -id "@rpath/libgit2.dylib"   "$FW/libgit2.dylib"
+          install_name_tool -id "@rpath/libssh2.1.dylib" "$FW/libssh2.1.dylib"
 
           # Collect the Mach-O binaries to scan (main exe + bundled dylibs + framework binaries).
           bins=("$EXE")
@@ -157,15 +160,17 @@ jobs:
             [ -f "$f" ] && file "$f" 2>/dev/null | grep -q 'Mach-O' && bins+=("$f")
           done
 
-          # Rewrite any experimental libgit2 reference -> the bundled vendored copy.
+          # Rewrite any experimental libgit2 DEPENDENCY reference -> the bundled vendored copy.
           for bin in "${bins[@]}"; do
+            chmod u+w "$bin" 2>/dev/null || true
             otool -L "$bin" 2>/dev/null | awk '/@rpath\/libgit2-experimental/{print $1}' | sort -u | while read -r ref; do
               echo "Rewriting $ref -> @rpath/libgit2.dylib in $(basename "$bin")"
-              install_name_tool -change "$ref" "@rpath/libgit2.dylib" "$bin"
+              install_name_tool -change "$ref" "@rpath/libgit2.dylib" "$bin" || true
             done
           done
 
           echo "Bundled native libs:"; ls -1 "$FW" | grep -iE 'git2|ssh2' || true
+          echo "libgit2.dylib id: $(otool -D "$FW/libgit2.dylib" | tail -1)"
 
           # Hard-fail if any native lib reference is still unbundled.
           missing=0
