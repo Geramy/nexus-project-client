@@ -10,6 +10,7 @@ import '../../../shared/ui/nexus_ui.dart';
 import '../call_system_editor.dart';
 import '../call_system_providers.dart';
 import '../model/call_node.dart';
+import 'ai_assist_dialog.dart';
 import 'call_flow_canvas.dart';
 import 'export_dialog.dart';
 import 'node_visuals.dart';
@@ -59,6 +60,12 @@ class CallFlowWorkspace extends ConsumerWidget {
                 onChanged: (v) => ref
                     .read(callBuilderAdvancedProvider(projectId).notifier)
                     .state = v,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              OutlinedButton.icon(
+                onPressed: () => showCallAiAssistDialog(context, projectId),
+                icon: const Icon(Icons.auto_awesome, size: 18),
+                label: const Text('AI assist'),
               ),
               const SizedBox(width: AppSpacing.sm),
               OutlinedButton.icon(
