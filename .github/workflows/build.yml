@@ -125,6 +125,21 @@ jobs:
             -e 's/DEVELOPMENT_TEAM = YBQ9BU6Q6F;/DEVELOPMENT_TEAM = "";/g' \
             "$PBX"
 
+      # The GitHub runner ships Homebrew's libgit2, built with the experimental
+      # SHA256 API (install name @rpath/libgit2-experimental.1.9.dylib). With it on
+      # the linker search path, the git2dart_binaries pod links THAT instead of its
+      # vendored libgit2.dylib — and the experimental dylib isn't bundled, so the
+      # app crashes at launch. Remove it so the build links the vendored copy
+      # (@rpath/libgit2.dylib), which the next step embeds + verifies.
+      - name: Remove Homebrew libgit2 so the pod links its vendored copy (macOS)
+        run: |
+          set -euo pipefail
+          brew uninstall --ignore-dependencies libgit2 2>/dev/null || true
+          sudo rm -f /opt/homebrew/lib/libgit2*.dylib \
+                     /opt/homebrew/opt/libgit2/lib/libgit2*.dylib 2>/dev/null || true
+          echo "Remaining brew libgit2 dylibs:"
+          ls -1 /opt/homebrew/lib/libgit2* 2>/dev/null || echo "  none (good)"
+
       - name: Build macOS (release)
         run: flutter build macos --release --build-name=${{ env.APP_VERSION }} --build-number=${{ github.run_number }}
 
