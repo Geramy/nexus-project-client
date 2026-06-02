@@ -141,6 +141,7 @@ class SetupChatController extends ChangeNotifier {
       model: resolved.model,
       projectName: 'Project',
       executor: executor,
+      enableThinking: resolved.enableThinking,
     );
     // If we resumed into refinement (or already finalized), start in refine.
     if (refining) _session!.enterRefinePhase();

@@ -32,6 +32,7 @@ import 'package:nexus_projects_client/infrastructure/build/build_service_provide
 import 'package:nexus_projects_client/core/providers/app_shell_provider.dart';
 import 'package:nexus_projects_client/services/audio/audio_recorder_service.dart';
 import 'package:nexus_projects_client/services/audio/tts_service.dart';
+import 'package:nexus_projects_client/features/agents/thinking_mode.dart';
 import 'package:nexus_projects_client/services/audio/coordinator_duplex_voice_session.dart';
 import 'package:nexus_projects_client/widgets/live_mic_visualizer.dart';
 
@@ -68,6 +69,9 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
   bool _isVoiceCallActive = false;   // Whether we are in voice conversation mode with the Coordinator
   bool _isMicMuted = false;          // Whether the mic is currently muted while in voice mode
   bool _isSending = false;
+  // True while an assistant turn is in flight but no streamed content has
+  // arrived yet (drives the "Coordinator is thinking…" indicator).
+  bool _isThinking = false;
   VoiceState _voiceState = VoiceState.idle;
   String _liveVoiceTranscript = '';
 
@@ -208,10 +212,16 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
       // conversation (and any tasks it spawns) is linked back to the plan.
       // Otherwise use/reuse the general project-level session.
       int sessionId;
+      // The plan store is a filesystem store over the project's /PLANS folder, so
+      // it must be available in the GENERAL project chat too — not only when a
+      // specific plan is open. Otherwise list_plans/read_plan report "Plan storage
+      // is unavailable" even though PLANS/ already has files. Load best-effort.
       PlanStore? planStore;
+      try {
+        planStore = await ref.read(planStoreProvider(widget.projectId).future);
+      } catch (_) {}
       if (widget.openPlanPath != null) {
         sessionId = await db.getOrCreateChatSession(widget.projectId, planPath: widget.openPlanPath);
-        planStore = await ref.read(planStoreProvider(widget.projectId).future);
       } else {
         sessionId = ref.read(currentChatSessionProvider(widget.projectId)) ??
             await db.getOrCreateChatSession(widget.projectId);
@@ -247,6 +257,11 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
         workspace: workspace,
         git: gitEngine,
         buildService: buildService,
+        // Agent-level thinking mode (Project Manager defaults Off, others Unset).
+        // Pass-2 will let a task override when the agent is Unset.
+        enableThinking: resolveEnableThinking(
+          agent: personaThinkingMode(persona?.configJson, personaName: persona?.name),
+        ),
       );
 
       // Load the session's persisted messages + restore the LLM history.
@@ -438,6 +453,7 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
       _messages.add(_ChatMessage(text: text, isUser: true));
       _messageController.clear();
       _isSending = true;
+      _isThinking = true;
     });
     final userMsgPk = await _persist('user', text);
 
@@ -451,7 +467,10 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
         text,
         onToolResult: (r) {
           if (!mounted) return;
-          setState(() => _messages.add(_ChatMessage(text: '✓ $r', isUser: false, isSystem: true)));
+          setState(() {
+            _messages.add(_ChatMessage(text: '✓ $r', isUser: false, isSystem: true));
+            _isThinking = true; // back to "thinking" until the next content arrives
+          });
           unawaited(_persist('system', '✓ $r'));
           needNewBubble = true;
           assistantBuffer.clear();
@@ -466,7 +485,10 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
             assistantBuffer
               ..clear()
               ..write(event.text);
-            setState(() => _messages.add(_ChatMessage(text: assistantBuffer.toString(), isUser: false)));
+            setState(() {
+              _messages.add(_ChatMessage(text: assistantBuffer.toString(), isUser: false));
+              _isThinking = false; // content is streaming now
+            });
             needNewBubble = false;
           } else {
             assistantBuffer.write(event.text);
@@ -479,6 +501,7 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
           }
           setState(() {
             _isSending = false;
+            _isThinking = false;
           });
         }
       }
@@ -492,6 +515,7 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
         setState(() {
           _messages.add(_ChatMessage(text: "Error talking to coordinator: $e", isUser: false));
           _isSending = false;
+          _isThinking = false;
         });
       }
     }
@@ -643,8 +667,42 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(AppSpacing.lg),
-              itemCount: _messages.length,
+              itemCount: _messages.length + (_isThinking ? 1 : 0),
               itemBuilder: (context, index) {
+                // Trailing "thinking" bubble while the assistant turn is in
+                // flight but hasn't started streaming text yet.
+                if (index >= _messages.length) {
+                  return Align(
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      decoration: BoxDecoration(
+                        color: context.nx.glass,
+                        borderRadius: AppRadius.lgAll,
+                        border: Border.all(color: context.nx.hairline),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 14, height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Text(
+                            'Coordinator is thinking…',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontStyle: FontStyle.italic,
+                              color: context.nx.textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
                 final msg = _messages[index];
                 final isSystem = msg.isSystem == true;
                 final nx = context.nx;
@@ -712,27 +770,52 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                children: [
-                                  Icon(
-                                    _isMicMuted ? Icons.mic_off : Icons.mic,
-                                    size: 16,
-                                    color: _isMicMuted
-                                        ? context.nx.danger
-                                        : Theme.of(context).colorScheme.primary,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    _isMicMuted
-                                        ? 'Microphone muted'
-                                        : 'Listening... speak now',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
+                              Builder(builder: (context) {
+                                // Status reflects the live voice state (not just
+                                // mute), so it never says "Listening" while the
+                                // assistant is thinking or speaking back.
+                                final primary = Theme.of(context).colorScheme.primary;
+                                IconData icon;
+                                String label;
+                                Color color;
+                                if (_isMicMuted) {
+                                  icon = Icons.mic_off;
+                                  label = 'Microphone muted';
+                                  color = context.nx.danger;
+                                } else {
+                                  switch (_voiceState) {
+                                    case VoiceState.processing:
+                                      icon = Icons.hourglass_top;
+                                      label = 'Thinking…';
+                                      color = primary;
+                                    case VoiceState.speaking:
+                                      icon = Icons.volume_up_rounded;
+                                      label = 'Speaking…';
+                                      color = primary;
+                                    case VoiceState.listening:
+                                      icon = Icons.mic;
+                                      label = 'Listening… speak now';
+                                      color = primary;
+                                    default:
+                                      icon = Icons.mic_none;
+                                      label = 'Connecting…';
+                                      color = context.nx.textMuted;
+                                  }
+                                }
+                                return Row(
+                                  children: [
+                                    Icon(icon, size: 16, color: color),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      label,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
+                                  ],
+                                );
+                              }),
                               const SizedBox(height: 2),
                               LiveMicVisualizer(
                                 recorder: _voiceRecorder,

@@ -36,6 +36,10 @@ class Tasks extends Table {
   TextColumn get description => text().nullable()();
   TextColumn get status => text().withDefault(const Constant('Todo'))();
   TextColumn get priority => text().withDefault(const Constant('MED'))();
+
+  /// Per-task model thinking mode: 'on' | 'off' | null (inherit). Set by the
+  /// Coordinator via the create_task/update_task `thinking_enabled` param.
+  TextColumn get thinkingMode => text().nullable()();
   IntColumn get tokenCost => integer().withDefault(const Constant(0))();
   RealColumn get usdCost => real().withDefault(const Constant(0.0))();
 

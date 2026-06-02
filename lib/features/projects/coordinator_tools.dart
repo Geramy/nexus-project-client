@@ -68,6 +68,7 @@ class CoordinatorTools {
               'parent_task_id': {'type': 'string', 'description': 'Optional parent task id to create this as a subtask'},
               'priority': {'type': 'string', 'enum': ['HIGH', 'MED', 'LOW'], 'description': 'Priority level'},
               'agent_persona_id': {'type': 'string', 'description': 'Worker persona id to assign. Strongly preferred — call list_agents first. If omitted, a default worker is auto-assigned.'},
+              'thinking_enabled': {'type': 'boolean', 'description': 'Optional. Enable the model\'s thinking/reasoning mode for THIS task. Only set true for small, very specific, cut-and-dry jobs. Leave unset/false for long or open-ended tasks (thinking degrades those ~15%).'},
             },
             'required': ['title'],
           },
@@ -101,6 +102,7 @@ class CoordinatorTools {
               'title': {'type': 'string'},
               'description': {'type': 'string'},
               'priority': {'type': 'string', 'enum': ['HIGH', 'MED', 'LOW']},
+              'thinking_enabled': {'type': 'boolean', 'description': 'Optional. Enable the model\'s thinking/reasoning mode for THIS task. Only set true for small, very specific, cut-and-dry jobs. Leave unset/false for long or open-ended tasks (thinking degrades those ~15%).'},
             },
             'required': ['task_id'],
           },
@@ -1048,6 +1050,9 @@ class CoordinatorToolExecutor {
     final description = args['description'] as String? ?? '';
     final parentId = _asInt(args['parent_task_id']);
     final priority = args['priority'] as String? ?? 'MED';
+    final thinkingMode = args['thinking_enabled'] == true
+        ? 'on'
+        : (args['thinking_enabled'] == false ? 'off' : null);
 
     // A task is never left unassigned: use the persona the coordinator named if
     // it resolves, otherwise fall back to the project's default worker. An
@@ -1070,6 +1075,7 @@ class CoordinatorToolExecutor {
       planPath: openPlanPath,
       chatSessionPk: chatSessionPk,
       agentPk: assignee,
+      thinkingMode: thinkingMode,
     );
 
     if (assignee == null) {
@@ -1116,11 +1122,15 @@ class CoordinatorToolExecutor {
     final newTitle = (args['title'] as String?)?.trim();
     final newDesc = args['description'] as String?;
     final newPrio = args['priority'] as String?;
+    final newThinking = args['thinking_enabled'] == true
+        ? 'on'
+        : (args['thinking_enabled'] == false ? 'off' : null);
 
     await db.patchTask(taskId, TasksCompanion(
       title: (newTitle != null && newTitle.isNotEmpty) ? Value(newTitle) : const Value.absent(),
       description: newDesc != null ? Value(newDesc) : const Value.absent(),
       priority: newPrio != null ? Value(newPrio) : const Value.absent(),
+      thinkingMode: newThinking != null ? Value(newThinking) : const Value.absent(),
     ));
 
     return 'Updated task "${newTitle ?? existing.title}". Changes are live in the UI.';

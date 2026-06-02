@@ -81,7 +81,13 @@ class ProjectCoordinatorSession {
     this.git,
     this.buildService,
     this.systemPromptOverride,
+    this.enableThinking,
   });
+
+  /// Effective model "thinking mode" for this session's requests: true/false
+  /// forces `enable_thinking`; null omits it (model default). Resolved by the
+  /// caller from the agent's (and, later, the task's) ThinkingMode.
+  final bool? enableThinking;
 
   /// The model id actually sent to the backend.
   String get _effectiveModel =>
@@ -144,6 +150,7 @@ class ProjectCoordinatorSession {
     final planFocus = openPlanPath != null ? 'view_plan, update_plan, ' : '';
     buffer.writeln('\nYou have FULL read/create/update/delete control. Available tools:');
     buffer.writeln('- Tasks: list_tasks, get_task, create_task (use parent_task_id for subtasks), update_task, update_task_status, set_task_dates, delete_task.');
+    buffer.writeln('  Thinking mode: when you create_task/update_task you may set `thinking_enabled: true`, but ONLY when the task is a small, very specific, cut-and-dry job (one narrow, well-defined feature). Do NOT enable thinking for large, broad, or open-ended tasks — on long/open-ended context, thinking mode degrades the response and outcome by about 15%, making results worse. Default to leaving thinking_enabled off (omit it) unless the job is narrow and clearly scoped.');
     buffer.writeln('- Agents: list_agents (call this to discover who exists), assign_agent_to_task. ALWAYS list_agents before assigning so you use a real agent id.');
     buffer.writeln('CRITICAL: every task MUST be assigned to a worker agent. When you create_task, pass agent_persona_id (call list_agents first to pick the best-fit specialist). Never leave a task unassigned — an unassigned task is invisible to the orchestrator and never gets worked. If you create a task without naming an agent, a default worker is auto-assigned, but you should choose the right one.');
     buffer.writeln('- Plans→tasks: when the user changes the idea, edit the PLAN first — add/adjust "- [ ] …" outline items in the relevant plan doc (update_plan/write_plan). Every plan write AUTOMATICALLY creates tasks for any new outline items (each line is annotated with its task id, so edits never double-create). Tell the user which tasks were created. sync_plans_to_tasks is also available to run the same pass on demand.');
@@ -176,7 +183,7 @@ class ProjectCoordinatorSession {
       messages: messages,
       tools: effectiveTools,
       temperature: 0.7,
-      enableThinking: true,
+      enableThinking: enableThinking,
     );
 
     _history.add({'role': 'user', 'content': userMessage});
@@ -220,7 +227,7 @@ class ProjectCoordinatorSession {
       messages: messages,
       tools: effectiveTools,
       temperature: 0.7,
-      enableThinking: true,
+      enableThinking: enableThinking,
     );
   }
 
@@ -244,7 +251,10 @@ class ProjectCoordinatorSession {
     // crash (empty 500) on subsequent turns.
     final rollbackTo = _history.length - 1;
 
-    final tools = CoordinatorTools.buildToolSchemas(includePlanTools: openPlanPath != null);
+    // Offer the plan tools whenever a plan store is available — not only when a
+    // specific plan is open — so the coordinator can list/read/create plans in
+    // the general project chat (PLANS/ exists from the start of planning).
+    final tools = CoordinatorTools.buildToolSchemas(includePlanTools: planStore != null);
     final executor = db != null
         ? CoordinatorToolExecutor(db: db!, projectId: projectId, inference: client, chatSessionPk: chatSessionPk, openPlanPath: openPlanPath, planStore: planStore, permissions: permissions, confirmAsk: confirmAsk, agentName: agentName, workspace: workspace, git: git, buildService: buildService)
         : null;
@@ -257,13 +267,23 @@ class ProjectCoordinatorSession {
           ..._history,
         ]);
 
-        final r = await _streamRound(messages, tools);
-        final contentStr = r.content;
-        final toolCalls = r.toolCalls;
-        if (r.toolsDropped && round == 0) {
+        // Stream the round: content deltas are forwarded live so the UI renders
+        // token-by-token; tool calls are captured from the final finish event.
+        final buf = StringBuffer();
+        var toolCalls = const <ToolCall>[];
+        var toolsDropped = false;
+        await for (final ev in _streamRound(messages, tools, onToolsDropped: (d) => toolsDropped = d)) {
+          if (ev is ChatContentDelta) {
+            buf.write(ev.text);
+            yield ev; // forward live (do NOT also re-yield the full content below)
+          } else if (ev is ChatStreamFinish) {
+            toolCalls = ev.toolCalls;
+          }
+        }
+        final contentStr = buf.toString();
+        if (toolsDropped && round == 0) {
           onToolResult?.call('(This model rejected tool-calling, so live task/plan actions are off for this reply.)');
         }
-        if (contentStr.isNotEmpty) yield ChatContentDelta(contentStr);
 
         // Record the assistant message in history. When there are tool calls and
         // no text, content must be null (not "") — servers reject empty-string
@@ -356,34 +376,73 @@ class ProjectCoordinatorSession {
     return out;
   }
 
-  /// Runs one model round (NON-streaming) and returns content + tool calls.
-  /// Matches the working lemonade_mobile pattern: tool-calling chat uses
-  /// `stream:false` (the llama.cpp/GGUF backend 400/500s on streaming-with-tools).
-  /// We also do NOT send `enable_thinking`. If the request is still rejected,
-  /// we retry once WITHOUT tools so plain chat still works.
-  Future<({String content, List<ToolCall> toolCalls, bool toolsDropped})> _streamRound(
+  /// Runs ONE model round, STREAMING as the PRIMARY path so the reply renders
+  /// token-by-token. Falls back to a NON-streaming request if streaming errors
+  /// before any content was emitted (some llama.cpp/GGUF backends reject
+  /// streaming-with-tools), and finally retries WITHOUT tools if the request
+  /// itself is rejected so plain chat still works. Yields [ChatContentDelta] as
+  /// tokens arrive and a final [ChatStreamFinish] carrying the assembled tool
+  /// calls; [onToolsDropped] reports whether tools were dropped.
+  Stream<ChatStreamEvent> _streamRound(
     List<Map<String, dynamic>> messages,
-    List<Map<String, dynamic>> tools,
-  ) async {
-    Future<({String content, List<ToolCall> calls})> run(List<Map<String, dynamic>>? t) async {
-      final resp = await client.createChatCompletion(
+    List<Map<String, dynamic>> tools, {
+    required void Function(bool dropped) onToolsDropped,
+  }) async* {
+    // Primary: streaming WITH tools.
+    var emitted = false;
+    try {
+      await for (final ev in client.streamChatCompletion(
         model: _effectiveModel,
         messages: messages,
-        tools: t,
+        tools: tools,
         temperature: 0.7,
-      );
-      final msg = resp.choices.isNotEmpty ? resp.choices.first.message : null;
-      return (content: msg?.content ?? '', calls: msg?.toolCalls ?? const <ToolCall>[]);
+        enableThinking: enableThinking,
+      )) {
+        emitted = true;
+        yield ev;
+      }
+      onToolsDropped(false);
+      return;
+    } catch (_) {
+      // If partial content already streamed we can't safely retry — rethrow.
+      if (emitted) rethrow;
+      // Otherwise fall through to the non-streaming fallbacks below.
     }
 
+    // Fallback 1: non-streaming WITH tools.
     try {
-      final r = await run(tools);
-      return (content: r.content, toolCalls: r.calls, toolsDropped: false);
-    } catch (e) {
-      // Retry once without tools — the request itself was rejected.
-      final r = await run(null);
-      return (content: r.content, toolCalls: r.calls, toolsDropped: true);
+      yield* _nonStreamingRound(messages, tools);
+      onToolsDropped(false);
+      return;
+    } catch (_) {
+      // Fall through to no-tools.
     }
+
+    // Fallback 2: non-streaming WITHOUT tools (the request itself was rejected).
+    yield* _nonStreamingRound(messages, null);
+    onToolsDropped(true);
+  }
+
+  /// One non-streaming round mapped into the same event shape as streaming.
+  Stream<ChatStreamEvent> _nonStreamingRound(
+    List<Map<String, dynamic>> messages,
+    List<Map<String, dynamic>>? tools,
+  ) async* {
+    final resp = await client.createChatCompletion(
+      model: _effectiveModel,
+      messages: messages,
+      tools: tools,
+      temperature: 0.7,
+      enableThinking: enableThinking,
+    );
+    final msg = resp.choices.isNotEmpty ? resp.choices.first.message : null;
+    final content = msg?.content ?? '';
+    if (content.isNotEmpty) yield ChatContentDelta(content);
+    yield ChatStreamFinish(
+      finishReason: 'stop',
+      toolCalls: msg?.toolCalls ?? const <ToolCall>[],
+      contentSoFar: content,
+    );
   }
 
   /// Executes a batch of tool calls (from ChatStreamFinish) against the live DB.

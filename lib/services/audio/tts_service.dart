@@ -29,10 +29,14 @@ class TtsService {
   /// so the chat session can replay it; the caller owns its lifetime.
   /// Returns null when there's no client, no audio, or synthesis fails.
   Future<String?> synthesize(String text, {String? voice}) async {
-    if (text.trim().isEmpty || inferenceClient == null) return null;
+    // Strip Markdown so TTS doesn't literally read "asterisk asterisk", "hash",
+    // backticks, etc. The chat bubble still shows the original formatted text;
+    // only the spoken audio is sanitized.
+    final spoken = _sanitizeForSpeech(text);
+    if (spoken.isEmpty || inferenceClient == null) return null;
     try {
       final result = await inferenceClient!.generateSpeech(
-        input: text,
+        input: spoken,
         model: ttsModel,
         voice: voice ?? defaultVoice ?? kDefaultTtsVoice,
         responseFormat: 'mp3',
@@ -82,6 +86,28 @@ class TtsService {
 
   Future<void> stop() async {
     await _player.stop();
+  }
+
+  /// Strips Markdown formatting so TTS doesn't read the syntax characters aloud
+  /// ("asterisk asterisk", "hash", backticks, …). Keeps the words, drops the
+  /// markup. Mirrors SetupVoiceSession so every spoken path is clean.
+  String _sanitizeForSpeech(String text) {
+    var s = text;
+    // Fenced + inline code: keep the inner text, drop the backticks.
+    s = s.replaceAll(RegExp(r'```[a-zA-Z0-9]*'), ' ');
+    s = s.replaceAll('`', '');
+    // Images / links: ![alt](url) / [label](url) → alt / label.
+    s = s.replaceAllMapped(
+        RegExp(r'!?\[([^\]]*)\]\([^)]*\)'), (m) => m.group(1) ?? '');
+    // Bold / italic / strikethrough emphasis markers.
+    s = s.replaceAll(RegExp(r'(\*\*\*|\*\*|\*|___|__|_|~~)'), '');
+    // Leading heading hashes and blockquote / list markers per line.
+    s = s.replaceAll(RegExp(r'^\s{0,3}#{1,6}\s*', multiLine: true), '');
+    s = s.replaceAll(RegExp(r'^\s*>\s?', multiLine: true), '');
+    s = s.replaceAll(RegExp(r'^\s*[-*+]\s+', multiLine: true), '');
+    // Collapse whitespace left behind.
+    s = s.replaceAll(RegExp(r'[ \t]{2,}'), ' ');
+    return s.trim();
   }
 
   Future<void> dispose() async {

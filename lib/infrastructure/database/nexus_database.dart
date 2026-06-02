@@ -69,7 +69,7 @@ class NexusDatabase extends _$NexusDatabase {
       _taskCompletedController.stream;
 
   @override
-  int get schemaVersion => 25;
+  int get schemaVersion => 26;
 
   @override
   MigrationStrategy get migration {
@@ -153,6 +153,9 @@ class NexusDatabase extends _$NexusDatabase {
         // (e.g. a Dart package vs. a C# NuGet), so the board can group them.
         if (from < 25) {
           await m.addColumn(projectTags, projectTags.forLanguage);
+        }
+        if (from < 26) {
+          await m.addColumn(tasks, tasks.thinkingMode);
         }
       },
     );
@@ -510,6 +513,7 @@ class NexusDatabase extends _$NexusDatabase {
     String description = '',
     String status = 'Todo',
     String priority = 'MED',
+    String? thinkingMode,
   }) async {
     final proj = await (select(projects)..where((p) => p.project_pk.equals(projectPk))).getSingleOrNull();
     final clientPk = proj?.client_fk ?? 0;
@@ -524,6 +528,7 @@ class NexusDatabase extends _$NexusDatabase {
       description: Value(description),
       status: Value(status),
       priority: Value(priority),
+      thinkingMode: thinkingMode != null ? Value(thinkingMode) : const Value.absent(),
     ));
   }
 

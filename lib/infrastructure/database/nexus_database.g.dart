@@ -4118,6 +4118,17 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
     requiredDuringInsert: false,
     defaultValue: const Constant('MED'),
   );
+  static const VerificationMeta _thinkingModeMeta = const VerificationMeta(
+    'thinkingMode',
+  );
+  @override
+  late final GeneratedColumn<String> thinkingMode = GeneratedColumn<String>(
+    'thinking_mode',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _tokenCostMeta = const VerificationMeta(
     'tokenCost',
   );
@@ -4319,6 +4330,7 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
     description,
     status,
     priority,
+    thinkingMode,
     tokenCost,
     usdCost,
     acceptanceCriteria,
@@ -4439,6 +4451,15 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
       context.handle(
         _priorityMeta,
         priority.isAcceptableOrUnknown(data['priority']!, _priorityMeta),
+      );
+    }
+    if (data.containsKey('thinking_mode')) {
+      context.handle(
+        _thinkingModeMeta,
+        thinkingMode.isAcceptableOrUnknown(
+          data['thinking_mode']!,
+          _thinkingModeMeta,
+        ),
       );
     }
     if (data.containsKey('token_cost')) {
@@ -4614,6 +4635,10 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
         DriftSqlType.string,
         data['${effectivePrefix}priority'],
       )!,
+      thinkingMode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}thinking_mode'],
+      ),
       tokenCost: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}token_cost'],
@@ -4708,6 +4733,10 @@ class Task extends DataClass implements Insertable<Task> {
   final String? description;
   final String status;
   final String priority;
+
+  /// Per-task model thinking mode: 'on' | 'off' | null (inherit). Set by the
+  /// Coordinator via the create_task/update_task `thinking_enabled` param.
+  final String? thinkingMode;
   final int tokenCost;
   final double usdCost;
 
@@ -4764,6 +4793,7 @@ class Task extends DataClass implements Insertable<Task> {
     this.description,
     required this.status,
     required this.priority,
+    this.thinkingMode,
     required this.tokenCost,
     required this.usdCost,
     this.acceptanceCriteria,
@@ -4805,6 +4835,9 @@ class Task extends DataClass implements Insertable<Task> {
     }
     map['status'] = Variable<String>(status);
     map['priority'] = Variable<String>(priority);
+    if (!nullToAbsent || thinkingMode != null) {
+      map['thinking_mode'] = Variable<String>(thinkingMode);
+    }
     map['token_cost'] = Variable<int>(tokenCost);
     map['usd_cost'] = Variable<double>(usdCost);
     if (!nullToAbsent || acceptanceCriteria != null) {
@@ -4867,6 +4900,9 @@ class Task extends DataClass implements Insertable<Task> {
           : Value(description),
       status: Value(status),
       priority: Value(priority),
+      thinkingMode: thinkingMode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(thinkingMode),
       tokenCost: Value(tokenCost),
       usdCost: Value(usdCost),
       acceptanceCriteria: acceptanceCriteria == null && nullToAbsent
@@ -4925,6 +4961,7 @@ class Task extends DataClass implements Insertable<Task> {
       description: serializer.fromJson<String?>(json['description']),
       status: serializer.fromJson<String>(json['status']),
       priority: serializer.fromJson<String>(json['priority']),
+      thinkingMode: serializer.fromJson<String?>(json['thinkingMode']),
       tokenCost: serializer.fromJson<int>(json['tokenCost']),
       usdCost: serializer.fromJson<double>(json['usdCost']),
       acceptanceCriteria: serializer.fromJson<String?>(
@@ -4960,6 +4997,7 @@ class Task extends DataClass implements Insertable<Task> {
       'description': serializer.toJson<String?>(description),
       'status': serializer.toJson<String>(status),
       'priority': serializer.toJson<String>(priority),
+      'thinkingMode': serializer.toJson<String?>(thinkingMode),
       'tokenCost': serializer.toJson<int>(tokenCost),
       'usdCost': serializer.toJson<double>(usdCost),
       'acceptanceCriteria': serializer.toJson<String?>(acceptanceCriteria),
@@ -4991,6 +5029,7 @@ class Task extends DataClass implements Insertable<Task> {
     Value<String?> description = const Value.absent(),
     String? status,
     String? priority,
+    Value<String?> thinkingMode = const Value.absent(),
     int? tokenCost,
     double? usdCost,
     Value<String?> acceptanceCriteria = const Value.absent(),
@@ -5027,6 +5066,7 @@ class Task extends DataClass implements Insertable<Task> {
     description: description.present ? description.value : this.description,
     status: status ?? this.status,
     priority: priority ?? this.priority,
+    thinkingMode: thinkingMode.present ? thinkingMode.value : this.thinkingMode,
     tokenCost: tokenCost ?? this.tokenCost,
     usdCost: usdCost ?? this.usdCost,
     acceptanceCriteria: acceptanceCriteria.present
@@ -5079,6 +5119,9 @@ class Task extends DataClass implements Insertable<Task> {
           : this.description,
       status: data.status.present ? data.status.value : this.status,
       priority: data.priority.present ? data.priority.value : this.priority,
+      thinkingMode: data.thinkingMode.present
+          ? data.thinkingMode.value
+          : this.thinkingMode,
       tokenCost: data.tokenCost.present ? data.tokenCost.value : this.tokenCost,
       usdCost: data.usdCost.present ? data.usdCost.value : this.usdCost,
       acceptanceCriteria: data.acceptanceCriteria.present
@@ -5130,6 +5173,7 @@ class Task extends DataClass implements Insertable<Task> {
           ..write('description: $description, ')
           ..write('status: $status, ')
           ..write('priority: $priority, ')
+          ..write('thinkingMode: $thinkingMode, ')
           ..write('tokenCost: $tokenCost, ')
           ..write('usdCost: $usdCost, ')
           ..write('acceptanceCriteria: $acceptanceCriteria, ')
@@ -5163,6 +5207,7 @@ class Task extends DataClass implements Insertable<Task> {
     description,
     status,
     priority,
+    thinkingMode,
     tokenCost,
     usdCost,
     acceptanceCriteria,
@@ -5195,6 +5240,7 @@ class Task extends DataClass implements Insertable<Task> {
           other.description == this.description &&
           other.status == this.status &&
           other.priority == this.priority &&
+          other.thinkingMode == this.thinkingMode &&
           other.tokenCost == this.tokenCost &&
           other.usdCost == this.usdCost &&
           other.acceptanceCriteria == this.acceptanceCriteria &&
@@ -5225,6 +5271,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
   final Value<String?> description;
   final Value<String> status;
   final Value<String> priority;
+  final Value<String?> thinkingMode;
   final Value<int> tokenCost;
   final Value<double> usdCost;
   final Value<String?> acceptanceCriteria;
@@ -5253,6 +5300,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
     this.description = const Value.absent(),
     this.status = const Value.absent(),
     this.priority = const Value.absent(),
+    this.thinkingMode = const Value.absent(),
     this.tokenCost = const Value.absent(),
     this.usdCost = const Value.absent(),
     this.acceptanceCriteria = const Value.absent(),
@@ -5282,6 +5330,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
     this.description = const Value.absent(),
     this.status = const Value.absent(),
     this.priority = const Value.absent(),
+    this.thinkingMode = const Value.absent(),
     this.tokenCost = const Value.absent(),
     this.usdCost = const Value.absent(),
     this.acceptanceCriteria = const Value.absent(),
@@ -5313,6 +5362,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
     Expression<String>? description,
     Expression<String>? status,
     Expression<String>? priority,
+    Expression<String>? thinkingMode,
     Expression<int>? tokenCost,
     Expression<double>? usdCost,
     Expression<String>? acceptanceCriteria,
@@ -5343,6 +5393,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
       if (description != null) 'description': description,
       if (status != null) 'status': status,
       if (priority != null) 'priority': priority,
+      if (thinkingMode != null) 'thinking_mode': thinkingMode,
       if (tokenCost != null) 'token_cost': tokenCost,
       if (usdCost != null) 'usd_cost': usdCost,
       if (acceptanceCriteria != null) 'acceptance_criteria': acceptanceCriteria,
@@ -5374,6 +5425,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
     Value<String?>? description,
     Value<String>? status,
     Value<String>? priority,
+    Value<String?>? thinkingMode,
     Value<int>? tokenCost,
     Value<double>? usdCost,
     Value<String?>? acceptanceCriteria,
@@ -5403,6 +5455,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
       description: description ?? this.description,
       status: status ?? this.status,
       priority: priority ?? this.priority,
+      thinkingMode: thinkingMode ?? this.thinkingMode,
       tokenCost: tokenCost ?? this.tokenCost,
       usdCost: usdCost ?? this.usdCost,
       acceptanceCriteria: acceptanceCriteria ?? this.acceptanceCriteria,
@@ -5457,6 +5510,9 @@ class TasksCompanion extends UpdateCompanion<Task> {
     }
     if (priority.present) {
       map['priority'] = Variable<String>(priority.value);
+    }
+    if (thinkingMode.present) {
+      map['thinking_mode'] = Variable<String>(thinkingMode.value);
     }
     if (tokenCost.present) {
       map['token_cost'] = Variable<int>(tokenCost.value);
@@ -5523,6 +5579,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
           ..write('description: $description, ')
           ..write('status: $status, ')
           ..write('priority: $priority, ')
+          ..write('thinkingMode: $thinkingMode, ')
           ..write('tokenCost: $tokenCost, ')
           ..write('usdCost: $usdCost, ')
           ..write('acceptanceCriteria: $acceptanceCriteria, ')
@@ -16391,6 +16448,7 @@ typedef $$TasksTableCreateCompanionBuilder =
       Value<String?> description,
       Value<String> status,
       Value<String> priority,
+      Value<String?> thinkingMode,
       Value<int> tokenCost,
       Value<double> usdCost,
       Value<String?> acceptanceCriteria,
@@ -16421,6 +16479,7 @@ typedef $$TasksTableUpdateCompanionBuilder =
       Value<String?> description,
       Value<String> status,
       Value<String> priority,
+      Value<String?> thinkingMode,
       Value<int> tokenCost,
       Value<double> usdCost,
       Value<String?> acceptanceCriteria,
@@ -16621,6 +16680,11 @@ class $$TasksTableFilterComposer
 
   ColumnFilters<String> get priority => $composableBuilder(
     column: $table.priority,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get thinkingMode => $composableBuilder(
+    column: $table.thinkingMode,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -16902,6 +16966,11 @@ class $$TasksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get thinkingMode => $composableBuilder(
+    column: $table.thinkingMode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get tokenCost => $composableBuilder(
     column: $table.tokenCost,
     builder: (column) => ColumnOrderings(column),
@@ -17146,6 +17215,11 @@ class $$TasksTableAnnotationComposer
 
   GeneratedColumn<String> get priority =>
       $composableBuilder(column: $table.priority, builder: (column) => column);
+
+  GeneratedColumn<String> get thinkingMode => $composableBuilder(
+    column: $table.thinkingMode,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get tokenCost =>
       $composableBuilder(column: $table.tokenCost, builder: (column) => column);
@@ -17419,6 +17493,7 @@ class $$TasksTableTableManager
                 Value<String?> description = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<String> priority = const Value.absent(),
+                Value<String?> thinkingMode = const Value.absent(),
                 Value<int> tokenCost = const Value.absent(),
                 Value<double> usdCost = const Value.absent(),
                 Value<String?> acceptanceCriteria = const Value.absent(),
@@ -17447,6 +17522,7 @@ class $$TasksTableTableManager
                 description: description,
                 status: status,
                 priority: priority,
+                thinkingMode: thinkingMode,
                 tokenCost: tokenCost,
                 usdCost: usdCost,
                 acceptanceCriteria: acceptanceCriteria,
@@ -17477,6 +17553,7 @@ class $$TasksTableTableManager
                 Value<String?> description = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<String> priority = const Value.absent(),
+                Value<String?> thinkingMode = const Value.absent(),
                 Value<int> tokenCost = const Value.absent(),
                 Value<double> usdCost = const Value.absent(),
                 Value<String?> acceptanceCriteria = const Value.absent(),
@@ -17505,6 +17582,7 @@ class $$TasksTableTableManager
                 description: description,
                 status: status,
                 priority: priority,
+                thinkingMode: thinkingMode,
                 tokenCost: tokenCost,
                 usdCost: usdCost,
                 acceptanceCriteria: acceptanceCriteria,

@@ -16,6 +16,7 @@ import 'package:nexus_projects_client/infrastructure/lemonade/services/persona_m
 import 'package:nexus_projects_client/infrastructure/lemonade/services/tts_voices.dart';
 import 'package:nexus_projects_client/features/agents/agent_tool_permissions.dart';
 import 'package:nexus_projects_client/features/agents/agent_role.dart';
+import 'package:nexus_projects_client/features/agents/thinking_mode.dart';
 
 import '../../shared/ui/nexus_ui.dart';
 
@@ -46,6 +47,9 @@ class _PersonaEditorState extends ConsumerState<PersonaEditor> {
   final Map<String, ToolPerm> _toolPerms = {};
   /// Existing configJson so we preserve non-permission keys when saving.
   String? _existingConfigJson;
+  /// Per-agent model "thinking mode" (enable_thinking). Unset inherits; the
+  /// Project Manager defaults to Off, every other agent to Unset.
+  ThinkingMode _thinkingMode = ThinkingMode.unset;
 
   @override
   void initState() {
@@ -89,6 +93,7 @@ class _PersonaEditorState extends ConsumerState<PersonaEditor> {
         _mods['llm'] = row.llmModel;
         // Load saved tool permissions over the catalog defaults.
         _existingConfigJson = row.configJson;
+        _thinkingMode = personaThinkingMode(row.configJson, personaName: row.name);
         final saved = AgentToolPermissions.fromConfigJson(row.configJson);
         for (final t in kCoordinatorToolSpecs) {
           _toolPerms[t.name] = saved.permFor(t.name);
@@ -145,6 +150,36 @@ class _PersonaEditorState extends ConsumerState<PersonaEditor> {
           ),
         Gap.md,
         TextFormField(controller: systemPromptCtrl, maxLines: 3, decoration: const InputDecoration(labelText: 'System Prompt / Core Instructions', border: OutlineInputBorder())),
+        Gap.md,
+
+        // Thinking mode (enable_thinking): tri-state per agent.
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Thinking mode', style: TextStyle(fontWeight: FontWeight.w600)),
+                  Text(
+                    "Force the model's reasoning on or off for this agent. Unset inherits "
+                    '(Project Manager defaults to Off, others to Unset).',
+                    style: TextStyle(fontSize: 12, color: context.nx.textMuted),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            SegmentedButton<ThinkingMode>(
+              segments: const [
+                ButtonSegment(value: ThinkingMode.unset, label: Text('Unset')),
+                ButtonSegment(value: ThinkingMode.on, label: Text('On')),
+                ButtonSegment(value: ThinkingMode.off, label: Text('Off')),
+              ],
+              selected: {_thinkingMode},
+              onSelectionChanged: (s) => setState(() => _thinkingMode = s.first),
+            ),
+          ],
+        ),
         Gap.xl,
 
         // AI Provider Selection (global list)
@@ -521,7 +556,10 @@ class _PersonaEditorState extends ConsumerState<PersonaEditor> {
           llmModel: Value(resolved.llm),
           ttsVoice: Value(_safeStr(selectedVoice)),
           // Persist tool-safety permissions (merged into existing configJson).
-          configJson: Value(AgentToolPermissions.writeIntoConfigJson(_existingConfigJson, _toolPerms)),
+          configJson: Value(writeThinkingModeIntoConfigJson(
+            AgentToolPermissions.writeIntoConfigJson(_existingConfigJson, _toolPerms),
+            _thinkingMode,
+          )),
           updatedAt: Value(DateTime.now()),
         ),
       );

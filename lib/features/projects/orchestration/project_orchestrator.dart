@@ -21,6 +21,7 @@ import 'package:nexus_projects_client/infrastructure/workspace/git/git_engine_pr
 import 'package:nexus_projects_client/infrastructure/build/build_models.dart' show CiStatus, CiStatusX;
 import 'package:nexus_projects_client/infrastructure/build/build_service.dart';
 import 'package:nexus_projects_client/infrastructure/build/build_service_provider.dart';
+import 'package:nexus_projects_client/features/agents/thinking_mode.dart';
 import 'package:nexus_projects_client/features/agents/agent_role.dart';
 import 'package:nexus_projects_client/features/agents/agent_role_policy.dart';
 import 'package:nexus_projects_client/features/agents/agent_tool_permissions.dart';
@@ -273,6 +274,10 @@ class ProjectOrchestrator {
       buildService: buildService,
       systemPromptOverride:
           '${defaultSystemPrompt(role)}\n${prompts.render(OrchestratorPromptField.workerFraming, vars)}',
+      enableThinking: resolveEnableThinking(
+        agent: personaThinkingMode(persona.configJson, personaName: persona.name),
+        task: ThinkingMode.fromString(task.thinkingMode),
+      ),
     );
 
     var kickoff = prompts.render(OrchestratorPromptField.workerKickoff, vars);
@@ -379,6 +384,10 @@ class ProjectOrchestrator {
       buildService: handles.build,
       systemPromptOverride:
           '${defaultSystemPrompt(AgentRole.verificationAgent)}\n${prompts.render(OrchestratorPromptField.verifyFraming, vars)}',
+      enableThinking: resolveEnableThinking(
+        agent: personaThinkingMode(persona.configJson, personaName: persona.name),
+        task: ThinkingMode.fromString(task.thinkingMode),
+      ),
     );
 
     var kickoff = prompts.render(OrchestratorPromptField.verifyKickoff, vars);
@@ -528,6 +537,10 @@ class ProjectOrchestrator {
       buildService: handles.build,
       systemPromptOverride:
           '${defaultSystemPrompt(AgentRole.coordinator)}\n${prompts.render(OrchestratorPromptField.mergeFraming, vars)}',
+      enableThinking: resolveEnableThinking(
+        agent: personaThinkingMode(persona.configJson, personaName: persona.name),
+        task: ThinkingMode.fromString(task.thinkingMode),
+      ),
     );
 
     var kickoff = prompts.render(OrchestratorPromptField.mergeKickoff, vars);

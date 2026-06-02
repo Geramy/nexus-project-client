@@ -12,6 +12,7 @@ import '../../infrastructure/inference/inference_backend_factory.dart'
     show backendForServer;
 import '../../infrastructure/inference/routed_server.dart'
     show isRoutedProviderType;
+import '../../features/agents/thinking_mode.dart';
 import '../../infrastructure/lemonade/services/persona_model_resolver.dart';
 import '../../infrastructure/models/ui/inference_server.dart' as ui_server;
 import '../../features/ai_providers/providers/ai_servers_cache_provider.dart';
@@ -26,9 +27,13 @@ class ResolvedInference {
     this.sttModel,
     this.ttsModel,
     this.ttsVoice,
+    this.enableThinking,
   });
   final InferenceBackend backend;
   final String model;
+
+  /// Effective enable_thinking for the project agent (null omits the param).
+  final bool? enableThinking;
 
   /// Per-modality models for voice "call mode" in the Setup interview. Null
   /// falls back to the server/default at the audio endpoints.
@@ -43,8 +48,13 @@ class ResolvedInference {
 /// both [WidgetRef] (Setup tab) and [Ref] (SummaryService) can read it.
 final projectInferenceProvider = FutureProvider.family<ResolvedInference?,
     ({int projectId, int clientId})>((ref, args) async {
+  // WATCH (not read) the server stream so this re-resolves whenever the configs
+  // change — critically when router_server_sync rewrites the routed server's
+  // apiKey after a re-login. Reading once cached a backend with a baked,
+  // never-refreshed token, which is why the Setup interview kept 401-ing on STT
+  // while the Coordinator (which rebuilds its client on every open) worked.
   final servers = await ref
-      .read(inferenceServersForClientProvider(args.clientId).future);
+      .watch(inferenceServersForClientProvider(args.clientId).future);
   if (servers.isEmpty) return null;
 
   final db = ref.read(nexusDatabaseProvider);
@@ -130,5 +140,12 @@ final projectInferenceProvider = FutureProvider.family<ResolvedInference?,
     sttModel: sttModel,
     ttsModel: ttsModel,
     ttsVoice: ttsVoice,
+    // Agent-level thinking mode (Project Manager defaults Off, others Unset).
+    enableThinking: resolveEnableThinking(
+      agent: personaThinkingMode(
+        persona?.configJson as String?,
+        personaName: persona?.name as String?,
+      ),
+    ),
   );
 });

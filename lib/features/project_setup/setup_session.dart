@@ -25,6 +25,7 @@ class SetupSession {
     required this.projectName,
     required this.executor,
     this.maxToolRounds = 40,
+    this.enableThinking,
   });
 
   final InferenceBackend client;
@@ -32,6 +33,9 @@ class SetupSession {
   final String projectName;
   final SetupToolExecutor executor;
   final int maxToolRounds;
+  /// Effective enable_thinking for this session (null omits the param). Resolved
+  /// from the project agent's ThinkingMode.
+  final bool? enableThinking;
 
   final List<Map<String, dynamic>> _history = [];
 
@@ -170,7 +174,7 @@ How to work:
           messages: messages,
           tools: tools,
           temperature: 0.6,
-          enableThinking: true,
+          enableThinking: enableThinking,
         );
         final msg = resp.choices.isNotEmpty ? resp.choices.first.message : null;
         final content = msg?.content ?? '';
