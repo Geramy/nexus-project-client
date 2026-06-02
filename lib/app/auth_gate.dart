@@ -10,10 +10,17 @@ import 'package:nexus_projects_client/features/main/main_shell.dart';
 import 'package:nexus_projects_client/infrastructure/nexus/providers/nexus_account_providers.dart';
 import 'package:nexus_projects_client/shared/ui/nexus_ui.dart';
 
-/// Top-level auth gate. Routes unauthenticated users straight to a full-screen
+/// Set when the user taps "Skip for now" on the login screen: lets them into the
+/// app without signing in (they can sign in later from the Account screen). Not
+/// persisted — a fresh launch shows the login screen again until they skip or
+/// sign in.
+final authSkippedProvider = StateProvider<bool>((ref) => false);
+
+/// Top-level auth gate. Routes unauthenticated users to a full-screen
 /// login/register page and signed-in users to the main workspace. While the
 /// saved token is read back from secure storage, shows a splash so the login
-/// form never flashes before a returning user is recognized.
+/// form never flashes before a returning user is recognized. Users can also
+/// "Skip for now" to explore the app before signing in.
 class AuthGate extends ConsumerWidget {
   const AuthGate({super.key});
 
@@ -24,18 +31,18 @@ class AuthGate extends ConsumerWidget {
     if (auth.busy && auth.token == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    if (!auth.isSignedIn) {
+    if (!auth.isSignedIn && !ref.watch(authSkippedProvider)) {
       return const _LoginScreen();
     }
     return const MainShell();
   }
 }
 
-class _LoginScreen extends StatelessWidget {
+class _LoginScreen extends ConsumerWidget {
   const _LoginScreen();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       body: Center(
@@ -71,6 +78,12 @@ class _LoginScreen extends StatelessWidget {
                       ?.copyWith(color: context.nx.textMuted),
                 ),
                 const AccountAuthForms(),
+                const SizedBox(height: AppSpacing.sm),
+                TextButton(
+                  onPressed: () =>
+                      ref.read(authSkippedProvider.notifier).state = true,
+                  child: const Text('Skip for now'),
+                ),
               ],
             ),
           ),
