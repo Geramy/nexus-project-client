@@ -39,6 +39,11 @@ class SetupSession {
 
   final List<Map<String, dynamic>> _history = [];
 
+  /// Internal nudge injected to unstick a stalled turn; filtered out of the
+  /// persisted transcript so it never shows to the user.
+  static const String _continueNudge =
+      'Continue: take the next step now — ask the next question or call the needed tool.';
+
   /// Which stage the host is in. Starts in [SetupPhase.interview]; flips to
   /// [SetupPhase.refine] once `finalize_setup` has generated the plan files.
   SetupPhase phase = SetupPhase.interview;
@@ -85,6 +90,11 @@ Rules:
     pub.dev package → "Dart", a NuGet package → "C#") using only allowed
     Languages values, so it attaches to the right side of the stack.
   Keep it to a handful of questions per stage; do not interrogate.
+- END-OF-STAGE CHECK: before moving from one stage to the next, ask the user
+  with `ask_question` whether they're done with the current stage or want to
+  add/adjust more (options like "Looks good — continue" / "Add more"). Only
+  advance to the next stage when they choose to continue; if they want more,
+  keep refining the current stage. This lets the user keep defining each step.
 - NEVER ask the user about programming languages or frameworks — not as a
   question, not as options, not even to confirm. The stack is chosen
   AUTOMATICALLY from the industries, platforms, objectives, and features. You
@@ -158,6 +168,10 @@ How to work:
     final rollbackTo = _history.length - 1;
 
     try {
+      // Counts consecutive rounds that produced neither tool calls nor spoken
+      // text — a stalled turn. We auto-nudge it back into motion instead of
+      // making the user type "?" by hand.
+      var emptyRounds = 0;
       for (var round = 0; round < maxToolRounds; round++) {
         // Recompute per round: the system prompt and toolset both depend on the
         // phase, which can flip to refine the moment finalize_setup runs.
@@ -169,13 +183,7 @@ How to work:
             ? SetupTools.buildRefineToolSchemas()
             : SetupTools.buildToolSchemas();
 
-        final resp = await client.createChatCompletion(
-          model: _effectiveModel,
-          messages: messages,
-          tools: tools,
-          temperature: 0.6,
-          enableThinking: enableThinking,
-        );
+        final resp = await _completeWithRetry(messages, tools);
         final msg = resp.choices.isNotEmpty ? resp.choices.first.message : null;
         final content = msg?.content ?? '';
         final toolCalls = msg?.toolCalls ?? const <ToolCall>[];
@@ -205,7 +213,18 @@ How to work:
             ],
         });
 
-        if (toolCalls.isEmpty) return content;
+        if (toolCalls.isEmpty) {
+          // A turn that produced neither a tool call nor spoken text is a stall
+          // (the model "thought" but didn't act). Auto-nudge it to continue —
+          // up to twice — so the user doesn't have to type "?" to unstick it.
+          if (content.trim().isEmpty && emptyRounds < 2) {
+            emptyRounds++;
+            _history.add({'role': 'user', 'content': _continueNudge});
+            continue;
+          }
+          return content;
+        }
+        emptyRounds = 0;
 
         for (final call in toolCalls) {
           Map<String, dynamic> args = {};
@@ -257,6 +276,33 @@ How to work:
     return '';
   }
 
+  /// Calls the model with a bounded retry so a transient inference failure
+  /// (dropped socket, 5xx, throttle) self-heals instead of surfacing an error
+  /// the user has to manually nudge past. Re-throws only after all attempts.
+  Future<ChatCompletionResponse> _completeWithRetry(
+    List<Map<String, dynamic>> messages,
+    List<Map<String, dynamic>> tools,
+  ) async {
+    Object? lastError;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await client.createChatCompletion(
+          model: _effectiveModel,
+          messages: messages,
+          tools: tools,
+          temperature: 0.6,
+          enableThinking: enableThinking,
+        );
+      } catch (e) {
+        lastError = e;
+        if (attempt < 2) {
+          await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+        }
+      }
+    }
+    throw lastError ?? StateError('inference failed');
+  }
+
   void clearHistory() {
     _history.clear();
     _loopGuard.reset();
@@ -269,7 +315,8 @@ How to work:
         .where((m) =>
             (m['role'] == 'user' || m['role'] == 'assistant') &&
             (m['content'] is String) &&
-            (m['content'] as String).isNotEmpty)
+            (m['content'] as String).isNotEmpty &&
+            m['content'] != _continueNudge)
         .map((m) => {'role': m['role'], 'content': m['content']})
         .toList();
     return jsonEncode(turns);
