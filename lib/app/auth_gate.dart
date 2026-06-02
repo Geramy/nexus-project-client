@@ -77,12 +77,9 @@ class _LoginScreen extends ConsumerWidget {
                       .bodyMedium
                       ?.copyWith(color: context.nx.textMuted),
                 ),
-                const AccountAuthForms(),
-                const SizedBox(height: AppSpacing.sm),
-                TextButton(
-                  onPressed: () =>
+                AccountAuthForms(
+                  onSkip: () =>
                       ref.read(authSkippedProvider.notifier).state = true,
-                  child: const Text('Skip for now'),
                 ),
               ],
             ),

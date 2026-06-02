@@ -16,7 +16,11 @@ import '../../../infrastructure/nexus/providers/nexus_account_providers.dart';
 import '../../../shared/ui/nexus_ui.dart';
 
 class AccountAuthForms extends ConsumerStatefulWidget {
-  const AccountAuthForms({super.key});
+  const AccountAuthForms({super.key, this.onSkip});
+
+  /// When provided, a "Skip for now" action is shown directly below the
+  /// sign-in/register button.
+  final VoidCallback? onSkip;
 
   @override
   ConsumerState<AccountAuthForms> createState() => _AccountAuthFormsState();
@@ -27,7 +31,19 @@ class _AccountAuthFormsState extends ConsumerState<AccountAuthForms>
   late final TabController _tabs = TabController(length: 2, vsync: this);
 
   @override
+  void initState() {
+    super.initState();
+    // Rebuild on tab change so the card sizes to the active form (below).
+    _tabs.addListener(_onTabChanged);
+  }
+
+  void _onTabChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void dispose() {
+    _tabs.removeListener(_onTabChanged);
     _tabs.dispose();
     super.dispose();
   }
@@ -41,7 +57,7 @@ class _AccountAuthFormsState extends ConsumerState<AccountAuthForms>
           constraints: const BoxConstraints(maxWidth: 460),
           child: NexusCard(
             padding: const EdgeInsets.all(AppSpacing.xl),
-            glow: true,
+            glow: false,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -65,14 +81,23 @@ class _AccountAuthFormsState extends ConsumerState<AccountAuthForms>
                   tabs: const [Tab(text: 'Sign in'), Tab(text: 'Register')],
                 ),
                 Gap.lg,
-                // Height-bounded so the two forms can share the card.
-                SizedBox(
-                  height: 360,
-                  child: TabBarView(
-                    controller: _tabs,
-                    children: const [_LoginForm(), _RegisterForm()],
-                  ),
+                // Size the card to the ACTIVE form (the short Sign-in form no
+                // longer gets padded out to the taller Register form's height),
+                // so the action button stays near the top.
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 200),
+                  alignment: Alignment.topCenter,
+                  child: _tabs.index == 0
+                      ? const _LoginForm()
+                      : const _RegisterForm(),
                 ),
+                if (widget.onSkip != null) ...[
+                  Gap.sm,
+                  TextButton(
+                    onPressed: widget.onSkip,
+                    child: const Text('Skip for now'),
+                  ),
+                ],
               ],
             ),
           ),
@@ -129,6 +154,7 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
       children: [
         TextField(
           controller: _email,
@@ -154,7 +180,7 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
           Gap.md,
           _ErrorText(_error!),
         ],
-        const SizedBox(height: AppSpacing.xl),
+        const SizedBox(height: AppSpacing.lg),
         GradientButton(
           onPressed: _submitting ? null : _submit,
           busy: _submitting,
@@ -245,53 +271,54 @@ class _RegisterFormState extends ConsumerState<_RegisterForm> {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextField(
-            controller: _company,
-            decoration: const InputDecoration(
-              labelText: 'Company / client name',
-              prefixIcon: Icon(Icons.business_outlined),
-            ),
+    // No inner scroll view: the parent (AccountAuthForms) already scrolls, and
+    // this is sized intrinsically by the AnimatedSize wrapper above.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextField(
+          controller: _company,
+          decoration: const InputDecoration(
+            labelText: 'Company / client name',
+            prefixIcon: Icon(Icons.business_outlined),
           ),
+        ),
+        Gap.md,
+        TextField(
+          controller: _email,
+          keyboardType: TextInputType.emailAddress,
+          autofillHints: const [AutofillHints.email],
+          decoration: const InputDecoration(
+            labelText: 'Email',
+            prefixIcon: Icon(Icons.email_outlined),
+          ),
+        ),
+        Gap.md,
+        TextField(
+          controller: _password,
+          obscureText: true,
+          autofillHints: const [AutofillHints.newPassword],
+          onSubmitted: (_) => _submit(),
+          decoration: const InputDecoration(
+            labelText: 'Password',
+            prefixIcon: Icon(Icons.lock_outline),
+            helperText: 'Min 8 chars, 1 uppercase, 1 symbol',
+            helperMaxLines: 2,
+          ),
+        ),
+        if (_error != null) ...[
           Gap.md,
-          TextField(
-            controller: _email,
-            keyboardType: TextInputType.emailAddress,
-            autofillHints: const [AutofillHints.email],
-            decoration: const InputDecoration(
-              labelText: 'Email',
-              prefixIcon: Icon(Icons.email_outlined),
-            ),
-          ),
-          Gap.md,
-          TextField(
-            controller: _password,
-            obscureText: true,
-            autofillHints: const [AutofillHints.newPassword],
-            onSubmitted: (_) => _submit(),
-            decoration: const InputDecoration(
-              labelText: 'Password',
-              prefixIcon: Icon(Icons.lock_outline),
-              helperText: 'Min 8 chars, 1 uppercase, 1 symbol',
-              helperMaxLines: 2,
-            ),
-          ),
-          if (_error != null) ...[
-            Gap.md,
-            _ErrorText(_error!),
-          ],
-          const SizedBox(height: AppSpacing.xl),
-          GradientButton(
-            onPressed: _submitting ? null : _submit,
-            busy: _submitting,
-            expand: true,
-            label: 'Create account',
-          ),
+          _ErrorText(_error!),
         ],
-      ),
+        const SizedBox(height: AppSpacing.lg),
+        GradientButton(
+          onPressed: _submitting ? null : _submit,
+          busy: _submitting,
+          expand: true,
+          label: 'Create account',
+        ),
+      ],
     );
   }
 }

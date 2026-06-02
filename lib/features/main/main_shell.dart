@@ -230,20 +230,24 @@ class _MainShellState extends ConsumerState<MainShell> {
                       ),
                     ),
 
-                    // Draggable divider - Center <-> Right (only when the panel is expanded)
-                    if (!_rightCollapsed) ResizableDivider(onDrag: _updateRightWidth),
+                    // Some pages have no right-panel content at all (e.g. Account),
+                    // so the whole right side — divider, rail and panel — is hidden.
+                    if (_hasRightPanel(currentView)) ...[
+                      // Draggable divider - Center <-> Right (only when expanded)
+                      if (!_rightCollapsed) ResizableDivider(onDrag: _updateRightWidth),
 
-                    // Collapse / expand rail — always visible at the right edge.
-                    _rightRail(currentView),
+                      // Collapse / expand rail — visible at the right edge.
+                      _rightRail(currentView),
 
-                    // RIGHT PANE — page-specific content, hidden when collapsed.
-                    if (!_rightCollapsed)
-                      SizedBox(
-                        width: _rightWidth,
-                        child: ClipRect(
-                          child: _buildRightPanel(currentView, ref),
+                      // RIGHT PANE — page-specific content, hidden when collapsed.
+                      if (!_rightCollapsed)
+                        SizedBox(
+                          width: _rightWidth,
+                          child: ClipRect(
+                            child: _buildRightPanel(currentView, ref),
+                          ),
                         ),
-                      ),
+                    ],
                   ],
                 );
               },
@@ -303,6 +307,10 @@ class _MainShellState extends ConsumerState<MainShell> {
   /// Builds the right panel content. Each [MainView] owns its own right panel —
   /// content never leaks across pages. Views without a dedicated detail panel
   /// show a contextual empty state instead of an unrelated panel.
+  /// Pages that have no right-panel content: the whole right side (rail +
+  /// divider + panel) is omitted so the page uses the full width.
+  bool _hasRightPanel(MainView view) => view != MainView.account;
+
   Widget _buildRightPanel(MainView currentView, WidgetRef ref) {
     switch (currentView) {
       case MainView.projectPlans:
