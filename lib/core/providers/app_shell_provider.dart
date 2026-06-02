@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 part 'app_shell_provider.g.dart';
 
-enum MainView { projectPlans, tasks, agents, aiProviders, activity, launch, code, account }
+enum MainView { projectPlans, tasks, agents, aiProviders, activity, launch, code, callFlow, account }
 
 @riverpod
 class CurrentMainView extends _$CurrentMainView {

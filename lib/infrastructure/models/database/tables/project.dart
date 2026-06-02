@@ -57,6 +57,22 @@ class Projects extends Table {
   TextColumn get projectSummaryMd => text().nullable()();
   DateTimeColumn get summaryUpdatedAt => dateTime().nullable()();
 
+  // ==================== Project type (extensibility) ====================
+  /// The project type key from the ProjectType catalog (e.g.
+  /// 'application-development', 'project-coordination', 'ivr-call-systems').
+  /// Drives which capabilities/UI are shown. Defaults to application-development
+  /// so existing projects are unchanged.
+  TextColumn get projectType =>
+      text().withDefault(const Constant('application-development'))();
+
+  /// Optional sub-category within the type (e.g. IVR: 'inboundIvr',
+  /// 'outboundCampaign', 'aiVoicebot'). Null = the type's default.
+  TextColumn get subCategory => text().nullable()();
+
+  /// Experience mode: 'regular' | 'advanced'. Presentation only — same model.
+  TextColumn get experienceMode =>
+      text().withDefault(const Constant('regular'))();
+
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 }

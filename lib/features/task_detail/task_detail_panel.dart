@@ -9,6 +9,8 @@ import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart' show Task;
 
 import '../../shared/ui/nexus_ui.dart';
+import '../projects/types/project_type.dart';
+import '../projects/types/project_type_providers.dart';
 import 'tabs/overview_tab.dart';
 import 'tabs/sub_tasks_tab.dart';
 import 'tabs/git_changes_tab.dart';
@@ -52,49 +54,39 @@ class TaskDetailPanel extends ConsumerWidget {
           );
         }
         final t = task;
+        // Gate software-only tabs by the project type's capabilities, so
+        // non-software projects (e.g. IVR / Call Systems) don't show Git/CI.
+        final type = ref.watch(projectTypeProvider(t.task_project_fk));
+        final showGit = type.has(ProjectCapability.git);
+        final showBuild =
+            type.has(ProjectCapability.build) || type.has(ProjectCapability.ci);
+        final tabSpecs = <({String label, Widget view})>[
+          (label: 'Overview', view: OverviewTab(key: ValueKey('ov-${t.task_pk}'), taskId: t.task_pk)),
+          (label: 'Sub-Tasks', view: SubTasksTab(key: ValueKey('st-${t.task_pk}'), taskId: t.task_pk)),
+          if (showGit)
+            (label: 'Git Changes', view: GitChangesTab(key: ValueKey('gc-${t.task_pk}'), taskId: t.task_pk, projectId: t.task_project_fk, workBranch: t.workBranch)),
+          (label: 'Agent Work', view: AgentWorkTab(key: ValueKey('aw-${t.task_pk}'), taskId: t.task_pk)),
+          if (showBuild)
+            (label: 'Builds & CI', view: BuildsCiTab(key: ValueKey('ci-${t.task_pk}'), projectPk: t.task_project_fk, taskId: t.task_pk)),
+          (label: 'Audit', view: AuditTab(key: ValueKey('au-${t.task_pk}'), taskId: t.task_pk, projectId: t.task_project_fk, workBranch: t.workBranch)),
+        ];
         return DefaultTabController(
-          length: 6,
+          length: tabSpecs.length,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildHeader(context, t, connectionMode),
-              const TabBar(
+              TabBar(
                 isScrollable: true,
                 // Pin tabs to the left edge (x=0) instead of the default
                 // scrollable leading offset, so they don't appear to drift right.
                 tabAlignment: TabAlignment.start,
-                tabs: [
-                  Tab(text: 'Overview'),
-                  Tab(text: 'Sub-Tasks'),
-                  Tab(text: 'Git Changes'),
-                  Tab(text: 'Agent Work'),
-                  Tab(text: 'Builds & CI'),
-                  Tab(text: 'Audit'),
-                ],
-                labelStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                tabs: [for (final s in tabSpecs) Tab(text: s.label)],
+                labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
               ),
               Expanded(
                 child: TabBarView(
-                  children: [
-                    // ValueKey → fresh tab state when the selected task changes.
-                    OverviewTab(key: ValueKey('ov-${t.task_pk}'), taskId: t.task_pk),
-                    SubTasksTab(key: ValueKey('st-${t.task_pk}'), taskId: t.task_pk),
-                    GitChangesTab(
-                        key: ValueKey('gc-${t.task_pk}'),
-                        taskId: t.task_pk,
-                        projectId: t.task_project_fk,
-                        workBranch: t.workBranch),
-                    AgentWorkTab(key: ValueKey('aw-${t.task_pk}'), taskId: t.task_pk),
-                    BuildsCiTab(
-                        key: ValueKey('ci-${t.task_pk}'),
-                        projectPk: t.task_project_fk,
-                        taskId: t.task_pk),
-                    AuditTab(
-                        key: ValueKey('au-${t.task_pk}'),
-                        taskId: t.task_pk,
-                        projectId: t.task_project_fk,
-                        workBranch: t.workBranch),
-                  ],
+                  children: [for (final s in tabSpecs) s.view],
                 ),
               ),
             ],

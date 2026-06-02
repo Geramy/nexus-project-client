@@ -72,7 +72,7 @@ class NexusDatabase extends _$NexusDatabase {
       _taskCompletedController.stream;
 
   @override
-  int get schemaVersion => 26;
+  int get schemaVersion => 27;
 
   @override
   MigrationStrategy get migration {
@@ -159,6 +159,12 @@ class NexusDatabase extends _$NexusDatabase {
         }
         if (from < 26) {
           await m.addColumn(tasks, tasks.thinkingMode);
+        }
+        // v26 → v27: extensible project types (capability-gated UI/tools).
+        if (from < 27) {
+          await m.addColumn(projects, projects.projectType);
+          await m.addColumn(projects, projects.subCategory);
+          await m.addColumn(projects, projects.experienceMode);
         }
       },
     );

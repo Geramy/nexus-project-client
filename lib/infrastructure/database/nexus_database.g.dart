@@ -2678,6 +2678,41 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         type: DriftSqlType.dateTime,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _projectTypeMeta = const VerificationMeta(
+    'projectType',
+  );
+  @override
+  late final GeneratedColumn<String> projectType = GeneratedColumn<String>(
+    'project_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('application-development'),
+  );
+  static const VerificationMeta _subCategoryMeta = const VerificationMeta(
+    'subCategory',
+  );
+  @override
+  late final GeneratedColumn<String> subCategory = GeneratedColumn<String>(
+    'sub_category',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _experienceModeMeta = const VerificationMeta(
+    'experienceMode',
+  );
+  @override
+  late final GeneratedColumn<String> experienceMode = GeneratedColumn<String>(
+    'experience_mode',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('regular'),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -2719,6 +2754,9 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
     setupTranscriptJson,
     projectSummaryMd,
     summaryUpdatedAt,
+    projectType,
+    subCategory,
+    experienceMode,
     createdAt,
     updatedAt,
   ];
@@ -2864,6 +2902,33 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         ),
       );
     }
+    if (data.containsKey('project_type')) {
+      context.handle(
+        _projectTypeMeta,
+        projectType.isAcceptableOrUnknown(
+          data['project_type']!,
+          _projectTypeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sub_category')) {
+      context.handle(
+        _subCategoryMeta,
+        subCategory.isAcceptableOrUnknown(
+          data['sub_category']!,
+          _subCategoryMeta,
+        ),
+      );
+    }
+    if (data.containsKey('experience_mode')) {
+      context.handle(
+        _experienceModeMeta,
+        experienceMode.isAcceptableOrUnknown(
+          data['experience_mode']!,
+          _experienceModeMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -2945,6 +3010,18 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}summary_updated_at'],
       ),
+      projectType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_type'],
+      )!,
+      subCategory: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sub_category'],
+      ),
+      experienceMode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}experience_mode'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -3008,6 +3085,19 @@ class Project extends DataClass implements Insertable<Project> {
   /// idle cycles. Null until first generated.
   final String? projectSummaryMd;
   final DateTime? summaryUpdatedAt;
+
+  /// The project type key from the ProjectType catalog (e.g.
+  /// 'application-development', 'project-coordination', 'ivr-call-systems').
+  /// Drives which capabilities/UI are shown. Defaults to application-development
+  /// so existing projects are unchanged.
+  final String projectType;
+
+  /// Optional sub-category within the type (e.g. IVR: 'inboundIvr',
+  /// 'outboundCampaign', 'aiVoicebot'). Null = the type's default.
+  final String? subCategory;
+
+  /// Experience mode: 'regular' | 'advanced'. Presentation only — same model.
+  final String experienceMode;
   final DateTime createdAt;
   final DateTime updatedAt;
   const Project({
@@ -3026,6 +3116,9 @@ class Project extends DataClass implements Insertable<Project> {
     this.setupTranscriptJson,
     this.projectSummaryMd,
     this.summaryUpdatedAt,
+    required this.projectType,
+    this.subCategory,
+    required this.experienceMode,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -3067,6 +3160,11 @@ class Project extends DataClass implements Insertable<Project> {
     if (!nullToAbsent || summaryUpdatedAt != null) {
       map['summary_updated_at'] = Variable<DateTime>(summaryUpdatedAt);
     }
+    map['project_type'] = Variable<String>(projectType);
+    if (!nullToAbsent || subCategory != null) {
+      map['sub_category'] = Variable<String>(subCategory);
+    }
+    map['experience_mode'] = Variable<String>(experienceMode);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -3107,6 +3205,11 @@ class Project extends DataClass implements Insertable<Project> {
       summaryUpdatedAt: summaryUpdatedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(summaryUpdatedAt),
+      projectType: Value(projectType),
+      subCategory: subCategory == null && nullToAbsent
+          ? const Value.absent()
+          : Value(subCategory),
+      experienceMode: Value(experienceMode),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -3141,6 +3244,9 @@ class Project extends DataClass implements Insertable<Project> {
       summaryUpdatedAt: serializer.fromJson<DateTime?>(
         json['summaryUpdatedAt'],
       ),
+      projectType: serializer.fromJson<String>(json['projectType']),
+      subCategory: serializer.fromJson<String?>(json['subCategory']),
+      experienceMode: serializer.fromJson<String>(json['experienceMode']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -3166,6 +3272,9 @@ class Project extends DataClass implements Insertable<Project> {
       'setupTranscriptJson': serializer.toJson<String?>(setupTranscriptJson),
       'projectSummaryMd': serializer.toJson<String?>(projectSummaryMd),
       'summaryUpdatedAt': serializer.toJson<DateTime?>(summaryUpdatedAt),
+      'projectType': serializer.toJson<String>(projectType),
+      'subCategory': serializer.toJson<String?>(subCategory),
+      'experienceMode': serializer.toJson<String>(experienceMode),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -3187,6 +3296,9 @@ class Project extends DataClass implements Insertable<Project> {
     Value<String?> setupTranscriptJson = const Value.absent(),
     Value<String?> projectSummaryMd = const Value.absent(),
     Value<DateTime?> summaryUpdatedAt = const Value.absent(),
+    String? projectType,
+    Value<String?> subCategory = const Value.absent(),
+    String? experienceMode,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => Project(
@@ -3217,6 +3329,9 @@ class Project extends DataClass implements Insertable<Project> {
     summaryUpdatedAt: summaryUpdatedAt.present
         ? summaryUpdatedAt.value
         : this.summaryUpdatedAt,
+    projectType: projectType ?? this.projectType,
+    subCategory: subCategory.present ? subCategory.value : this.subCategory,
+    experienceMode: experienceMode ?? this.experienceMode,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -3263,6 +3378,15 @@ class Project extends DataClass implements Insertable<Project> {
       summaryUpdatedAt: data.summaryUpdatedAt.present
           ? data.summaryUpdatedAt.value
           : this.summaryUpdatedAt,
+      projectType: data.projectType.present
+          ? data.projectType.value
+          : this.projectType,
+      subCategory: data.subCategory.present
+          ? data.subCategory.value
+          : this.subCategory,
+      experienceMode: data.experienceMode.present
+          ? data.experienceMode.value
+          : this.experienceMode,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -3286,6 +3410,9 @@ class Project extends DataClass implements Insertable<Project> {
           ..write('setupTranscriptJson: $setupTranscriptJson, ')
           ..write('projectSummaryMd: $projectSummaryMd, ')
           ..write('summaryUpdatedAt: $summaryUpdatedAt, ')
+          ..write('projectType: $projectType, ')
+          ..write('subCategory: $subCategory, ')
+          ..write('experienceMode: $experienceMode, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -3309,6 +3436,9 @@ class Project extends DataClass implements Insertable<Project> {
     setupTranscriptJson,
     projectSummaryMd,
     summaryUpdatedAt,
+    projectType,
+    subCategory,
+    experienceMode,
     createdAt,
     updatedAt,
   );
@@ -3331,6 +3461,9 @@ class Project extends DataClass implements Insertable<Project> {
           other.setupTranscriptJson == this.setupTranscriptJson &&
           other.projectSummaryMd == this.projectSummaryMd &&
           other.summaryUpdatedAt == this.summaryUpdatedAt &&
+          other.projectType == this.projectType &&
+          other.subCategory == this.subCategory &&
+          other.experienceMode == this.experienceMode &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -3351,6 +3484,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
   final Value<String?> setupTranscriptJson;
   final Value<String?> projectSummaryMd;
   final Value<DateTime?> summaryUpdatedAt;
+  final Value<String> projectType;
+  final Value<String?> subCategory;
+  final Value<String> experienceMode;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   const ProjectsCompanion({
@@ -3369,6 +3505,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     this.setupTranscriptJson = const Value.absent(),
     this.projectSummaryMd = const Value.absent(),
     this.summaryUpdatedAt = const Value.absent(),
+    this.projectType = const Value.absent(),
+    this.subCategory = const Value.absent(),
+    this.experienceMode = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
@@ -3388,6 +3527,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     this.setupTranscriptJson = const Value.absent(),
     this.projectSummaryMd = const Value.absent(),
     this.summaryUpdatedAt = const Value.absent(),
+    this.projectType = const Value.absent(),
+    this.subCategory = const Value.absent(),
+    this.experienceMode = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   }) : client_fk = Value(client_fk),
@@ -3408,6 +3550,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     Expression<String>? setupTranscriptJson,
     Expression<String>? projectSummaryMd,
     Expression<DateTime>? summaryUpdatedAt,
+    Expression<String>? projectType,
+    Expression<String>? subCategory,
+    Expression<String>? experienceMode,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
   }) {
@@ -3429,6 +3574,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
         'setup_transcript_json': setupTranscriptJson,
       if (projectSummaryMd != null) 'project_summary_md': projectSummaryMd,
       if (summaryUpdatedAt != null) 'summary_updated_at': summaryUpdatedAt,
+      if (projectType != null) 'project_type': projectType,
+      if (subCategory != null) 'sub_category': subCategory,
+      if (experienceMode != null) 'experience_mode': experienceMode,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
@@ -3450,6 +3598,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     Value<String?>? setupTranscriptJson,
     Value<String?>? projectSummaryMd,
     Value<DateTime?>? summaryUpdatedAt,
+    Value<String>? projectType,
+    Value<String?>? subCategory,
+    Value<String>? experienceMode,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
   }) {
@@ -3470,6 +3621,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
       setupTranscriptJson: setupTranscriptJson ?? this.setupTranscriptJson,
       projectSummaryMd: projectSummaryMd ?? this.projectSummaryMd,
       summaryUpdatedAt: summaryUpdatedAt ?? this.summaryUpdatedAt,
+      projectType: projectType ?? this.projectType,
+      subCategory: subCategory ?? this.subCategory,
+      experienceMode: experienceMode ?? this.experienceMode,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -3527,6 +3681,15 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     if (summaryUpdatedAt.present) {
       map['summary_updated_at'] = Variable<DateTime>(summaryUpdatedAt.value);
     }
+    if (projectType.present) {
+      map['project_type'] = Variable<String>(projectType.value);
+    }
+    if (subCategory.present) {
+      map['sub_category'] = Variable<String>(subCategory.value);
+    }
+    if (experienceMode.present) {
+      map['experience_mode'] = Variable<String>(experienceMode.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -3554,6 +3717,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
           ..write('setupTranscriptJson: $setupTranscriptJson, ')
           ..write('projectSummaryMd: $projectSummaryMd, ')
           ..write('summaryUpdatedAt: $summaryUpdatedAt, ')
+          ..write('projectType: $projectType, ')
+          ..write('subCategory: $subCategory, ')
+          ..write('experienceMode: $experienceMode, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -14554,6 +14720,9 @@ typedef $$ProjectsTableCreateCompanionBuilder =
       Value<String?> setupTranscriptJson,
       Value<String?> projectSummaryMd,
       Value<DateTime?> summaryUpdatedAt,
+      Value<String> projectType,
+      Value<String?> subCategory,
+      Value<String> experienceMode,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -14574,6 +14743,9 @@ typedef $$ProjectsTableUpdateCompanionBuilder =
       Value<String?> setupTranscriptJson,
       Value<String?> projectSummaryMd,
       Value<DateTime?> summaryUpdatedAt,
+      Value<String> projectType,
+      Value<String?> subCategory,
+      Value<String> experienceMode,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -14832,6 +15004,21 @@ class $$ProjectsTableFilterComposer
 
   ColumnFilters<DateTime> get summaryUpdatedAt => $composableBuilder(
     column: $table.summaryUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get projectType => $composableBuilder(
+    column: $table.projectType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get subCategory => $composableBuilder(
+    column: $table.subCategory,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get experienceMode => $composableBuilder(
+    column: $table.experienceMode,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -15116,6 +15303,21 @@ class $$ProjectsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get projectType => $composableBuilder(
+    column: $table.projectType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get subCategory => $composableBuilder(
+    column: $table.subCategory,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get experienceMode => $composableBuilder(
+    column: $table.experienceMode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -15242,6 +15444,21 @@ class $$ProjectsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get summaryUpdatedAt => $composableBuilder(
     column: $table.summaryUpdatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get projectType => $composableBuilder(
+    column: $table.projectType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get subCategory => $composableBuilder(
+    column: $table.subCategory,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get experienceMode => $composableBuilder(
+    column: $table.experienceMode,
     builder: (column) => column,
   );
 
@@ -15500,6 +15717,9 @@ class $$ProjectsTableTableManager
                 Value<String?> setupTranscriptJson = const Value.absent(),
                 Value<String?> projectSummaryMd = const Value.absent(),
                 Value<DateTime?> summaryUpdatedAt = const Value.absent(),
+                Value<String> projectType = const Value.absent(),
+                Value<String?> subCategory = const Value.absent(),
+                Value<String> experienceMode = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => ProjectsCompanion(
@@ -15518,6 +15738,9 @@ class $$ProjectsTableTableManager
                 setupTranscriptJson: setupTranscriptJson,
                 projectSummaryMd: projectSummaryMd,
                 summaryUpdatedAt: summaryUpdatedAt,
+                projectType: projectType,
+                subCategory: subCategory,
+                experienceMode: experienceMode,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -15538,6 +15761,9 @@ class $$ProjectsTableTableManager
                 Value<String?> setupTranscriptJson = const Value.absent(),
                 Value<String?> projectSummaryMd = const Value.absent(),
                 Value<DateTime?> summaryUpdatedAt = const Value.absent(),
+                Value<String> projectType = const Value.absent(),
+                Value<String?> subCategory = const Value.absent(),
+                Value<String> experienceMode = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => ProjectsCompanion.insert(
@@ -15556,6 +15782,9 @@ class $$ProjectsTableTableManager
                 setupTranscriptJson: setupTranscriptJson,
                 projectSummaryMd: projectSummaryMd,
                 summaryUpdatedAt: summaryUpdatedAt,
+                projectType: projectType,
+                subCategory: subCategory,
+                experienceMode: experienceMode,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),

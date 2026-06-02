@@ -26,6 +26,7 @@ import 'package:nexus_projects_client/features/ai_providers/widgets/admin_consol
 import 'package:nexus_projects_client/features/main/widgets/launch_center.dart';
 import 'package:nexus_projects_client/features/main/widgets/activity_center.dart';
 import 'package:nexus_projects_client/features/workspace/file_browser_view.dart';
+import 'package:nexus_projects_client/features/call_systems/ui/call_flow_workspace.dart';
 import 'package:nexus_projects_client/features/workspace/code_and_git_right_panel.dart';
 import 'package:nexus_projects_client/features/account/account_view.dart';
 import 'package:nexus_projects_client/shared/ui/nexus_ui.dart';
@@ -296,6 +297,9 @@ class _MainShellState extends ConsumerState<MainShell> {
       case MainView.code:
         child = const FileBrowserView();
         break;
+      case MainView.callFlow:
+        child = const CallFlowWorkspace();
+        break;
       case MainView.account:
         child = const AccountView();
         break;
@@ -381,6 +385,12 @@ class _MainShellState extends ConsumerState<MainShell> {
         );
       case MainView.code:
         return const CodeAndGitRightPanel();
+      case MainView.callFlow:
+        return _emptyRightPanel(
+          Icons.account_tree_outlined,
+          'Call Flow',
+          'Select a node to edit its prompt, options, and routing here.',
+        );
       case MainView.account:
         return _emptyRightPanel(
           Icons.account_circle_outlined,

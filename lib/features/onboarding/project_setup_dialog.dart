@@ -25,7 +25,7 @@ Future<void> showProjectSetupDialog(BuildContext context) {
               child: ProjectStep(
                 headline: 'New project',
                 subhead:
-                    'Name it and choose the agent pack(s) to provision. You can change both later.',
+                    'Name it and choose the project type. You can change both later.',
                 defaultName: 'New Project',
                 onCreated: () => Navigator.of(ctx).pop(),
               ),
