@@ -232,7 +232,10 @@ class NexusDatabase extends _$NexusDatabase {
       InferenceServersCompanion.insert(
         client_fk: clientPk,
         name: 'Local Lemonade',
-        baseUrl: 'http://localhost:13305/v1',
+        // Bare host (no /v1): ServerConfig.apiUrl normalizes this to the correct
+        // Lemonade base `…/api/v1`. A stored `…/v1` is kept as-is by the
+        // normalizer and would hit the wrong `/v1/models` path (404).
+        baseUrl: 'http://localhost:13305',
         providerType: const Value('lemonade'),
         maxConcurrency: const Value(4),
         maxAgents: const Value(8),
