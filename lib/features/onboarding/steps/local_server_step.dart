@@ -217,14 +217,14 @@ class _LocalServerStepState extends ConsumerState<LocalServerStep> {
         ),
         Gap.lg,
         GradientButton(
-          onPressed: servers.isEmpty ? null : widget.onContinue,
-          label: 'Continue',
+          onPressed: widget.onContinue,
+          label: servers.isEmpty ? 'Skip for now' : 'Continue',
           icon: Icons.arrow_forward,
           expand: true,
         ),
         if (servers.isEmpty) ...[
           Gap.xs,
-          Text('Add at least one server to continue.',
+          Text('Optional — you can add servers later from AI Providers.',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall?.copyWith(color: context.nx.textMuted)),
         ],

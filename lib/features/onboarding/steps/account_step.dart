@@ -10,17 +10,21 @@ import '../../../infrastructure/nexus/providers/nexus_account_providers.dart';
 import '../../../shared/ui/nexus_ui.dart';
 
 /// Step 2 — the key step. Sign in or register to connect Nexus routed inference
-/// (no server setup needed). Already-signed-in users get a confirmation and
-/// continue; the secondary action branches to bring-your-own local servers.
+/// (no server setup needed). When signed in you can continue, set up local
+/// servers anyway, or log out and sign in / register again. When signed out you
+/// can skip straight to local-server setup.
 class AccountStep extends ConsumerWidget {
   const AccountStep({
     super.key,
     required this.onContinue,
-    required this.onUseLocalServers,
+    required this.onLocalServers,
   });
 
+  /// Proceed with routed (signed-in) inference → project step.
   final VoidCallback onContinue;
-  final VoidCallback onUseLocalServers;
+
+  /// Branch to the local LLM server setup step.
+  final VoidCallback onLocalServers;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -62,6 +66,18 @@ class AccountStep extends ConsumerWidget {
               icon: Icons.arrow_forward,
               expand: true,
             ),
+            Gap.sm,
+            OutlinedButton.icon(
+              onPressed: onLocalServers,
+              icon: const Icon(Icons.dns_outlined, size: 18),
+              label: const Text('Set up local LLM servers'),
+            ),
+            Gap.xs,
+            TextButton.icon(
+              onPressed: () => ref.read(nexusAuthProvider.notifier).logout(),
+              icon: const Icon(Icons.logout, size: 16),
+              label: const Text('Log out'),
+            ),
           ],
         ),
       );
@@ -70,20 +86,20 @@ class AccountStep extends ConsumerWidget {
     // Signed-out: AccountAuthForms brings its own header + scroll view, so give
     // it bounded height via Expanded rather than nesting it in another scroll
     // view (which would throw an unbounded-height error). On success the auth
-    // state flips and the branch above renders the Continue button.
+    // state flips and the signed-in branch renders.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Expanded(child: AccountAuthForms()),
         Gap.sm,
         Text(
-          'No server setup required — sign in and Nexus handles inference.',
+          'Or run your own inference — skip sign-in and set up local LLM servers.',
           textAlign: TextAlign.center,
           style: theme.textTheme.bodySmall?.copyWith(color: context.nx.textMuted),
         ),
         TextButton(
-          onPressed: onUseLocalServers,
-          child: const Text("I'll run my own local servers"),
+          onPressed: onLocalServers,
+          child: const Text('Skip — set up local LLM servers'),
         ),
       ],
     );

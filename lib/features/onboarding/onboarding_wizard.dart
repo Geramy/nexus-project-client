@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/auth_skipped_provider.dart';
 import '../../core/providers/onboarding_controller.dart';
+import '../../infrastructure/nexus/providers/nexus_account_providers.dart';
 import '../../shared/ui/nexus_ui.dart';
 import 'steps/account_step.dart';
 import 'steps/done_step.dart';
@@ -59,11 +60,13 @@ class _OnboardingWizardState extends ConsumerState<OnboardingWizard> {
     if (i > 0) _go(seq[i - 1]);
   }
 
-  /// User chose to use their own local server(s) rather than a Nexus account.
-  /// Record the auth skip (so the login wall stays down) and branch into the
-  /// server step.
-  void _useLocalServers() {
-    ref.read(authSkippedNotifierProvider.notifier).skip();
+  /// Branch into the local LLM server setup step. Reachable whether or not the
+  /// user is signed in (signed-in users may still add their own servers). When
+  /// NOT signed in, record the auth skip so the login wall stays down later.
+  void _goToServers() {
+    if (!ref.read(nexusAuthProvider).isSignedIn) {
+      ref.read(authSkippedNotifierProvider.notifier).skip();
+    }
     setState(() => _byoServers = true);
     _go(OnboardingStep.localServer);
   }
@@ -135,7 +138,7 @@ class _OnboardingWizardState extends ConsumerState<OnboardingWizard> {
       case OnboardingStep.account:
         return AccountStep(
           onContinue: _next,
-          onUseLocalServers: _useLocalServers,
+          onLocalServers: _goToServers,
         );
       case OnboardingStep.localServer:
         return LocalServerStep(onContinue: _next);

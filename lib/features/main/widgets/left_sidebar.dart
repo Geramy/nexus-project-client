@@ -8,8 +8,8 @@ import 'package:nexus_projects_client/core/providers/app_shell_provider.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart';
 import 'package:nexus_projects_client/infrastructure/lemonade/providers/lemonade_servers_provider.dart';
-import 'package:nexus_projects_client/features/agents/packs/agent_pack_catalog.dart';
 import 'package:nexus_projects_client/features/onboarding/widgets/create_with_packs_dialog.dart';
+import 'package:nexus_projects_client/features/onboarding/project_setup_dialog.dart';
 import 'package:nexus_projects_client/shared/ui/nexus_ui.dart';
 
 /// The eight primary navigation destinations, shared by the full sidebar and
@@ -204,25 +204,10 @@ class LeftSidebar extends ConsumerWidget {
                 ),
 
                 TextButton.icon(
-                  onPressed: () async {
-                    final result = await showCreateWithPacksDialog(
-                      context,
-                      title: 'New Project',
-                      nameLabel: 'Project name',
-                      defaultName: 'New Project',
-                    );
-                    if (result != null) {
-                      final db = ref.read(nexusDatabaseProvider);
-                      final clientId = ref.read(currentClientIdProvider);
-                      final id = await db.createProject(
-                          ProjectsCompanion.insert(client_fk: clientId, name: result.name));
-                      // Provision the chosen pack(s) into this project's client
-                      // (dedupes against agents the client already has).
-                      await db.provisionAgentPack(
-                          clientId, agentsForPackKeys(result.packKeys));
-                      ref.read(currentProjectIdProvider.notifier).selectProject(id);
-                    }
-                  },
+                  // Reuse the SAME project-setup screen + workflow as the
+                  // onboarding wizard (name + agent packs), instead of a
+                  // separate dialog.
+                  onPressed: () => showProjectSetupDialog(context),
                   icon: const Icon(Icons.add, size: 14),
                   label: const Text('New Project', style: TextStyle(fontSize: 11)),
                   style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),

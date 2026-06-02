@@ -16,16 +16,31 @@ import '../../../shared/ui/nexus_ui.dart';
 /// Step 4 — name the first project and pick the agent pack(s) to provision into
 /// the current client. Creating the project selects it and advances the wizard.
 class ProjectStep extends ConsumerStatefulWidget {
-  const ProjectStep({super.key, required this.onCreated});
+  const ProjectStep({
+    super.key,
+    required this.onCreated,
+    this.headline = 'Create your first project',
+    this.subhead =
+        'Name it and choose the team of agents to set up. You can change both later.',
+    this.defaultName = 'My First Project',
+  });
 
+  /// Called after the project is created and selected.
   final VoidCallback onCreated;
+
+  /// Copy varies by context: the onboarding wizard's first project vs. the
+  /// "New Project" action elsewhere in the app (which reuses this same screen).
+  final String headline;
+  final String subhead;
+  final String defaultName;
 
   @override
   ConsumerState<ProjectStep> createState() => _ProjectStepState();
 }
 
 class _ProjectStepState extends ConsumerState<ProjectStep> {
-  final _name = TextEditingController(text: 'My First Project');
+  late final TextEditingController _name =
+      TextEditingController(text: widget.defaultName);
   Set<String> _packs = {kDefaultAgentPackKey};
   bool _creating = false;
 
@@ -63,13 +78,12 @@ class _ProjectStepState extends ConsumerState<ProjectStep> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Create your first project',
+        Text(widget.headline,
             textAlign: TextAlign.center,
             style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
         Gap.xs,
         Text(
-          'Name it and choose the team of agents to set up. You can change both '
-          'later.',
+          widget.subhead,
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyMedium?.copyWith(color: context.nx.textMuted),
         ),
