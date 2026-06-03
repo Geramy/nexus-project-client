@@ -31,6 +31,8 @@ import '../models/database/tables/project_tag.dart';
 import '../models/database/tables/library_verification.dart';
 import '../models/database/tables/call_system.dart';
 import '../models/database/tables/setup_flow.dart';
+import '../models/database/tables/setup_scope.dart';
+import '../models/database/tables/setup_scope_option.dart';
 import '../../features/project_setup/config/setup_flow_catalog.dart' as setup_cat;
 import '../../features/agents/agent_role.dart';
 import '../../features/agents/agent_role_policy.dart';
@@ -60,9 +62,16 @@ class TaskCompletedEvent {
 /// All tables use integer auto-increment primary keys named `<entity>_pk`
 /// (client_pk, project_pk, task_pk, agent_pk, server_pk, session_pk, …) and
 /// foreign keys named `<ref>_fk` (client_fk, project_fk, task_parent_fk, …).
-@DriftDatabase(tables: [Clients, Projects, Tasks, InferenceServers, AgentPersonas, Skills, Deployments, ActivityLogs, CiRuns, CiJobs, CiSteps, ChatSessions, ChatMessages, ProjectTags, LibraryVerifications, CallSystems, SetupFlows])
+@DriftDatabase(tables: [Clients, Projects, Tasks, InferenceServers, AgentPersonas, Skills, Deployments, ActivityLogs, CiRuns, CiJobs, CiSteps, ChatSessions, ChatMessages, ProjectTags, LibraryVerifications, CallSystems, SetupFlows, SetupScopes, SetupScopeOptions])
 class NexusDatabase extends _$NexusDatabase {
   NexusDatabase() : super(_openConnection()) {
+    _initDriftOptions();
+  }
+
+  /// Test-only: bind to a caller-provided executor (e.g. `NativeDatabase.memory()`)
+  /// so unit tests can exercise migrations/queries without touching disk.
+  @visibleForTesting
+  NexusDatabase.forTesting(super.executor) {
     _initDriftOptions();
   }
 
@@ -75,7 +84,7 @@ class NexusDatabase extends _$NexusDatabase {
       _taskCompletedController.stream;
 
   @override
-  int get schemaVersion => 29;
+  int get schemaVersion => 30;
 
   @override
   MigrationStrategy get migration {
@@ -177,6 +186,10 @@ class NexusDatabase extends _$NexusDatabase {
         if (from < 29) {
           await m.createTable(setupFlows);
         }
+        if (from < 30) {
+          await m.createTable(setupScopes);
+          await m.createTable(setupScopeOptions);
+        }
       },
     );
   }
@@ -244,6 +257,204 @@ class NexusDatabase extends _$NexusDatabase {
           .write(SetupFlowsCompanion(
               json: Value(json), updatedAt: Value(DateTime.now())));
     }
+  }
+
+  // ==================== Setup scopes (adaptive scoped vocabulary) ========
+  /// Idempotently seed the scoped-vocabulary tree from a parsed catalog (the
+  /// research-generated `assets/setup/scoped_vocab.json`). Each catalog entry is
+  /// an industry "pack": an industry scope (optionally introducing a sub-axis
+  /// like Genre), its industry-level options, and one child scope per sub-axis
+  /// value with its own options + platform-conditional stacks. Skips industries
+  /// already present so it's safe to call every launch.
+  Future<void> seedSetupScopes(List<dynamic> packs) async {
+    await transaction(() async {
+      for (final raw in packs) {
+        if (raw is! Map) continue;
+        final pack = raw.cast<String, dynamic>();
+        final industry = (pack['industry'] ?? '').toString().trim();
+        if (industry.isEmpty) continue;
+
+        final existing = await (select(setupScopes)
+              ..where((s) =>
+                  s.axis.equals('industry') &
+                  s.value.equals(industry) &
+                  s.parent_scope_fk.isNull()))
+            .getSingleOrNull();
+        if (existing != null) continue; // already seeded this industry
+
+        final subAxis = (pack['subAxis'] as Map?)?.cast<String, dynamic>();
+        final subName = subAxis?['name']?.toString();
+        final subKey = subAxis?['key']?.toString();
+
+        final industryPk = await into(setupScopes).insert(
+          SetupScopesCompanion.insert(
+            axis: 'industry',
+            value: industry,
+            subAxisName: Value(subName),
+            subAxisKey: Value(subKey),
+          ),
+        );
+
+        await _insertScopeOptions(industryPk, pack);
+
+        final values = (subAxis?['values'] as List?) ?? const [];
+        for (final v in values) {
+          if (v is! Map) continue;
+          final valueMap = v.cast<String, dynamic>();
+          final valueName = (valueMap['value'] ?? '').toString().trim();
+          if (valueName.isEmpty || subKey == null) continue;
+          final childPk = await into(setupScopes).insert(
+            SetupScopesCompanion.insert(
+              axis: subKey,
+              value: valueName,
+              parent_scope_fk: Value(industryPk),
+            ),
+          );
+          await _insertScopeOptions(childPk, valueMap);
+        }
+      }
+    });
+  }
+
+  /// Insert the option rows for one scope from its catalog map: plain
+  /// objectives/features/platforms/libraries (platform-agnostic) plus any
+  /// platform-conditional `stacks` (languages/frameworks/libraries tagged with
+  /// their platform).
+  Future<void> _insertScopeOptions(
+      int scopePk, Map<String, dynamic> map) async {
+    var sort = 0;
+    Future<void> add(String category, String value,
+        {String? platform, String? forLanguage}) async {
+      final v = value.trim();
+      if (v.isEmpty) return;
+      await into(setupScopeOptions).insert(
+        SetupScopeOptionsCompanion.insert(
+          setup_scope_fk: scopePk,
+          category: category,
+          value: v,
+          platform: Value(platform),
+          forLanguage: Value(forLanguage),
+          sort: Value(sort++),
+        ),
+        mode: InsertMode.insertOrIgnore,
+      );
+    }
+
+    for (final c in const ['objectives', 'features', 'platforms']) {
+      for (final e in (map[c] as List?) ?? const []) {
+        await add(c, e.toString());
+      }
+    }
+    for (final lib in (map['libraries'] as List?) ?? const []) {
+      if (lib is Map) {
+        await add('libraries', (lib['value'] ?? '').toString(),
+            forLanguage: lib['forLanguage']?.toString());
+      } else {
+        await add('libraries', lib.toString());
+      }
+    }
+    for (final s in (map['stacks'] as List?) ?? const []) {
+      if (s is! Map) continue;
+      final stack = s.cast<String, dynamic>();
+      final platform = stack['platform']?.toString();
+      for (final lang in (stack['languages'] as List?) ?? const []) {
+        await add('languages', lang.toString(), platform: platform);
+      }
+      for (final fw in (stack['frameworks'] as List?) ?? const []) {
+        await add('frameworks', fw.toString(), platform: platform);
+      }
+      for (final lib in (stack['libraries'] as List?) ?? const []) {
+        if (lib is Map) {
+          await add('libraries', (lib['value'] ?? '').toString(),
+              platform: platform, forLanguage: lib['forLanguage']?.toString());
+        } else {
+          await add('libraries', lib.toString(), platform: platform);
+        }
+      }
+    }
+  }
+
+  /// The sub-axes (e.g. Genre) introduced by the given selected [industries],
+  /// each with its display name, category key, and the available values.
+  Future<List<({String name, String key, List<String> values})>>
+      subAxesForIndustries(List<String> industries) async {
+    if (industries.isEmpty) return const [];
+    final inds = await (select(setupScopes)
+          ..where((s) =>
+              s.axis.equals('industry') &
+              s.value.isIn(industries) &
+              s.subAxisKey.isNotNull()))
+        .get();
+    final out = <({String name, String key, List<String> values})>[];
+    for (final ind in inds) {
+      final values = await (select(setupScopes)
+            ..where((s) => s.parent_scope_fk.equals(ind.setup_scope_pk))
+            ..orderBy([(s) => OrderingTerm(expression: s.value)]))
+          .get();
+      out.add((
+        name: ind.subAxisName ?? ind.subAxisKey!,
+        key: ind.subAxisKey!,
+        values: values.map((s) => s.value).toList(),
+      ));
+    }
+    return out;
+  }
+
+  /// Scoped suggestion values for [category], given the user's selected
+  /// [industries] and any selected sub-axis values [subValues] (e.g. genres).
+  /// Returns the deepest (sub-axis) options first, then industry-level, deduped.
+  /// When [platform] is given, platform-conditional entries for that platform
+  /// are included alongside platform-agnostic ones (used for languages /
+  /// frameworks / libraries); otherwise only platform-agnostic entries.
+  Future<List<String>> scopeOptions({
+    required List<String> industries,
+    required List<String> subValues,
+    required String category,
+    String? platform,
+  }) async {
+    if (industries.isEmpty) return const [];
+    final industryScopes = await (select(setupScopes)
+          ..where((s) => s.axis.equals('industry') & s.value.isIn(industries)))
+        .get();
+    if (industryScopes.isEmpty) return const [];
+    final industryPks = industryScopes.map((s) => s.setup_scope_pk).toList();
+
+    // Child (sub-axis) scopes under those industries whose value is selected.
+    final childScopes = subValues.isEmpty
+        ? <SetupScope>[]
+        : await (select(setupScopes)
+              ..where((s) =>
+                  s.parent_scope_fk.isIn(industryPks) &
+                  s.value.isIn(subValues)))
+            .get();
+    final childPks = childScopes.map((s) => s.setup_scope_pk).toList();
+
+    Future<List<SetupScopeOption>> opts(List<int> pks) async {
+      if (pks.isEmpty) return const [];
+      final q = select(setupScopeOptions)
+        ..where((o) => o.setup_scope_fk.isIn(pks) & o.category.equals(category));
+      if (platform != null) {
+        q.where((o) => o.platform.equals(platform) | o.platform.isNull());
+      } else {
+        q.where((o) => o.platform.isNull());
+      }
+      q.orderBy([(o) => OrderingTerm(expression: o.sort)]);
+      return q.get();
+    }
+
+    final seen = <String>{};
+    final result = <String>[];
+    for (final row in [...await opts(childPks), ...await opts(industryPks)]) {
+      if (seen.add(row.value.toLowerCase())) result.add(row.value);
+    }
+    return result;
+  }
+
+  /// True once any scoped vocabulary has been seeded.
+  Future<bool> hasSetupScopes() async {
+    final row = await (selectOnly(setupScopes)..addColumns([setupScopes.setup_scope_pk]))
+        .get();
+    return row.isNotEmpty;
   }
 
   // ==================== Clients ====================
@@ -664,6 +875,17 @@ class NexusDatabase extends _$NexusDatabase {
     String priority = 'MED',
     String? thinkingMode,
   }) async {
+    // Hard guard against duplicates: never create a second task with the same
+    // title in the same project. Returns the existing task's id instead, so a
+    // re-run (e.g. re-finalizing setup) is idempotent and can't loop by piling
+    // up identical tasks.
+    final dupe = await (select(tasks)
+          ..where((t) =>
+              t.task_project_fk.equals(projectPk) & t.title.equals(title))
+          ..limit(1))
+        .getSingleOrNull();
+    if (dupe != null) return dupe.task_pk;
+
     final proj = await (select(projects)..where((p) => p.project_pk.equals(projectPk))).getSingleOrNull();
     final clientPk = proj?.client_fk ?? 0;
     return into(tasks).insert(TasksCompanion.insert(

@@ -12703,6 +12703,949 @@ class SetupFlowsCompanion extends UpdateCompanion<SetupFlow> {
   }
 }
 
+class $SetupScopesTable extends SetupScopes
+    with TableInfo<$SetupScopesTable, SetupScope> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SetupScopesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _setup_scope_pkMeta = const VerificationMeta(
+    'setup_scope_pk',
+  );
+  @override
+  late final GeneratedColumn<int> setup_scope_pk = GeneratedColumn<int>(
+    'setup_scope_pk',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _axisMeta = const VerificationMeta('axis');
+  @override
+  late final GeneratedColumn<String> axis = GeneratedColumn<String>(
+    'axis',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _valueMeta = const VerificationMeta('value');
+  @override
+  late final GeneratedColumn<String> value = GeneratedColumn<String>(
+    'value',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _parent_scope_fkMeta = const VerificationMeta(
+    'parent_scope_fk',
+  );
+  @override
+  late final GeneratedColumn<int> parent_scope_fk = GeneratedColumn<int>(
+    'parent_scope_fk',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES setup_scopes (setup_scope_pk)',
+    ),
+  );
+  static const VerificationMeta _subAxisNameMeta = const VerificationMeta(
+    'subAxisName',
+  );
+  @override
+  late final GeneratedColumn<String> subAxisName = GeneratedColumn<String>(
+    'sub_axis_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _subAxisKeyMeta = const VerificationMeta(
+    'subAxisKey',
+  );
+  @override
+  late final GeneratedColumn<String> subAxisKey = GeneratedColumn<String>(
+    'sub_axis_key',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    setup_scope_pk,
+    axis,
+    value,
+    parent_scope_fk,
+    subAxisName,
+    subAxisKey,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'setup_scopes';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SetupScope> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('setup_scope_pk')) {
+      context.handle(
+        _setup_scope_pkMeta,
+        setup_scope_pk.isAcceptableOrUnknown(
+          data['setup_scope_pk']!,
+          _setup_scope_pkMeta,
+        ),
+      );
+    }
+    if (data.containsKey('axis')) {
+      context.handle(
+        _axisMeta,
+        axis.isAcceptableOrUnknown(data['axis']!, _axisMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_axisMeta);
+    }
+    if (data.containsKey('value')) {
+      context.handle(
+        _valueMeta,
+        value.isAcceptableOrUnknown(data['value']!, _valueMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_valueMeta);
+    }
+    if (data.containsKey('parent_scope_fk')) {
+      context.handle(
+        _parent_scope_fkMeta,
+        parent_scope_fk.isAcceptableOrUnknown(
+          data['parent_scope_fk']!,
+          _parent_scope_fkMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sub_axis_name')) {
+      context.handle(
+        _subAxisNameMeta,
+        subAxisName.isAcceptableOrUnknown(
+          data['sub_axis_name']!,
+          _subAxisNameMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sub_axis_key')) {
+      context.handle(
+        _subAxisKeyMeta,
+        subAxisKey.isAcceptableOrUnknown(
+          data['sub_axis_key']!,
+          _subAxisKeyMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {setup_scope_pk};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {axis, value, parent_scope_fk},
+  ];
+  @override
+  SetupScope map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SetupScope(
+      setup_scope_pk: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}setup_scope_pk'],
+      )!,
+      axis: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}axis'],
+      )!,
+      value: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}value'],
+      )!,
+      parent_scope_fk: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}parent_scope_fk'],
+      ),
+      subAxisName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sub_axis_name'],
+      ),
+      subAxisKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sub_axis_key'],
+      ),
+    );
+  }
+
+  @override
+  $SetupScopesTable createAlias(String alias) {
+    return $SetupScopesTable(attachedDatabase, alias);
+  }
+}
+
+class SetupScope extends DataClass implements Insertable<SetupScope> {
+  final int setup_scope_pk;
+
+  /// The dimension this scope value lives on: `industry`, or a sub-axis key
+  /// such as `genre`, `segment`, `business-model`, …
+  final String axis;
+
+  /// The scope value, e.g. "Gaming", "RPG".
+  final String value;
+
+  /// Parent scope (e.g. genre "RPG"'s parent is industry "Gaming"). Null for
+  /// top-level (industry) scopes.
+  final int? parent_scope_fk;
+
+  /// If this scope introduces a further sub-axis, its display name (e.g.
+  /// "Genre"); null when the scope has no sub-axis.
+  final String? subAxisName;
+
+  /// The lowercase slug/category key for the introduced sub-axis (e.g. "genre").
+  final String? subAxisKey;
+  const SetupScope({
+    required this.setup_scope_pk,
+    required this.axis,
+    required this.value,
+    this.parent_scope_fk,
+    this.subAxisName,
+    this.subAxisKey,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['setup_scope_pk'] = Variable<int>(setup_scope_pk);
+    map['axis'] = Variable<String>(axis);
+    map['value'] = Variable<String>(value);
+    if (!nullToAbsent || parent_scope_fk != null) {
+      map['parent_scope_fk'] = Variable<int>(parent_scope_fk);
+    }
+    if (!nullToAbsent || subAxisName != null) {
+      map['sub_axis_name'] = Variable<String>(subAxisName);
+    }
+    if (!nullToAbsent || subAxisKey != null) {
+      map['sub_axis_key'] = Variable<String>(subAxisKey);
+    }
+    return map;
+  }
+
+  SetupScopesCompanion toCompanion(bool nullToAbsent) {
+    return SetupScopesCompanion(
+      setup_scope_pk: Value(setup_scope_pk),
+      axis: Value(axis),
+      value: Value(value),
+      parent_scope_fk: parent_scope_fk == null && nullToAbsent
+          ? const Value.absent()
+          : Value(parent_scope_fk),
+      subAxisName: subAxisName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(subAxisName),
+      subAxisKey: subAxisKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(subAxisKey),
+    );
+  }
+
+  factory SetupScope.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SetupScope(
+      setup_scope_pk: serializer.fromJson<int>(json['setup_scope_pk']),
+      axis: serializer.fromJson<String>(json['axis']),
+      value: serializer.fromJson<String>(json['value']),
+      parent_scope_fk: serializer.fromJson<int?>(json['parent_scope_fk']),
+      subAxisName: serializer.fromJson<String?>(json['subAxisName']),
+      subAxisKey: serializer.fromJson<String?>(json['subAxisKey']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'setup_scope_pk': serializer.toJson<int>(setup_scope_pk),
+      'axis': serializer.toJson<String>(axis),
+      'value': serializer.toJson<String>(value),
+      'parent_scope_fk': serializer.toJson<int?>(parent_scope_fk),
+      'subAxisName': serializer.toJson<String?>(subAxisName),
+      'subAxisKey': serializer.toJson<String?>(subAxisKey),
+    };
+  }
+
+  SetupScope copyWith({
+    int? setup_scope_pk,
+    String? axis,
+    String? value,
+    Value<int?> parent_scope_fk = const Value.absent(),
+    Value<String?> subAxisName = const Value.absent(),
+    Value<String?> subAxisKey = const Value.absent(),
+  }) => SetupScope(
+    setup_scope_pk: setup_scope_pk ?? this.setup_scope_pk,
+    axis: axis ?? this.axis,
+    value: value ?? this.value,
+    parent_scope_fk: parent_scope_fk.present
+        ? parent_scope_fk.value
+        : this.parent_scope_fk,
+    subAxisName: subAxisName.present ? subAxisName.value : this.subAxisName,
+    subAxisKey: subAxisKey.present ? subAxisKey.value : this.subAxisKey,
+  );
+  SetupScope copyWithCompanion(SetupScopesCompanion data) {
+    return SetupScope(
+      setup_scope_pk: data.setup_scope_pk.present
+          ? data.setup_scope_pk.value
+          : this.setup_scope_pk,
+      axis: data.axis.present ? data.axis.value : this.axis,
+      value: data.value.present ? data.value.value : this.value,
+      parent_scope_fk: data.parent_scope_fk.present
+          ? data.parent_scope_fk.value
+          : this.parent_scope_fk,
+      subAxisName: data.subAxisName.present
+          ? data.subAxisName.value
+          : this.subAxisName,
+      subAxisKey: data.subAxisKey.present
+          ? data.subAxisKey.value
+          : this.subAxisKey,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SetupScope(')
+          ..write('setup_scope_pk: $setup_scope_pk, ')
+          ..write('axis: $axis, ')
+          ..write('value: $value, ')
+          ..write('parent_scope_fk: $parent_scope_fk, ')
+          ..write('subAxisName: $subAxisName, ')
+          ..write('subAxisKey: $subAxisKey')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    setup_scope_pk,
+    axis,
+    value,
+    parent_scope_fk,
+    subAxisName,
+    subAxisKey,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SetupScope &&
+          other.setup_scope_pk == this.setup_scope_pk &&
+          other.axis == this.axis &&
+          other.value == this.value &&
+          other.parent_scope_fk == this.parent_scope_fk &&
+          other.subAxisName == this.subAxisName &&
+          other.subAxisKey == this.subAxisKey);
+}
+
+class SetupScopesCompanion extends UpdateCompanion<SetupScope> {
+  final Value<int> setup_scope_pk;
+  final Value<String> axis;
+  final Value<String> value;
+  final Value<int?> parent_scope_fk;
+  final Value<String?> subAxisName;
+  final Value<String?> subAxisKey;
+  const SetupScopesCompanion({
+    this.setup_scope_pk = const Value.absent(),
+    this.axis = const Value.absent(),
+    this.value = const Value.absent(),
+    this.parent_scope_fk = const Value.absent(),
+    this.subAxisName = const Value.absent(),
+    this.subAxisKey = const Value.absent(),
+  });
+  SetupScopesCompanion.insert({
+    this.setup_scope_pk = const Value.absent(),
+    required String axis,
+    required String value,
+    this.parent_scope_fk = const Value.absent(),
+    this.subAxisName = const Value.absent(),
+    this.subAxisKey = const Value.absent(),
+  }) : axis = Value(axis),
+       value = Value(value);
+  static Insertable<SetupScope> custom({
+    Expression<int>? setup_scope_pk,
+    Expression<String>? axis,
+    Expression<String>? value,
+    Expression<int>? parent_scope_fk,
+    Expression<String>? subAxisName,
+    Expression<String>? subAxisKey,
+  }) {
+    return RawValuesInsertable({
+      if (setup_scope_pk != null) 'setup_scope_pk': setup_scope_pk,
+      if (axis != null) 'axis': axis,
+      if (value != null) 'value': value,
+      if (parent_scope_fk != null) 'parent_scope_fk': parent_scope_fk,
+      if (subAxisName != null) 'sub_axis_name': subAxisName,
+      if (subAxisKey != null) 'sub_axis_key': subAxisKey,
+    });
+  }
+
+  SetupScopesCompanion copyWith({
+    Value<int>? setup_scope_pk,
+    Value<String>? axis,
+    Value<String>? value,
+    Value<int?>? parent_scope_fk,
+    Value<String?>? subAxisName,
+    Value<String?>? subAxisKey,
+  }) {
+    return SetupScopesCompanion(
+      setup_scope_pk: setup_scope_pk ?? this.setup_scope_pk,
+      axis: axis ?? this.axis,
+      value: value ?? this.value,
+      parent_scope_fk: parent_scope_fk ?? this.parent_scope_fk,
+      subAxisName: subAxisName ?? this.subAxisName,
+      subAxisKey: subAxisKey ?? this.subAxisKey,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (setup_scope_pk.present) {
+      map['setup_scope_pk'] = Variable<int>(setup_scope_pk.value);
+    }
+    if (axis.present) {
+      map['axis'] = Variable<String>(axis.value);
+    }
+    if (value.present) {
+      map['value'] = Variable<String>(value.value);
+    }
+    if (parent_scope_fk.present) {
+      map['parent_scope_fk'] = Variable<int>(parent_scope_fk.value);
+    }
+    if (subAxisName.present) {
+      map['sub_axis_name'] = Variable<String>(subAxisName.value);
+    }
+    if (subAxisKey.present) {
+      map['sub_axis_key'] = Variable<String>(subAxisKey.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SetupScopesCompanion(')
+          ..write('setup_scope_pk: $setup_scope_pk, ')
+          ..write('axis: $axis, ')
+          ..write('value: $value, ')
+          ..write('parent_scope_fk: $parent_scope_fk, ')
+          ..write('subAxisName: $subAxisName, ')
+          ..write('subAxisKey: $subAxisKey')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SetupScopeOptionsTable extends SetupScopeOptions
+    with TableInfo<$SetupScopeOptionsTable, SetupScopeOption> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SetupScopeOptionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _setup_scope_option_pkMeta =
+      const VerificationMeta('setup_scope_option_pk');
+  @override
+  late final GeneratedColumn<int> setup_scope_option_pk = GeneratedColumn<int>(
+    'setup_scope_option_pk',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _setup_scope_fkMeta = const VerificationMeta(
+    'setup_scope_fk',
+  );
+  @override
+  late final GeneratedColumn<int> setup_scope_fk = GeneratedColumn<int>(
+    'setup_scope_fk',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES setup_scopes (setup_scope_pk)',
+    ),
+  );
+  static const VerificationMeta _categoryMeta = const VerificationMeta(
+    'category',
+  );
+  @override
+  late final GeneratedColumn<String> category = GeneratedColumn<String>(
+    'category',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _valueMeta = const VerificationMeta('value');
+  @override
+  late final GeneratedColumn<String> value = GeneratedColumn<String>(
+    'value',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _platformMeta = const VerificationMeta(
+    'platform',
+  );
+  @override
+  late final GeneratedColumn<String> platform = GeneratedColumn<String>(
+    'platform',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _forLanguageMeta = const VerificationMeta(
+    'forLanguage',
+  );
+  @override
+  late final GeneratedColumn<String> forLanguage = GeneratedColumn<String>(
+    'for_language',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sortMeta = const VerificationMeta('sort');
+  @override
+  late final GeneratedColumn<int> sort = GeneratedColumn<int>(
+    'sort',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    setup_scope_option_pk,
+    setup_scope_fk,
+    category,
+    value,
+    platform,
+    forLanguage,
+    sort,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'setup_scope_options';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SetupScopeOption> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('setup_scope_option_pk')) {
+      context.handle(
+        _setup_scope_option_pkMeta,
+        setup_scope_option_pk.isAcceptableOrUnknown(
+          data['setup_scope_option_pk']!,
+          _setup_scope_option_pkMeta,
+        ),
+      );
+    }
+    if (data.containsKey('setup_scope_fk')) {
+      context.handle(
+        _setup_scope_fkMeta,
+        setup_scope_fk.isAcceptableOrUnknown(
+          data['setup_scope_fk']!,
+          _setup_scope_fkMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_setup_scope_fkMeta);
+    }
+    if (data.containsKey('category')) {
+      context.handle(
+        _categoryMeta,
+        category.isAcceptableOrUnknown(data['category']!, _categoryMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_categoryMeta);
+    }
+    if (data.containsKey('value')) {
+      context.handle(
+        _valueMeta,
+        value.isAcceptableOrUnknown(data['value']!, _valueMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_valueMeta);
+    }
+    if (data.containsKey('platform')) {
+      context.handle(
+        _platformMeta,
+        platform.isAcceptableOrUnknown(data['platform']!, _platformMeta),
+      );
+    }
+    if (data.containsKey('for_language')) {
+      context.handle(
+        _forLanguageMeta,
+        forLanguage.isAcceptableOrUnknown(
+          data['for_language']!,
+          _forLanguageMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sort')) {
+      context.handle(
+        _sortMeta,
+        sort.isAcceptableOrUnknown(data['sort']!, _sortMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {setup_scope_option_pk};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {setup_scope_fk, category, platform, value},
+  ];
+  @override
+  SetupScopeOption map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SetupScopeOption(
+      setup_scope_option_pk: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}setup_scope_option_pk'],
+      )!,
+      setup_scope_fk: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}setup_scope_fk'],
+      )!,
+      category: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category'],
+      )!,
+      value: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}value'],
+      )!,
+      platform: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}platform'],
+      ),
+      forLanguage: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}for_language'],
+      ),
+      sort: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort'],
+      )!,
+    );
+  }
+
+  @override
+  $SetupScopeOptionsTable createAlias(String alias) {
+    return $SetupScopeOptionsTable(attachedDatabase, alias);
+  }
+}
+
+class SetupScopeOption extends DataClass
+    implements Insertable<SetupScopeOption> {
+  final int setup_scope_option_pk;
+  final int setup_scope_fk;
+
+  /// Which setup category this option feeds: `objectives`, `features`,
+  /// `platforms`, `languages`, `frameworks`, `libraries`.
+  final String category;
+  final String value;
+
+  /// For platform-conditional stack entries (languages/frameworks/libraries):
+  /// the platform this entry applies to (`Mobile`, `Desktop`, `Web`, `Console`,
+  /// `Embedded`, `Cloud/Server`). Null for platform-agnostic suggestions.
+  final String? platform;
+
+  /// Libraries only: the language/ecosystem the package belongs to (e.g. "Dart",
+  /// "C#", "C++"). Null for non-library entries.
+  final String? forLanguage;
+  final int sort;
+  const SetupScopeOption({
+    required this.setup_scope_option_pk,
+    required this.setup_scope_fk,
+    required this.category,
+    required this.value,
+    this.platform,
+    this.forLanguage,
+    required this.sort,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['setup_scope_option_pk'] = Variable<int>(setup_scope_option_pk);
+    map['setup_scope_fk'] = Variable<int>(setup_scope_fk);
+    map['category'] = Variable<String>(category);
+    map['value'] = Variable<String>(value);
+    if (!nullToAbsent || platform != null) {
+      map['platform'] = Variable<String>(platform);
+    }
+    if (!nullToAbsent || forLanguage != null) {
+      map['for_language'] = Variable<String>(forLanguage);
+    }
+    map['sort'] = Variable<int>(sort);
+    return map;
+  }
+
+  SetupScopeOptionsCompanion toCompanion(bool nullToAbsent) {
+    return SetupScopeOptionsCompanion(
+      setup_scope_option_pk: Value(setup_scope_option_pk),
+      setup_scope_fk: Value(setup_scope_fk),
+      category: Value(category),
+      value: Value(value),
+      platform: platform == null && nullToAbsent
+          ? const Value.absent()
+          : Value(platform),
+      forLanguage: forLanguage == null && nullToAbsent
+          ? const Value.absent()
+          : Value(forLanguage),
+      sort: Value(sort),
+    );
+  }
+
+  factory SetupScopeOption.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SetupScopeOption(
+      setup_scope_option_pk: serializer.fromJson<int>(
+        json['setup_scope_option_pk'],
+      ),
+      setup_scope_fk: serializer.fromJson<int>(json['setup_scope_fk']),
+      category: serializer.fromJson<String>(json['category']),
+      value: serializer.fromJson<String>(json['value']),
+      platform: serializer.fromJson<String?>(json['platform']),
+      forLanguage: serializer.fromJson<String?>(json['forLanguage']),
+      sort: serializer.fromJson<int>(json['sort']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'setup_scope_option_pk': serializer.toJson<int>(setup_scope_option_pk),
+      'setup_scope_fk': serializer.toJson<int>(setup_scope_fk),
+      'category': serializer.toJson<String>(category),
+      'value': serializer.toJson<String>(value),
+      'platform': serializer.toJson<String?>(platform),
+      'forLanguage': serializer.toJson<String?>(forLanguage),
+      'sort': serializer.toJson<int>(sort),
+    };
+  }
+
+  SetupScopeOption copyWith({
+    int? setup_scope_option_pk,
+    int? setup_scope_fk,
+    String? category,
+    String? value,
+    Value<String?> platform = const Value.absent(),
+    Value<String?> forLanguage = const Value.absent(),
+    int? sort,
+  }) => SetupScopeOption(
+    setup_scope_option_pk: setup_scope_option_pk ?? this.setup_scope_option_pk,
+    setup_scope_fk: setup_scope_fk ?? this.setup_scope_fk,
+    category: category ?? this.category,
+    value: value ?? this.value,
+    platform: platform.present ? platform.value : this.platform,
+    forLanguage: forLanguage.present ? forLanguage.value : this.forLanguage,
+    sort: sort ?? this.sort,
+  );
+  SetupScopeOption copyWithCompanion(SetupScopeOptionsCompanion data) {
+    return SetupScopeOption(
+      setup_scope_option_pk: data.setup_scope_option_pk.present
+          ? data.setup_scope_option_pk.value
+          : this.setup_scope_option_pk,
+      setup_scope_fk: data.setup_scope_fk.present
+          ? data.setup_scope_fk.value
+          : this.setup_scope_fk,
+      category: data.category.present ? data.category.value : this.category,
+      value: data.value.present ? data.value.value : this.value,
+      platform: data.platform.present ? data.platform.value : this.platform,
+      forLanguage: data.forLanguage.present
+          ? data.forLanguage.value
+          : this.forLanguage,
+      sort: data.sort.present ? data.sort.value : this.sort,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SetupScopeOption(')
+          ..write('setup_scope_option_pk: $setup_scope_option_pk, ')
+          ..write('setup_scope_fk: $setup_scope_fk, ')
+          ..write('category: $category, ')
+          ..write('value: $value, ')
+          ..write('platform: $platform, ')
+          ..write('forLanguage: $forLanguage, ')
+          ..write('sort: $sort')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    setup_scope_option_pk,
+    setup_scope_fk,
+    category,
+    value,
+    platform,
+    forLanguage,
+    sort,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SetupScopeOption &&
+          other.setup_scope_option_pk == this.setup_scope_option_pk &&
+          other.setup_scope_fk == this.setup_scope_fk &&
+          other.category == this.category &&
+          other.value == this.value &&
+          other.platform == this.platform &&
+          other.forLanguage == this.forLanguage &&
+          other.sort == this.sort);
+}
+
+class SetupScopeOptionsCompanion extends UpdateCompanion<SetupScopeOption> {
+  final Value<int> setup_scope_option_pk;
+  final Value<int> setup_scope_fk;
+  final Value<String> category;
+  final Value<String> value;
+  final Value<String?> platform;
+  final Value<String?> forLanguage;
+  final Value<int> sort;
+  const SetupScopeOptionsCompanion({
+    this.setup_scope_option_pk = const Value.absent(),
+    this.setup_scope_fk = const Value.absent(),
+    this.category = const Value.absent(),
+    this.value = const Value.absent(),
+    this.platform = const Value.absent(),
+    this.forLanguage = const Value.absent(),
+    this.sort = const Value.absent(),
+  });
+  SetupScopeOptionsCompanion.insert({
+    this.setup_scope_option_pk = const Value.absent(),
+    required int setup_scope_fk,
+    required String category,
+    required String value,
+    this.platform = const Value.absent(),
+    this.forLanguage = const Value.absent(),
+    this.sort = const Value.absent(),
+  }) : setup_scope_fk = Value(setup_scope_fk),
+       category = Value(category),
+       value = Value(value);
+  static Insertable<SetupScopeOption> custom({
+    Expression<int>? setup_scope_option_pk,
+    Expression<int>? setup_scope_fk,
+    Expression<String>? category,
+    Expression<String>? value,
+    Expression<String>? platform,
+    Expression<String>? forLanguage,
+    Expression<int>? sort,
+  }) {
+    return RawValuesInsertable({
+      if (setup_scope_option_pk != null)
+        'setup_scope_option_pk': setup_scope_option_pk,
+      if (setup_scope_fk != null) 'setup_scope_fk': setup_scope_fk,
+      if (category != null) 'category': category,
+      if (value != null) 'value': value,
+      if (platform != null) 'platform': platform,
+      if (forLanguage != null) 'for_language': forLanguage,
+      if (sort != null) 'sort': sort,
+    });
+  }
+
+  SetupScopeOptionsCompanion copyWith({
+    Value<int>? setup_scope_option_pk,
+    Value<int>? setup_scope_fk,
+    Value<String>? category,
+    Value<String>? value,
+    Value<String?>? platform,
+    Value<String?>? forLanguage,
+    Value<int>? sort,
+  }) {
+    return SetupScopeOptionsCompanion(
+      setup_scope_option_pk:
+          setup_scope_option_pk ?? this.setup_scope_option_pk,
+      setup_scope_fk: setup_scope_fk ?? this.setup_scope_fk,
+      category: category ?? this.category,
+      value: value ?? this.value,
+      platform: platform ?? this.platform,
+      forLanguage: forLanguage ?? this.forLanguage,
+      sort: sort ?? this.sort,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (setup_scope_option_pk.present) {
+      map['setup_scope_option_pk'] = Variable<int>(setup_scope_option_pk.value);
+    }
+    if (setup_scope_fk.present) {
+      map['setup_scope_fk'] = Variable<int>(setup_scope_fk.value);
+    }
+    if (category.present) {
+      map['category'] = Variable<String>(category.value);
+    }
+    if (value.present) {
+      map['value'] = Variable<String>(value.value);
+    }
+    if (platform.present) {
+      map['platform'] = Variable<String>(platform.value);
+    }
+    if (forLanguage.present) {
+      map['for_language'] = Variable<String>(forLanguage.value);
+    }
+    if (sort.present) {
+      map['sort'] = Variable<int>(sort.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SetupScopeOptionsCompanion(')
+          ..write('setup_scope_option_pk: $setup_scope_option_pk, ')
+          ..write('setup_scope_fk: $setup_scope_fk, ')
+          ..write('category: $category, ')
+          ..write('value: $value, ')
+          ..write('platform: $platform, ')
+          ..write('forLanguage: $forLanguage, ')
+          ..write('sort: $sort')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$NexusDatabase extends GeneratedDatabase {
   _$NexusDatabase(QueryExecutor e) : super(e);
   $NexusDatabaseManager get managers => $NexusDatabaseManager(this);
@@ -12726,6 +13669,9 @@ abstract class _$NexusDatabase extends GeneratedDatabase {
       $LibraryVerificationsTable(this);
   late final $CallSystemsTable callSystems = $CallSystemsTable(this);
   late final $SetupFlowsTable setupFlows = $SetupFlowsTable(this);
+  late final $SetupScopesTable setupScopes = $SetupScopesTable(this);
+  late final $SetupScopeOptionsTable setupScopeOptions =
+      $SetupScopeOptionsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -12748,6 +13694,8 @@ abstract class _$NexusDatabase extends GeneratedDatabase {
     libraryVerifications,
     callSystems,
     setupFlows,
+    setupScopes,
+    setupScopeOptions,
   ];
 }
 
@@ -23774,6 +24722,831 @@ typedef $$SetupFlowsTableProcessedTableManager =
       SetupFlow,
       PrefetchHooks Function()
     >;
+typedef $$SetupScopesTableCreateCompanionBuilder =
+    SetupScopesCompanion Function({
+      Value<int> setup_scope_pk,
+      required String axis,
+      required String value,
+      Value<int?> parent_scope_fk,
+      Value<String?> subAxisName,
+      Value<String?> subAxisKey,
+    });
+typedef $$SetupScopesTableUpdateCompanionBuilder =
+    SetupScopesCompanion Function({
+      Value<int> setup_scope_pk,
+      Value<String> axis,
+      Value<String> value,
+      Value<int?> parent_scope_fk,
+      Value<String?> subAxisName,
+      Value<String?> subAxisKey,
+    });
+
+final class $$SetupScopesTableReferences
+    extends BaseReferences<_$NexusDatabase, $SetupScopesTable, SetupScope> {
+  $$SetupScopesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $SetupScopesTable _parent_scope_fkTable(_$NexusDatabase db) =>
+      db.setupScopes.createAlias(
+        $_aliasNameGenerator(
+          db.setupScopes.parent_scope_fk,
+          db.setupScopes.setup_scope_pk,
+        ),
+      );
+
+  $$SetupScopesTableProcessedTableManager? get parent_scope_fk {
+    final $_column = $_itemColumn<int>('parent_scope_fk');
+    if ($_column == null) return null;
+    final manager = $$SetupScopesTableTableManager(
+      $_db,
+      $_db.setupScopes,
+    ).filter((f) => f.setup_scope_pk.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_parent_scope_fkTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$SetupScopeOptionsTable, List<SetupScopeOption>>
+  _setupScopeOptionsRefsTable(_$NexusDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.setupScopeOptions,
+        aliasName: $_aliasNameGenerator(
+          db.setupScopes.setup_scope_pk,
+          db.setupScopeOptions.setup_scope_fk,
+        ),
+      );
+
+  $$SetupScopeOptionsTableProcessedTableManager get setupScopeOptionsRefs {
+    final manager =
+        $$SetupScopeOptionsTableTableManager(
+          $_db,
+          $_db.setupScopeOptions,
+        ).filter(
+          (f) => f.setup_scope_fk.setup_scope_pk.sqlEquals(
+            $_itemColumn<int>('setup_scope_pk')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _setupScopeOptionsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$SetupScopesTableFilterComposer
+    extends Composer<_$NexusDatabase, $SetupScopesTable> {
+  $$SetupScopesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get setup_scope_pk => $composableBuilder(
+    column: $table.setup_scope_pk,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get axis => $composableBuilder(
+    column: $table.axis,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get subAxisName => $composableBuilder(
+    column: $table.subAxisName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get subAxisKey => $composableBuilder(
+    column: $table.subAxisKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$SetupScopesTableFilterComposer get parent_scope_fk {
+    final $$SetupScopesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.parent_scope_fk,
+      referencedTable: $db.setupScopes,
+      getReferencedColumn: (t) => t.setup_scope_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SetupScopesTableFilterComposer(
+            $db: $db,
+            $table: $db.setupScopes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> setupScopeOptionsRefs(
+    Expression<bool> Function($$SetupScopeOptionsTableFilterComposer f) f,
+  ) {
+    final $$SetupScopeOptionsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.setup_scope_pk,
+      referencedTable: $db.setupScopeOptions,
+      getReferencedColumn: (t) => t.setup_scope_fk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SetupScopeOptionsTableFilterComposer(
+            $db: $db,
+            $table: $db.setupScopeOptions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$SetupScopesTableOrderingComposer
+    extends Composer<_$NexusDatabase, $SetupScopesTable> {
+  $$SetupScopesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get setup_scope_pk => $composableBuilder(
+    column: $table.setup_scope_pk,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get axis => $composableBuilder(
+    column: $table.axis,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get subAxisName => $composableBuilder(
+    column: $table.subAxisName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get subAxisKey => $composableBuilder(
+    column: $table.subAxisKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$SetupScopesTableOrderingComposer get parent_scope_fk {
+    final $$SetupScopesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.parent_scope_fk,
+      referencedTable: $db.setupScopes,
+      getReferencedColumn: (t) => t.setup_scope_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SetupScopesTableOrderingComposer(
+            $db: $db,
+            $table: $db.setupScopes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SetupScopesTableAnnotationComposer
+    extends Composer<_$NexusDatabase, $SetupScopesTable> {
+  $$SetupScopesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get setup_scope_pk => $composableBuilder(
+    column: $table.setup_scope_pk,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get axis =>
+      $composableBuilder(column: $table.axis, builder: (column) => column);
+
+  GeneratedColumn<String> get value =>
+      $composableBuilder(column: $table.value, builder: (column) => column);
+
+  GeneratedColumn<String> get subAxisName => $composableBuilder(
+    column: $table.subAxisName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get subAxisKey => $composableBuilder(
+    column: $table.subAxisKey,
+    builder: (column) => column,
+  );
+
+  $$SetupScopesTableAnnotationComposer get parent_scope_fk {
+    final $$SetupScopesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.parent_scope_fk,
+      referencedTable: $db.setupScopes,
+      getReferencedColumn: (t) => t.setup_scope_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SetupScopesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.setupScopes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> setupScopeOptionsRefs<T extends Object>(
+    Expression<T> Function($$SetupScopeOptionsTableAnnotationComposer a) f,
+  ) {
+    final $$SetupScopeOptionsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.setup_scope_pk,
+          referencedTable: $db.setupScopeOptions,
+          getReferencedColumn: (t) => t.setup_scope_fk,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SetupScopeOptionsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.setupScopeOptions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$SetupScopesTableTableManager
+    extends
+        RootTableManager<
+          _$NexusDatabase,
+          $SetupScopesTable,
+          SetupScope,
+          $$SetupScopesTableFilterComposer,
+          $$SetupScopesTableOrderingComposer,
+          $$SetupScopesTableAnnotationComposer,
+          $$SetupScopesTableCreateCompanionBuilder,
+          $$SetupScopesTableUpdateCompanionBuilder,
+          (SetupScope, $$SetupScopesTableReferences),
+          SetupScope,
+          PrefetchHooks Function({
+            bool parent_scope_fk,
+            bool setupScopeOptionsRefs,
+          })
+        > {
+  $$SetupScopesTableTableManager(_$NexusDatabase db, $SetupScopesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SetupScopesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SetupScopesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SetupScopesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> setup_scope_pk = const Value.absent(),
+                Value<String> axis = const Value.absent(),
+                Value<String> value = const Value.absent(),
+                Value<int?> parent_scope_fk = const Value.absent(),
+                Value<String?> subAxisName = const Value.absent(),
+                Value<String?> subAxisKey = const Value.absent(),
+              }) => SetupScopesCompanion(
+                setup_scope_pk: setup_scope_pk,
+                axis: axis,
+                value: value,
+                parent_scope_fk: parent_scope_fk,
+                subAxisName: subAxisName,
+                subAxisKey: subAxisKey,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> setup_scope_pk = const Value.absent(),
+                required String axis,
+                required String value,
+                Value<int?> parent_scope_fk = const Value.absent(),
+                Value<String?> subAxisName = const Value.absent(),
+                Value<String?> subAxisKey = const Value.absent(),
+              }) => SetupScopesCompanion.insert(
+                setup_scope_pk: setup_scope_pk,
+                axis: axis,
+                value: value,
+                parent_scope_fk: parent_scope_fk,
+                subAxisName: subAxisName,
+                subAxisKey: subAxisKey,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$SetupScopesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({parent_scope_fk = false, setupScopeOptionsRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (setupScopeOptionsRefs) db.setupScopeOptions,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (parent_scope_fk) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.parent_scope_fk,
+                                    referencedTable:
+                                        $$SetupScopesTableReferences
+                                            ._parent_scope_fkTable(db),
+                                    referencedColumn:
+                                        $$SetupScopesTableReferences
+                                            ._parent_scope_fkTable(db)
+                                            .setup_scope_pk,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (setupScopeOptionsRefs)
+                        await $_getPrefetchedData<
+                          SetupScope,
+                          $SetupScopesTable,
+                          SetupScopeOption
+                        >(
+                          currentTable: table,
+                          referencedTable: $$SetupScopesTableReferences
+                              ._setupScopeOptionsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SetupScopesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).setupScopeOptionsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.setup_scope_fk == item.setup_scope_pk,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$SetupScopesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$NexusDatabase,
+      $SetupScopesTable,
+      SetupScope,
+      $$SetupScopesTableFilterComposer,
+      $$SetupScopesTableOrderingComposer,
+      $$SetupScopesTableAnnotationComposer,
+      $$SetupScopesTableCreateCompanionBuilder,
+      $$SetupScopesTableUpdateCompanionBuilder,
+      (SetupScope, $$SetupScopesTableReferences),
+      SetupScope,
+      PrefetchHooks Function({bool parent_scope_fk, bool setupScopeOptionsRefs})
+    >;
+typedef $$SetupScopeOptionsTableCreateCompanionBuilder =
+    SetupScopeOptionsCompanion Function({
+      Value<int> setup_scope_option_pk,
+      required int setup_scope_fk,
+      required String category,
+      required String value,
+      Value<String?> platform,
+      Value<String?> forLanguage,
+      Value<int> sort,
+    });
+typedef $$SetupScopeOptionsTableUpdateCompanionBuilder =
+    SetupScopeOptionsCompanion Function({
+      Value<int> setup_scope_option_pk,
+      Value<int> setup_scope_fk,
+      Value<String> category,
+      Value<String> value,
+      Value<String?> platform,
+      Value<String?> forLanguage,
+      Value<int> sort,
+    });
+
+final class $$SetupScopeOptionsTableReferences
+    extends
+        BaseReferences<
+          _$NexusDatabase,
+          $SetupScopeOptionsTable,
+          SetupScopeOption
+        > {
+  $$SetupScopeOptionsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $SetupScopesTable _setup_scope_fkTable(_$NexusDatabase db) =>
+      db.setupScopes.createAlias(
+        $_aliasNameGenerator(
+          db.setupScopeOptions.setup_scope_fk,
+          db.setupScopes.setup_scope_pk,
+        ),
+      );
+
+  $$SetupScopesTableProcessedTableManager get setup_scope_fk {
+    final $_column = $_itemColumn<int>('setup_scope_fk')!;
+
+    final manager = $$SetupScopesTableTableManager(
+      $_db,
+      $_db.setupScopes,
+    ).filter((f) => f.setup_scope_pk.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_setup_scope_fkTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$SetupScopeOptionsTableFilterComposer
+    extends Composer<_$NexusDatabase, $SetupScopeOptionsTable> {
+  $$SetupScopeOptionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get setup_scope_option_pk => $composableBuilder(
+    column: $table.setup_scope_option_pk,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get platform => $composableBuilder(
+    column: $table.platform,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get forLanguage => $composableBuilder(
+    column: $table.forLanguage,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sort => $composableBuilder(
+    column: $table.sort,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$SetupScopesTableFilterComposer get setup_scope_fk {
+    final $$SetupScopesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.setup_scope_fk,
+      referencedTable: $db.setupScopes,
+      getReferencedColumn: (t) => t.setup_scope_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SetupScopesTableFilterComposer(
+            $db: $db,
+            $table: $db.setupScopes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SetupScopeOptionsTableOrderingComposer
+    extends Composer<_$NexusDatabase, $SetupScopeOptionsTable> {
+  $$SetupScopeOptionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get setup_scope_option_pk => $composableBuilder(
+    column: $table.setup_scope_option_pk,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get platform => $composableBuilder(
+    column: $table.platform,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get forLanguage => $composableBuilder(
+    column: $table.forLanguage,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sort => $composableBuilder(
+    column: $table.sort,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$SetupScopesTableOrderingComposer get setup_scope_fk {
+    final $$SetupScopesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.setup_scope_fk,
+      referencedTable: $db.setupScopes,
+      getReferencedColumn: (t) => t.setup_scope_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SetupScopesTableOrderingComposer(
+            $db: $db,
+            $table: $db.setupScopes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SetupScopeOptionsTableAnnotationComposer
+    extends Composer<_$NexusDatabase, $SetupScopeOptionsTable> {
+  $$SetupScopeOptionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get setup_scope_option_pk => $composableBuilder(
+    column: $table.setup_scope_option_pk,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get category =>
+      $composableBuilder(column: $table.category, builder: (column) => column);
+
+  GeneratedColumn<String> get value =>
+      $composableBuilder(column: $table.value, builder: (column) => column);
+
+  GeneratedColumn<String> get platform =>
+      $composableBuilder(column: $table.platform, builder: (column) => column);
+
+  GeneratedColumn<String> get forLanguage => $composableBuilder(
+    column: $table.forLanguage,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get sort =>
+      $composableBuilder(column: $table.sort, builder: (column) => column);
+
+  $$SetupScopesTableAnnotationComposer get setup_scope_fk {
+    final $$SetupScopesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.setup_scope_fk,
+      referencedTable: $db.setupScopes,
+      getReferencedColumn: (t) => t.setup_scope_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SetupScopesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.setupScopes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SetupScopeOptionsTableTableManager
+    extends
+        RootTableManager<
+          _$NexusDatabase,
+          $SetupScopeOptionsTable,
+          SetupScopeOption,
+          $$SetupScopeOptionsTableFilterComposer,
+          $$SetupScopeOptionsTableOrderingComposer,
+          $$SetupScopeOptionsTableAnnotationComposer,
+          $$SetupScopeOptionsTableCreateCompanionBuilder,
+          $$SetupScopeOptionsTableUpdateCompanionBuilder,
+          (SetupScopeOption, $$SetupScopeOptionsTableReferences),
+          SetupScopeOption,
+          PrefetchHooks Function({bool setup_scope_fk})
+        > {
+  $$SetupScopeOptionsTableTableManager(
+    _$NexusDatabase db,
+    $SetupScopeOptionsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SetupScopeOptionsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SetupScopeOptionsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SetupScopeOptionsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> setup_scope_option_pk = const Value.absent(),
+                Value<int> setup_scope_fk = const Value.absent(),
+                Value<String> category = const Value.absent(),
+                Value<String> value = const Value.absent(),
+                Value<String?> platform = const Value.absent(),
+                Value<String?> forLanguage = const Value.absent(),
+                Value<int> sort = const Value.absent(),
+              }) => SetupScopeOptionsCompanion(
+                setup_scope_option_pk: setup_scope_option_pk,
+                setup_scope_fk: setup_scope_fk,
+                category: category,
+                value: value,
+                platform: platform,
+                forLanguage: forLanguage,
+                sort: sort,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> setup_scope_option_pk = const Value.absent(),
+                required int setup_scope_fk,
+                required String category,
+                required String value,
+                Value<String?> platform = const Value.absent(),
+                Value<String?> forLanguage = const Value.absent(),
+                Value<int> sort = const Value.absent(),
+              }) => SetupScopeOptionsCompanion.insert(
+                setup_scope_option_pk: setup_scope_option_pk,
+                setup_scope_fk: setup_scope_fk,
+                category: category,
+                value: value,
+                platform: platform,
+                forLanguage: forLanguage,
+                sort: sort,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$SetupScopeOptionsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({setup_scope_fk = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (setup_scope_fk) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.setup_scope_fk,
+                                referencedTable:
+                                    $$SetupScopeOptionsTableReferences
+                                        ._setup_scope_fkTable(db),
+                                referencedColumn:
+                                    $$SetupScopeOptionsTableReferences
+                                        ._setup_scope_fkTable(db)
+                                        .setup_scope_pk,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$SetupScopeOptionsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$NexusDatabase,
+      $SetupScopeOptionsTable,
+      SetupScopeOption,
+      $$SetupScopeOptionsTableFilterComposer,
+      $$SetupScopeOptionsTableOrderingComposer,
+      $$SetupScopeOptionsTableAnnotationComposer,
+      $$SetupScopeOptionsTableCreateCompanionBuilder,
+      $$SetupScopeOptionsTableUpdateCompanionBuilder,
+      (SetupScopeOption, $$SetupScopeOptionsTableReferences),
+      SetupScopeOption,
+      PrefetchHooks Function({bool setup_scope_fk})
+    >;
 
 class $NexusDatabaseManager {
   final _$NexusDatabase _db;
@@ -23812,4 +25585,8 @@ class $NexusDatabaseManager {
       $$CallSystemsTableTableManager(_db, _db.callSystems);
   $$SetupFlowsTableTableManager get setupFlows =>
       $$SetupFlowsTableTableManager(_db, _db.setupFlows);
+  $$SetupScopesTableTableManager get setupScopes =>
+      $$SetupScopesTableTableManager(_db, _db.setupScopes);
+  $$SetupScopeOptionsTableTableManager get setupScopeOptions =>
+      $$SetupScopeOptionsTableTableManager(_db, _db.setupScopeOptions);
 }

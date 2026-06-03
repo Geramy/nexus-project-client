@@ -68,6 +68,59 @@ class SetupTools {
       {
         'type': 'function',
         'function': {
+          'name': 'scope_status',
+          'description':
+              'Read the adaptive scope for THIS project from the user\'s current '
+                  'selections. Call it right AFTER proposing `industries`, and '
+                  'again after `platforms`. It reports the selected industries, '
+                  'any sub-axis the chosen industry introduces (e.g. Gaming → '
+                  '"Genre") that you should ask NEXT, whether that sub-axis is '
+                  'already answered, and the selected platforms. Use the returned '
+                  'sub-axis + values as the options for your next ask_question.',
+          'parameters': {'type': 'object', 'properties': {}},
+        },
+      },
+      {
+        'type': 'function',
+        'function': {
+          'name': 'scope_options',
+          'description':
+              'Get vocabulary tailored to the user\'s selected industry + '
+                  'sub-axis (e.g. genre) for a category. Call this BEFORE asking '
+                  'objectives or features (use the returned values as the '
+                  'options), and when deriving languages/frameworks/libraries '
+                  '(pass the relevant platform). Platform-conditional: for '
+                  'languages/frameworks/libraries pass `platform` so you get the '
+                  'stack appropriate for that surface (e.g. Desktop games → '
+                  'C#/C++ engines; Mobile games → Flutter/Flame).',
+          'parameters': {
+            'type': 'object',
+            'properties': {
+              'category': {
+                'type': 'string',
+                'enum': [
+                  'objectives',
+                  'features',
+                  'languages',
+                  'frameworks',
+                  'libraries',
+                  'platforms',
+                ],
+              },
+              'platform': {
+                'type': 'string',
+                'description':
+                    'Optional platform bucket for stack categories: Mobile, '
+                        'Desktop, Web, Console, Embedded, Cloud/Server.',
+              },
+            },
+            'required': ['category'],
+          },
+        },
+      },
+      {
+        'type': 'function',
+        'function': {
           'name': 'lookup_package',
           'description':
               'Verify a library/framework against pub.dev or GitHub and get a '
@@ -107,7 +160,10 @@ class SetupTools {
                   'properties': {
                     'category': {
                       'type': 'string',
-                      'enum': cats,
+                      'description':
+                          'One of the flow categories (${cats.join(', ')}), OR a '
+                              'sub-axis category reported by scope_status '
+                              '(e.g. `genre`).',
                     },
                     'value': {'type': 'string'},
                     'layerKey': {
@@ -245,6 +301,10 @@ class SetupToolExecutor {
     switch (name) {
       case 'ask_question':
         return _ask(args);
+      case 'scope_status':
+        return _scopeStatus();
+      case 'scope_options':
+        return _scopeOptions(args);
       case 'lookup_package':
         return _lookup(args);
       case 'propose_tags':
@@ -279,6 +339,121 @@ class SetupToolExecutor {
     final picked = await askQuestion!(question, options, multi);
     if (picked.isEmpty) return 'User skipped the question.';
     return 'User selected: ${picked.join(', ')}.';
+  }
+
+  /// Map a target-surface label (a selected platform like "iOS"/"macOS", or a
+  /// bucket the model passes) to the stack bucket used by the scoped vocab
+  /// (Mobile/Desktop/Web/Console/Embedded/Cloud/Server).
+  String _platformBucket(String raw) {
+    switch (raw.trim().toLowerCase()) {
+      case 'ios':
+      case 'android':
+      case 'mobile':
+        return 'Mobile';
+      case 'macos':
+      case 'windows':
+      case 'linux':
+      case 'desktop':
+        return 'Desktop';
+      case 'web':
+        return 'Web';
+      case 'console':
+        return 'Console';
+      case 'embedded':
+        return 'Embedded';
+      case 'cloud':
+      case 'server':
+      case 'cloud/server':
+      case 'cloud / server':
+        return 'Cloud/Server';
+      default:
+        return raw.trim();
+    }
+  }
+
+  /// Current selections + the sub-axis (if any) the chosen industry introduces.
+  Future<({List<String> industries, List<String> platforms, List<({String name, String key, List<String> values, bool answered})> subAxes})>
+      _readScope() async {
+    final tags = await db.getTagsForProject(projectPk);
+    List<String> byCat(String c) => tags
+        .where((t) => t.category == c)
+        .map((t) => t.value)
+        .toList();
+    final industries = byCat('industries');
+    final platforms = byCat('platforms');
+    final axes = await db.subAxesForIndustries(industries);
+    final subAxes = [
+      for (final a in axes)
+        (
+          name: a.name,
+          key: a.key,
+          values: a.values,
+          answered: byCat(a.key).isNotEmpty,
+        )
+    ];
+    return (industries: industries, platforms: platforms, subAxes: subAxes);
+  }
+
+  Future<String> _scopeStatus() async {
+    final s = await _readScope();
+    if (s.industries.isEmpty) {
+      return 'No industry selected yet. Ask the industries question first, then '
+          'propose_tags(industries), then call scope_status again.';
+    }
+    final b = StringBuffer('Selected industries: ${s.industries.join(', ')}.');
+    if (s.platforms.isNotEmpty) {
+      b.write(' Selected platforms: ${s.platforms.join(', ')}.');
+    }
+    final pending = s.subAxes.where((a) => !a.answered).toList();
+    if (pending.isEmpty) {
+      b.write(' No sub-axis pending. Proceed to objectives/features '
+          '(call scope_options first for tailored options).');
+    } else {
+      for (final a in pending) {
+        b.write('\nSub-axis to ask NEXT: "${a.name}" (category `${a.key}`). '
+            'Ask the user which ${a.name.toLowerCase()}(s) apply, using these '
+            'options: ${a.values.join(', ')}. Then propose_tags with category '
+            '`${a.key}`.');
+      }
+    }
+    return b.toString();
+  }
+
+  Future<String> _scopeOptions(Map<String, dynamic> args) async {
+    final category = (args['category'] ?? '').toString().trim();
+    if (category.isEmpty) return 'scope_options needs a category.';
+    final s = await _readScope();
+    if (s.industries.isEmpty) {
+      return 'No industry selected yet — cannot scope $category.';
+    }
+    final subValues = <String>[];
+    final tags = await db.getTagsForProject(projectPk);
+    for (final a in s.subAxes) {
+      subValues.addAll(
+          tags.where((t) => t.category == a.key).map((t) => t.value));
+    }
+    final rawPlatform = args['platform']?.toString();
+    final platform =
+        (rawPlatform != null && rawPlatform.trim().isNotEmpty)
+            ? _platformBucket(rawPlatform)
+            : null;
+    final values = await db.scopeOptions(
+      industries: s.industries,
+      subValues: subValues,
+      category: category,
+      platform: platform,
+    );
+    if (values.isEmpty) {
+      return 'No scoped $category found for ${s.industries.join(', ')}'
+          '${subValues.isEmpty ? '' : ' / ${subValues.join(', ')}'}'
+          '${platform == null ? '' : ' on $platform'}. '
+          'Use sensible defaults for this domain.';
+    }
+    final scope = subValues.isEmpty
+        ? s.industries.join(', ')
+        : '${s.industries.join(', ')} / ${subValues.join(', ')}';
+    return 'Scoped $category for $scope'
+        '${platform == null ? '' : ' ($platform)'}: ${values.join(', ')}.';
   }
 
   Future<String> _lookup(Map<String, dynamic> args) async {

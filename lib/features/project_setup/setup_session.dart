@@ -102,6 +102,22 @@ Rules:
   NEXT call MUST be `propose_tags` using that stage's `category` — that is how
   answers reach the board (propose one tag per selected value). Never ask two
   questions without a `propose_tags` between.
+- ADAPTIVE SCOPE — the interview narrows to the chosen industry. Right AFTER you
+  propose `industries`, call `scope_status`. If it reports a sub-axis (e.g.
+  Gaming → "Genre"), ask THAT next using the values it returns as the options,
+  then `propose_tags` with the reported sub-axis category (e.g. `genre`). Call
+  `scope_status` again after `platforms`.
+- Before asking `objectives` and `features`, call `scope_options` for that
+  category and use the returned values as your question options — they are
+  tailored to the selected industry + sub-axis. Do NOT fall back to generic
+  options when scoped ones exist.
+- PLATFORM-CONDITIONAL STACK — when deriving `languages`/`frameworks`/
+  `libraries`, call `scope_options` with the right `platform` for EACH selected
+  surface and propose the stack it returns. The correct stack depends on the
+  platform: e.g. desktop/console games use C#/C++ engines (Unity/Unreal/Godot),
+  mobile games use Flutter/Flame (Dart), web games use TypeScript (Phaser). Never
+  propose a desktop/console game in Flutter, or force one language across all
+  platforms — honor what `scope_options(platform)` returns per surface.
 - END-OF-STAGE CHECK: before advancing a stage, ask the user (via
   `ask_question`) whether they're done with it or want to add/adjust more
   ("Looks good — continue" / "Add more"). Only advance when they choose to

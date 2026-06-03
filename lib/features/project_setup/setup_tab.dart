@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/database_provider.dart';
 import '../../infrastructure/workspace/workspace_provider.dart';
-import '../projects/workspace_nav.dart';
 import 'setup_chat_controller.dart';
 import 'tag_board_view.dart';
 import 'workspace_tag_observer.dart';
@@ -82,46 +81,19 @@ class _SetupTabState extends ConsumerState<SetupTab> {
   Future<void> _complete() async {
     await ref.read(setupChatControllerProvider(_key)).completeSetup();
     if (!mounted) return;
-    // Tasks were just generated, but nothing runs until orchestration is on.
-    // If it's still off, surface a dialog that jumps straight to the toggle.
-    final project =
-        await ref.read(nexusDatabaseProvider).getProjectById(widget.projectId);
-    if (!mounted) return;
+    // Setup is finished and tasks are created. Turn orchestration ON
+    // automatically — no prompt, no "turn it off" question — so agents start
+    // working immediately. We just confirm with a toast.
+    final db = ref.read(nexusDatabaseProvider);
+    final project = await db.getProjectById(widget.projectId);
     if (project?.orchestrationState != 'running') {
-      await _showOrchestrationOffDialog();
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Plans ready — tasks created and orchestration is '
-                'running.')),
-      );
+      await db.setProjectOrchestrationState(widget.projectId, 'running');
     }
-  }
-
-  Future<void> _showOrchestrationOffDialog() async {
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        icon: const Icon(Icons.motion_photos_off_outlined),
-        title: const Text('Orchestration is off'),
-        content: const Text(
-            'Your plans are ready and tasks have been created, but no agents '
-            'will start working until you turn orchestration on.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Later'),
-          ),
-          FilledButton.icon(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              // Nudge the workspace to surface the Overview tab (Start button).
-              ref.read(requestOverviewTabProvider.notifier).state++;
-            },
-            icon: const Icon(Icons.play_arrow, size: 18),
-            label: const Text('Turn on orchestration'),
-          ),
-        ],
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Setup complete — plans generated, tasks created, and '
+            'orchestration turned on.'),
       ),
     );
   }
