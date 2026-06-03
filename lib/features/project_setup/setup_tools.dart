@@ -11,6 +11,29 @@ import 'models/tag_category.dart';
 import 'plan_generator.dart';
 import 'providers/tag_providers.dart';
 
+/// How the user answered an inline `ask_question`. The setup interview is
+/// conversation-first: the user can just TYPE a reply ([SetupAnswer.text]) and
+/// only optionally expand the pre-made choices to click them ([SetupAnswer.picks]).
+/// An empty result of either kind is a skip.
+class SetupAnswer {
+  const SetupAnswer.picks(this.picks) : freeText = null;
+  const SetupAnswer.text(String text)
+      : picks = const [],
+        freeText = text;
+  const SetupAnswer.skipped()
+      : picks = const [],
+        freeText = null;
+
+  /// Chip/checkbox selections (when the user expanded and clicked the options).
+  final List<String> picks;
+
+  /// A typed, free-form reply (when the user answered in their own words).
+  final String? freeText;
+
+  bool get isSkip =>
+      picks.isEmpty && (freeText == null || freeText!.trim().isEmpty);
+}
+
 /// The bounded toolset the setup-interview AI may call. The AI hosts the
 /// conversation, but it can only: ask the user a multiple-choice question,
 /// verify a package/repo against the registries, propose tags (always
@@ -28,7 +51,9 @@ class SetupTools {
             'features',
             'languages',
             'frameworks',
+            'databases',
             'libraries',
+            'services',
           ]
         : categories;
     return [
@@ -37,9 +62,11 @@ class SetupTools {
         'function': {
           'name': 'ask_question',
           'description':
-              'Ask the user ONE bounded question. The user answers by picking '
-                  'from the options you provide — never free text. Use this to '
-                  'learn industries, platforms, and objectives.',
+              'OPTIONAL guardrail: ask ONE bounded multiple-choice question when '
+                  'picking from options helps the user decide or confirms a '
+                  'direction. You can also just talk in plain text — use this only '
+                  'when bounded choices are genuinely useful, not every turn. The '
+                  'user answers by picking from the options you provide.',
           'parameters': {
             'type': 'object',
             'properties': {
@@ -147,9 +174,12 @@ class SetupTools {
         'function': {
           'name': 'propose_tags',
           'description':
-              'Propose one or more tags for the project profile. They are saved '
-                  'as `proposed` for the user to accept/reject — never auto-'
-                  'accepted. Languages and platforms must use the allowed vocab.',
+              'Propose one or more tags for the project profile. Batch as many as '
+                  'you like in ONE call, across categories (e.g. a database + a '
+                  'service + features together) — no need to call this after every '
+                  'single message. Saved as `proposed` for the user to accept/'
+                  'reject. Languages and platforms must use the allowed vocab; '
+                  'databases/services/frameworks accept free entry.',
           'parameters': {
             'type': 'object',
             'properties': {
@@ -292,8 +322,9 @@ class SetupToolExecutor {
   final void Function()? onPlansChanged;
 
   /// UI hook: presents [question] with [options] and returns the user's
-  /// selection(s). When null, ask_question reports that input isn't available.
-  final Future<List<String>> Function(
+  /// answer — typed free text or chip picks (see [SetupAnswer]). When null,
+  /// ask_question reports that input isn't available.
+  final Future<SetupAnswer> Function(
           String question, List<String> options, bool multi)?
       askQuestion;
 
@@ -336,9 +367,15 @@ class SetupToolExecutor {
     if (askQuestion == null) {
       return 'Cannot ask the user here (no input channel). Proceed with sensible defaults.';
     }
-    final picked = await askQuestion!(question, options, multi);
-    if (picked.isEmpty) return 'User skipped the question.';
-    return 'User selected: ${picked.join(', ')}.';
+    final answer = await askQuestion!(question, options, multi);
+    // Conversation-first: a typed reply is returned verbatim so the host reacts
+    // to what the user actually said (not a canned "User selected: …"); chip
+    // picks come back as the chosen labels; either being empty is a skip.
+    if (answer.freeText != null && answer.freeText!.trim().isNotEmpty) {
+      return 'User answered: "${answer.freeText!.trim()}"';
+    }
+    if (answer.picks.isEmpty) return 'User skipped the question.';
+    return 'User selected: ${answer.picks.join(', ')}.';
   }
 
   /// Map a target-surface label (a selected platform like "iOS"/"macOS", or a

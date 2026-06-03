@@ -65,8 +65,19 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
   Future<void> _send() async {
     final text = _input.text.trim();
     if (text.isEmpty) return;
+    final controller = ref.read(setupChatControllerProvider(_key));
+    // Conversation-first: if the host has an inline question waiting, a typed
+    // reply IS the answer — it resumes the same turn rather than starting a new
+    // one (and works even while that turn is still "busy" awaiting the answer).
+    final pending = controller.pendingQuestion;
+    if (pending != null) {
+      _input.clear();
+      controller.answerQuestionWithText(pending, text);
+      return;
+    }
+    if (controller.busy) return; // mid-turn with no question — nothing to send
     _input.clear();
-    await ref.read(setupChatControllerProvider(_key)).send(text);
+    await controller.send(text);
   }
 
   Future<void> _toggleCall() async {
@@ -189,14 +200,24 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
               onEnd: _toggleCall,
             ),
           const Divider(height: 1),
-          _Composer(
-            controller: _input,
-            busy: controller.busy,
-            onSend: _send,
-            hintText: controller.refining
-                ? 'Describe your UI, screens, behavior, data…'
-                : 'Tell the setup host about your project…',
-          ),
+          () {
+            final pending = controller.pendingQuestion;
+            // The composer stays live while a question is waiting, so the user
+            // can simply type their answer; it only locks mid-turn when there's
+            // nothing for them to say yet.
+            final canType = !controller.busy || pending != null;
+            return _Composer(
+              controller: _input,
+              enabled: canType,
+              loading: controller.busy && pending == null,
+              onSend: _send,
+              hintText: pending != null
+                  ? 'Type your answer… (or expand the options to pick)'
+                  : controller.refining
+                      ? 'Describe your UI, screens, behavior, data…'
+                      : 'Tell the setup host about your project…',
+            );
+          }(),
             ],
           ),
         ),
@@ -403,8 +424,11 @@ class _NoteRow extends StatelessWidget {
   }
 }
 
-/// Inline multiple-choice question. Stays in the transcript; once answered it
-/// locks and shows the choice, so it's never lost by clicking away.
+/// Inline question, conversation-first. It reads like the host's spoken prompt;
+/// the user normally just TYPES a reply in the composer below. The pre-made
+/// choices are a fallback, tucked behind a "Pick from options" dropdown arrow
+/// the user can expand to click instead. Once answered (typed OR picked) it
+/// locks and shows what happened, so it's never lost by clicking away.
 class _QuestionCard extends StatefulWidget {
   const _QuestionCard({required this.msg, required this.onAnswer});
 
@@ -417,90 +441,151 @@ class _QuestionCard extends StatefulWidget {
 
 class _QuestionCardState extends State<_QuestionCard> {
   final Set<String> _selected = {};
+  bool _optionsOpen = false;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final msg = widget.msg;
     final answered = msg.answered;
+    final hasOptions = msg.options.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: theme.colorScheme.tertiaryContainer.withValues(alpha: 0.5),
+        // Quiet surface tint, not a loud alert box — it's a prompt, not a wall.
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
         border: Border.all(color: theme.colorScheme.outlineVariant),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(msg.text,
-              style:
-                  const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-          const SizedBox(height: 8),
-          if (answered)
+          // The question, phrased as the host's message.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.help_outline,
+                  size: 16, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(msg.text,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 14)),
+              ),
+            ],
+          ),
+          if (answered) ...[
+            const SizedBox(height: 6),
             Text(
-              msg.selected.isEmpty
-                  ? 'Skipped.'
-                  : 'You picked: ${msg.selected.join(', ')}',
+              msg.freeText != null
+                  ? 'Answered in chat ↑'
+                  : msg.selected.isEmpty
+                      ? 'Skipped.'
+                      : 'You picked: ${msg.selected.join(', ')}',
               style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onTertiaryContainer),
-            )
-          else if (msg.multi)
-            ...[
-              for (final option in msg.options)
-                CheckboxListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  title: Text(option, style: const TextStyle(fontSize: 13)),
-                  value: _selected.contains(option),
-                  onChanged: (v) => setState(() {
-                    if (v == true) {
-                      _selected.add(option);
-                    } else {
-                      _selected.remove(option);
-                    }
-                  }),
-                ),
-            ]
-          else
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final option in msg.options)
-                  ChoiceChip(
-                    label: Text(option),
-                    selected: _selected.contains(option),
-                    onSelected: (_) => setState(() => _selected
-                      ..clear()
-                      ..add(option)),
+                  ?.copyWith(color: theme.colorScheme.outline),
+            ),
+          ] else ...[
+            const SizedBox(height: 4),
+            Text(
+              'Type your answer below'
+              '${hasOptions ? ', or pick from the options.' : '.'}',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.outline),
+            ),
+            if (hasOptions) ...[
+              // The dropdown-arrow disclosure: collapsed by default; expands the
+              // pre-made checkboxes/chips as the click-to-pick fallback.
+              InkWell(
+                onTap: () => setState(() => _optionsOpen = !_optionsOpen),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _optionsOpen
+                            ? Icons.expand_less
+                            : Icons.expand_more,
+                        size: 18,
+                        color: theme.colorScheme.primary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _optionsOpen
+                            ? 'Hide options'
+                            : 'Pick from ${msg.options.length} options',
+                        style: theme.textTheme.labelMedium
+                            ?.copyWith(color: theme.colorScheme.primary),
+                      ),
+                    ],
                   ),
-              ],
-            ),
-          if (!answered) ...[
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => widget.onAnswer(msg, const []),
-                  child: const Text('Skip'),
                 ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: _selected.isEmpty
-                      ? null
-                      : () => widget.onAnswer(msg, _selected.toList()),
-                  child: const Text('Answer'),
-                ),
-              ],
-            ),
+              ),
+              if (_optionsOpen) _buildOptions(theme, msg),
+            ],
           ],
         ],
       ),
+    );
+  }
+
+  /// The fallback picker, revealed when the user expands the options dropdown.
+  Widget _buildOptions(ThemeData theme, SetupMsg msg) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (msg.multi)
+          for (final option in msg.options)
+            CheckboxListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(option, style: const TextStyle(fontSize: 13)),
+              value: _selected.contains(option),
+              onChanged: (v) => setState(() {
+                if (v == true) {
+                  _selected.add(option);
+                } else {
+                  _selected.remove(option);
+                }
+              }),
+            )
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final option in msg.options)
+                ChoiceChip(
+                  label: Text(option),
+                  selected: _selected.contains(option),
+                  onSelected: (_) => setState(() => _selected
+                    ..clear()
+                    ..add(option)),
+                ),
+            ],
+          ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            TextButton(
+              onPressed: () => widget.onAnswer(msg, const []),
+              child: const Text('Skip'),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: _selected.isEmpty
+                  ? null
+                  : () => widget.onAnswer(msg, _selected.toList()),
+              child: const Text('Add selected'),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -566,13 +651,21 @@ class _CallBar extends StatelessWidget {
 class _Composer extends StatelessWidget {
   const _Composer({
     required this.controller,
-    required this.busy,
+    required this.enabled,
+    required this.loading,
     required this.onSend,
     required this.hintText,
   });
 
   final TextEditingController controller;
-  final bool busy;
+
+  /// Whether the user can type/send right now. True whenever the host is idle
+  /// OR has an inline question awaiting a reply.
+  final bool enabled;
+
+  /// Whether the host is mid-turn with nothing for the user to answer — shows a
+  /// spinner in place of the send button.
+  final bool loading;
   final VoidCallback onSend;
   final String hintText;
 
@@ -585,10 +678,10 @@ class _Composer extends StatelessWidget {
           Expanded(
             child: SubmitOnEnter(
               onSubmit: onSend,
-              enabled: !busy,
+              enabled: enabled,
               child: TextField(
                 controller: controller,
-                enabled: !busy,
+                enabled: enabled,
                 minLines: 1,
                 maxLines: 3,
                 textInputAction: TextInputAction.newline,
@@ -601,7 +694,7 @@ class _Composer extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          busy
+          loading
               ? const SizedBox(
                   width: 36,
                   height: 36,

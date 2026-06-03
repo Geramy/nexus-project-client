@@ -2,10 +2,14 @@
 // Author: Geramy Loveless <support@nexus-projects.ai>
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
-/// The seven sections of the project profile. Every tag belongs to exactly one.
+/// The sections of the project profile. Every tag belongs to exactly one.
 /// Categories split into two families:
-///   - Intent (user-led): industries, platforms, objectives, features.
-///   - Stack (AI/resolver-derived, user confirms): languages, frameworks, libraries.
+///   - Intent (user-led): industries, platforms, objectives, features, services.
+///   - Stack (AI/resolver-derived, user confirms): languages, frameworks,
+///     databases, libraries.
+/// [databases] and [services] are curated/open so the host can capture anything
+/// the user describes in conversation (PostgreSQL, Redis, Stripe, Twilio, …)
+/// rather than being limited to a fixed list.
 enum TagCategory {
   industries,
   platforms,
@@ -13,7 +17,9 @@ enum TagCategory {
   features,
   languages,
   frameworks,
+  databases,
   libraries,
+  services,
 }
 
 /// How a section's "+ Add" picker behaves:
@@ -40,13 +46,16 @@ extension TagCategoryX on TagCategory {
         TagCategory.features => 'Features',
         TagCategory.languages => 'Languages',
         TagCategory.frameworks => 'Frameworks',
+        TagCategory.databases => 'Databases',
         TagCategory.libraries => 'Libraries',
+        TagCategory.services => 'Services & Integrations',
       };
 
   /// Whether this category is part of the resolver-derived stack family.
   bool get isStack => switch (this) {
         TagCategory.languages ||
         TagCategory.frameworks ||
+        TagCategory.databases ||
         TagCategory.libraries =>
           true,
         _ => false,
@@ -59,6 +68,10 @@ extension TagCategoryX on TagCategory {
         TagCategory.objectives => VocabKind.curated,
         TagCategory.features => VocabKind.curated,
         TagCategory.frameworks => VocabKind.curated,
+        // Curated, not closed: PostgreSQL/Redis/Stripe/Twilio etc. should always
+        // be taggable from the conversation even if not in the seed list.
+        TagCategory.databases => VocabKind.curated,
+        TagCategory.services => VocabKind.curated,
         TagCategory.libraries => VocabKind.open,
       };
 
@@ -72,6 +85,8 @@ extension TagCategoryX on TagCategory {
         TagCategory.objectives => kObjectives,
         TagCategory.features => kFeatures,
         TagCategory.frameworks => kFrameworks,
+        TagCategory.databases => kDatabases,
+        TagCategory.services => kServices,
         TagCategory.libraries => const [],
       };
 }
@@ -166,4 +181,38 @@ const List<String> kFrameworks = [
   'gRPC',
   'Drift',
   'Riverpod',
+];
+
+/// Curated seeds — databases & data stores (free entry encouraged: tag whatever
+/// the user actually describes). This is why "PostgreSQL" now lands somewhere.
+const List<String> kDatabases = [
+  'PostgreSQL',
+  'MySQL',
+  'MariaDB',
+  'SQLite',
+  'SQL Server',
+  'MongoDB',
+  'Redis',
+  'Cassandra',
+  'DynamoDB',
+  'Firestore',
+  'Elasticsearch',
+  'Neo4j',
+];
+
+/// Curated seeds — external services & integrations the product depends on
+/// (payments, auth, messaging, storage, maps, …). Free entry encouraged.
+const List<String> kServices = [
+  'Stripe',
+  'PayPal',
+  'Twilio',
+  'SendGrid',
+  'Firebase',
+  'Auth0',
+  'AWS S3',
+  'Google Maps',
+  'Mapbox',
+  'Push notifications (FCM/APNs)',
+  'OpenAI / LLM API',
+  'Algolia',
 ];
