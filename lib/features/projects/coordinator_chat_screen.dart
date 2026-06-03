@@ -38,6 +38,7 @@ import 'package:nexus_projects_client/services/audio/coordinator_duplex_voice_se
 import 'package:nexus_projects_client/widgets/live_mic_visualizer.dart';
 
 import '../../shared/ui/nexus_ui.dart';
+import '../../shared/ui/sticky_scroll.dart';
 
 /// Main interface for talking to a Project's Coordinator AI (the "Main Brain").
 /// Full bidirectional text + voice with live tool execution (the AI can create/update
@@ -63,6 +64,7 @@ class ProjectCoordinatorChatScreen extends ConsumerStatefulWidget {
 
 class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinatorChatScreen> {
   final TextEditingController _messageController = TextEditingController();
+  final StickyScrollController _sticky = StickyScrollController();
   final List<_ChatMessage> _messages = [];
   // Dedicated player for replaying a reply's audio from the transcript (separate
   // from the live TTS player so replay can't clash with an active call turn).
@@ -90,6 +92,7 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
   @override
   void initState() {
     super.initState();
+    _sticky.attach();
     _initializeCoordinator();
   }
 
@@ -333,6 +336,7 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
   @override
   void dispose() {
     _messageController.dispose();
+    _sticky.dispose();
     _duplexVoiceSession?.dispose();
     _voiceRecorder?.dispose();
     _replayPlayer.dispose();
@@ -607,6 +611,10 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
     final ready = _clientReady;
     final voiceActive = _isVoiceCallActive;
 
+    // Keep the transcript pinned to the bottom as messages/tokens stream in,
+    // unless the user has scrolled up to read history.
+    _sticky.stickToBottom();
+
     // If the active session changes (e.g. picked in the sidebar) while we're
     // open, switch to it. ref.listen runs outside build, so setState is safe.
     ref.listen<int?>(currentChatSessionProvider(widget.projectId), (prev, next) {
@@ -670,6 +678,7 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
 
           Expanded(
             child: ListView.builder(
+              controller: _sticky.controller,
               padding: const EdgeInsets.all(AppSpacing.lg),
               itemCount: _messages.length + (_isThinking ? 1 : 0),
               itemBuilder: (context, index) {

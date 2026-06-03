@@ -10,6 +10,7 @@ import '../../services/audio/coordinator_duplex_voice_session.dart'
     show VoiceState;
 import '../../widgets/live_mic_visualizer.dart';
 import '../../shared/ui/chat_markdown.dart';
+import '../../shared/ui/sticky_scroll.dart';
 import 'setup_chat_controller.dart';
 
 /// The Project Setup interview, rendered as a chat in the MainShell right outer
@@ -34,8 +35,7 @@ class SetupInterviewPanel extends ConsumerStatefulWidget {
 
 class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
   final _input = TextEditingController();
-  final _scroll = ScrollController();
-  int _lastCount = 0;
+  final _sticky = StickyScrollController();
 
   ({int projectId, int clientId}) get _key =>
       (projectId: widget.projectId, clientId: widget.clientId);
@@ -43,6 +43,7 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
   @override
   void initState() {
     super.initState();
+    _sticky.attach();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(setupChatControllerProvider(_key)).restoreOnce();
     });
@@ -51,20 +52,8 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
   @override
   void dispose() {
     _input.dispose();
-    _scroll.dispose();
+    _sticky.dispose();
     super.dispose();
-  }
-
-  void _scrollToEnd() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scroll.hasClients) {
-        _scroll.animateTo(
-          _scroll.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-        );
-      }
-    });
   }
 
   Future<void> _send() async {
@@ -89,10 +78,8 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
     final controller = ref.watch(setupChatControllerProvider(_key));
     final messages = controller.messages;
 
-    if (messages.length != _lastCount) {
-      _lastCount = messages.length;
-      _scrollToEnd();
-    }
+    // Pin to the bottom as messages stream in — unless the user has scrolled up.
+    _sticky.stickToBottom();
 
     return Container(
       color: theme.colorScheme.surface,
@@ -148,7 +135,7 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
             child: messages.isEmpty
                 ? const _EmptyState()
                 : ListView.builder(
-                    controller: _scroll,
+                    controller: _sticky.controller,
                     padding: const EdgeInsets.all(12),
                     itemCount: messages.length,
                     itemBuilder: (context, i) => _MessageView(
