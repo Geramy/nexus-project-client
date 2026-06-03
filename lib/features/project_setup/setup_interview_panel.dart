@@ -41,6 +41,9 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
   // Captures the "m" mute hotkey during a voice call without stealing keys from
   // the text composer (a focused TextField consumes character keys itself).
   final _hotkeyFocus = FocusNode(debugLabel: 'setup-interview-hotkeys');
+  // The composer's own focus, watched so the "m" hotkey is DISARMED whenever the
+  // user is typing — otherwise the shortcut swallows every "m" they type.
+  final _inputFocus = FocusNode(debugLabel: 'setup-interview-composer');
 
   ({int projectId, int clientId}) get _key =>
       (projectId: widget.projectId, clientId: widget.clientId);
@@ -49,9 +52,16 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
   void initState() {
     super.initState();
     _sticky.attach();
+    // Rebuild when the composer gains/loses focus so the "m" binding is added
+    // only while it's NOT focused (see build()).
+    _inputFocus.addListener(_onInputFocusChange);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(setupChatControllerProvider(_key)).restoreOnce();
     });
+  }
+
+  void _onInputFocusChange() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -59,6 +69,8 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
     _input.dispose();
     _sticky.dispose();
     _hotkeyFocus.dispose();
+    _inputFocus.removeListener(_onInputFocusChange);
+    _inputFocus.dispose();
     super.dispose();
   }
 
@@ -107,10 +119,16 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
     // Pin to the bottom as messages stream in — unless the user has scrolled up.
     _sticky.stickToBottom();
 
+    // The "m" → mute hotkey is only meaningful during a call, and must NOT be
+    // bound while the user is typing — otherwise it eats every "m" they enter.
+    // Binding it only when the composer is unfocused leaves plain typing alone.
+    final muteHotkeyArmed = controller.callActive && !_inputFocus.hasFocus;
+
     return CallbackShortcuts(
       bindings: <ShortcutActivator, VoidCallback>{
-        const SingleActivator(LogicalKeyboardKey.keyM, includeRepeats: false):
-            _onMuteHotkey,
+        if (muteHotkeyArmed)
+          const SingleActivator(LogicalKeyboardKey.keyM, includeRepeats: false):
+              _onMuteHotkey,
       },
       child: Focus(
         focusNode: _hotkeyFocus,
@@ -208,6 +226,7 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
             final canType = !controller.busy || pending != null;
             return _Composer(
               controller: _input,
+              focusNode: _inputFocus,
               enabled: canType,
               loading: controller.busy && pending == null,
               onSend: _send,
@@ -655,9 +674,11 @@ class _Composer extends StatelessWidget {
     required this.loading,
     required this.onSend,
     required this.hintText,
+    this.focusNode,
   });
 
   final TextEditingController controller;
+  final FocusNode? focusNode;
 
   /// Whether the user can type/send right now. True whenever the host is idle
   /// OR has an inline question awaiting a reply.
@@ -681,6 +702,7 @@ class _Composer extends StatelessWidget {
               enabled: enabled,
               child: TextField(
                 controller: controller,
+                focusNode: focusNode,
                 enabled: enabled,
                 minLines: 1,
                 maxLines: 3,
