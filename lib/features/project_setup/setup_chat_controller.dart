@@ -45,9 +45,14 @@ class SetupMsg {
   final String text;
   final List<String> options;
   final bool multi;
-  final Completer<List<String>>? completer;
+  final Completer<SetupAnswer>? completer;
   bool answered = false;
   List<String> selected = const [];
+
+  /// Set when the user answered this question by TYPING rather than picking
+  /// chips, so the card can show it was handled in chat (the typed words appear
+  /// as their own bubble above).
+  String? freeText;
 }
 
 /// Holds the live Project Setup interview (session + transcript) so the Tag
@@ -182,9 +187,9 @@ class SetupChatController extends ChangeNotifier {
 
   /// Presents a bounded question inline and returns the user's pick(s). The
   /// future completes when they answer/skip — nothing is lost by looking away.
-  Future<List<String>> _askQuestion(
+  Future<SetupAnswer> _askQuestion(
       String question, List<String> options, bool multi) {
-    final completer = Completer<List<String>>();
+    final completer = Completer<SetupAnswer>();
     final msg = SetupMsg(
       kind: SetupMsgKind.question,
       text: question,
@@ -208,6 +213,17 @@ class SetupChatController extends ChangeNotifier {
     return completer.future;
   }
 
+  /// The most recent inline question still awaiting an answer, if any. Drives
+  /// the composer: while one is pending the user can TYPE a reply (see
+  /// [answerQuestionWithText]) instead of being forced to click chips.
+  SetupMsg? get pendingQuestion {
+    for (var i = messages.length - 1; i >= 0; i--) {
+      final m = messages[i];
+      if (m.kind == SetupMsgKind.question && !m.answered) return m;
+    }
+    return null;
+  }
+
   void answerQuestion(SetupMsg msg, List<String> picks) {
     if (msg.answered) return;
     // A tap (or a mapped voice answer) wins; cancel any pending voice capture.
@@ -216,7 +232,25 @@ class SetupChatController extends ChangeNotifier {
     msg.selected = picks;
     notifyListeners();
     if (!(msg.completer?.isCompleted ?? true)) {
-      msg.completer!.complete(picks);
+      msg.completer!.complete(SetupAnswer.picks(picks));
+    }
+  }
+
+  /// Answers a pending inline question by free text typed in the composer. The
+  /// words show as the user's own chat bubble, the card locks (so it stops
+  /// blocking), and the host receives the reply verbatim and reacts — this is
+  /// the natural, conversation-first path; the chip picker is the fallback.
+  void answerQuestionWithText(SetupMsg msg, String text) {
+    final trimmed = text.trim();
+    if (msg.answered || trimmed.isEmpty) return;
+    _voice?.disarmQuestion();
+    msg.answered = true;
+    msg.freeText = trimmed;
+    // Echo the typed answer as a normal user turn in the transcript.
+    messages.add(SetupMsg(kind: SetupMsgKind.user, text: trimmed));
+    notifyListeners();
+    if (!(msg.completer?.isCompleted ?? true)) {
+      msg.completer!.complete(SetupAnswer.text(trimmed));
     }
   }
 

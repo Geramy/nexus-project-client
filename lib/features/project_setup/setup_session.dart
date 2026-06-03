@@ -26,7 +26,7 @@ class SetupSession {
     required this.projectName,
     required this.executor,
     required this.flow,
-    this.maxToolRounds = 40,
+    this.maxToolRounds = 12,
     this.enableThinking,
     this.leanContext = true,
   });
@@ -96,54 +96,46 @@ class SetupSession {
   List<String> get tagCategories => flow.stages.map((s) => s.key).toList();
 
   String _interviewPrompt() {
-    final stages = StringBuffer();
-    for (var i = 0; i < flow.stages.length; i++) {
-      final s = flow.stages[i];
-      stages.writeln('${i + 1}. ${s.title} (category `${s.key}`): ${s.guidance}');
+    final topics = StringBuffer();
+    for (final s in flow.stages) {
+      topics.writeln('- ${s.title} (category `${s.key}`): ${s.guidance}');
       if (s.vocab == SetupVocab.closed && s.suggestions.isNotEmpty) {
-        stages.writeln('   Allowed values ONLY: ${s.suggestions.join(', ')}.');
+        topics.writeln('    Allowed values ONLY: ${s.suggestions.join(', ')}.');
       } else if (s.suggestions.isNotEmpty) {
-        stages.writeln('   Suggested: ${s.suggestions.join(', ')}.');
+        topics.writeln('    Examples: ${s.suggestions.join(', ')}.');
       }
     }
     return '''
-You are the Project Setup host for the project "$projectName" (${flow.name}).
+You are the Project Setup host for "$projectName" (${flow.name}).
 
 ${flow.intro}
 
-Stages — drive them in order, finishing each before moving on:
-$stages
-Rules:
-- Ask ONE question at a time via `ask_question`; the user picks from options you
-  supply (unless a stage is free-form). Selection questions are MULTI-SELECT by
-  default — the user may pick several (e.g. multiple platforms, languages,
-  frameworks, libraries). Leave `multi` true (the default) for these. Set
-  `multi:false` ONLY for a strict single-choice question, such as a yes/no or the
-  end-of-stage "continue vs. add more" confirmation. After each answer, your VERY
-  NEXT call MUST be `propose_tags` using that stage's `category` — that is how
-  answers reach the board (propose one tag per selected value). Never ask two
-  questions without a `propose_tags` between.
-- ADAPTIVE SCOPE — the interview narrows to the chosen industry. Right AFTER you
-  propose `industries`, call `scope_status`. If it reports a sub-axis (e.g.
-  Gaming → "Genre"), ask THAT next using the values it returns as the options,
-  then `propose_tags` with the reported sub-axis category (e.g. `genre`). Call
-  `scope_status` again after `platforms`.
-- Before asking `objectives` and `features`, call `scope_options` for that
-  category and use the returned values as your question options — they are
-  tailored to the selected industry + sub-axis. Do NOT fall back to generic
-  options when scoped ones exist.
-- PLATFORM-CONDITIONAL STACK — when deriving `languages`/`frameworks`/
-  `libraries`, call `scope_options` with the right `platform` for EACH selected
-  surface and propose the stack it returns. The correct stack depends on the
-  platform: e.g. desktop/console games use C#/C++ engines (Unity/Unreal/Godot),
-  mobile games use Flutter/Flame (Dart), web games use TypeScript (Phaser). Never
-  propose a desktop/console game in Flutter, or force one language across all
-  platforms — honor what `scope_options(platform)` returns per surface.
-- END-OF-STAGE CHECK: before advancing a stage, ask the user (via
-  `ask_question`) whether they're done with it or want to add/adjust more
-  ("Looks good — continue" / "Add more"). Only advance when they choose to
-  continue; otherwise keep refining the current stage.
-- Use ONLY these `propose_tags` categories: ${tagCategories.join(', ')}.
+This is a CONVERSATION, not a form. Let the user describe their project in their
+own words; react, ask natural follow-ups, and build the profile from what they
+say. The topics below are what to COVER over the chat — in any sensible order,
+revisited as you learn more — NOT a script to march through:
+$topics
+How to work:
+- Talk like a helpful product partner. A spoken reply with NO tool call is fine —
+  that's how you ask an open question or react to what they said. You do not need
+  to call a tool every turn.
+- Use `ask_question` as a GUARDRAIL when bounded choices help the user decide, or
+  to confirm a direction — not for every exchange. Selection questions are
+  MULTI-SELECT by default (leave `multi` true); set `multi:false` only for a
+  strict single choice (yes/no, "continue vs. add more").
+- When you're confident about something the user said or picked, call
+  `propose_tags` to put it on the board. You MAY batch several tags in one call,
+  across categories. Tags save as `proposed` for the user to accept — you don't
+  need a `propose_tags` after every single message.
+- Capture databases and services you INFER from the description (orders/users →
+  a `databases` tag like PostgreSQL; payments → a `services` tag like Stripe).
+  Derive `languages`/`frameworks` yourself rather than quizzing the user.
+- ADAPTIVE SCOPE (optional helpers): after proposing `industries` you may call
+  `scope_status` to surface a sub-axis (e.g. Gaming → Genre) and `scope_options`
+  for industry/platform-tailored vocabulary. Use them when they help — honor the
+  platform-specific stack they return (e.g. desktop games → C#/C++ engines, not
+  Flutter); don't call them mechanically.
+- Only these `propose_tags` categories are valid: ${tagCategories.join(', ')}.
 - ${flow.finalizeGuidance}
 - Keep spoken replies to 1-3 sentences. Be concrete and friendly.
 ''';
@@ -215,18 +207,20 @@ How to work:
           : '';
 
       // Counts consecutive rounds that produced neither tool calls nor spoken
-      // text — a stalled turn. We auto-nudge it back into motion instead of
-      // making the user type "?" by hand.
+      // text — a true stall. We auto-nudge those back into motion. A spoken
+      // reply with no tool is a legitimate conversational turn and is NOT a stall.
       var emptyRounds = 0;
       for (var round = 0; round < maxToolRounds; round++) {
-        // Recompute per round: the system prompt and toolset both depend on the
-        // phase, which can flip to refine the moment finalize_setup runs.
-        final systemContent = stateSummary.isEmpty
-            ? _systemPrompt()
-            : '${_systemPrompt()}\n\n$stateSummary';
-        final messages = [
-          {'role': 'system', 'content': systemContent},
+        // The system prompt is kept STATIC (phase-only) and the tool list is
+        // deterministic, so the [system + tools] prefix is byte-identical every
+        // round and across turns — which is exactly what llama.cpp/Lemonade
+        // prefix-caching reuses. The volatile board state is appended at the TAIL
+        // (after history) so it never invalidates that cached prefix.
+        final messages = <Map<String, dynamic>>[
+          {'role': 'system', 'content': _systemPrompt()},
           ...(leanContext ? _recentHistory() : _history),
+          if (stateSummary.isNotEmpty)
+            {'role': 'system', 'content': stateSummary},
         ];
         final tools = phase == SetupPhase.refine
             ? SetupTools.buildRefineToolSchemas()
@@ -264,14 +258,12 @@ How to work:
         });
 
         if (toolCalls.isEmpty) {
-          // The bounded interview is tool-driven: the host should ALWAYS act via
-          // a tool (ask_question / propose_tags / lookup_package / finalize). A
-          // turn that ends with NO tool call — whether empty or just narration
-          // ("Let me set that up…") — is a stall; auto-nudge it to take the next
-          // step, up to twice, so the user never has to type "?" to unstick it.
-          // The refine phase is open conversation, so plain-text replies there
-          // are legitimate and we don't nudge.
-          if (phase == SetupPhase.interview && emptyRounds < 2) {
+          // A SPOKEN reply with no tool is a normal conversational turn now (an
+          // open question or a reaction) — hand it back to the user. Only a truly
+          // EMPTY round (no text AND no tool) is a stall worth auto-nudging, so
+          // the user never has to type "?" to unstick a silent model.
+          final spoke = content.trim().isNotEmpty;
+          if (!spoke && phase == SetupPhase.interview && emptyRounds < 2) {
             emptyRounds++;
             _history.add({'role': 'user', 'content': _continueNudge});
             continue;
@@ -346,6 +338,10 @@ How to work:
           tools: tools,
           temperature: 0.6,
           enableThinking: enableThinking,
+          // Ask the server (llama.cpp / Lemonade) to reuse the KV cache for the
+          // identical [system + tools] prefix we now hold stable across rounds
+          // and turns. Harmless on backends that ignore it.
+          extra: const {'cache_prompt': true},
         );
       } catch (e) {
         lastError = e;

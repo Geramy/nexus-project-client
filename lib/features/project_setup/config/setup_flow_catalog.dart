@@ -33,12 +33,15 @@ final SetupFlowDefinition applicationDevelopmentFlow = SetupFlowDefinition(
   projectType: 'application-development',
   name: 'Software project setup',
   intro:
-      'Interview the user with SHORT, bounded multiple-choice questions to build a '
-      'structured profile across the sections below. Ask ONE question at a time via '
-      '`ask_question`; after each answer, your VERY NEXT call MUST be `propose_tags` '
-      'for that answer. Never ask programming languages or frameworks — derive the '
-      'stack automatically (Flutter+Dart for UI; C#/ASP.NET Core+EF Core for the API; '
-      'PostgreSQL) and propose `languages`/`frameworks` tags yourself after features.',
+      'Have a friendly, natural CONVERSATION that walks the user through describing '
+      'their project — let THEM explain it in their own words, and build the profile '
+      'from what they say. The sections below are topics to COVER (in any sensible '
+      'order), not a rigid script. Use `ask_question` to offer bounded choices when '
+      'it helps the user decide or to confirm — not for every turn. As the user '
+      'describes their software, capture what you hear as tags: a delivery app that '
+      'stores orders implies a `databases` tag (e.g. PostgreSQL); Stripe/Twilio/maps '
+      'imply `services` tags. Derive the code stack (`languages`/`frameworks`) '
+      'yourself rather than quizzing the user on it.',
   stages: [
     _s('industries', TagCategoryX(TagCategory.industries).label,
         'What industry/industries is this for? Propose `industries` tags.',
@@ -59,10 +62,19 @@ final SetupFlowDefinition applicationDevelopmentFlow = SetupFlowDefinition(
     _s('frameworks', TagCategoryX(TagCategory.frameworks).label,
         'AI-DERIVED — do NOT ask the user. Propose `frameworks` tags for the stack.',
         input: SetupStageInput.choices, suggestions: kFrameworks),
+    _s('databases', TagCategoryX(TagCategory.databases).label,
+        'Data stores the project needs, inferred from what the user describes '
+        '(e.g. orders/users → PostgreSQL; caching → Redis). Free entry — tag '
+        'whatever fits. Propose `databases` tags.',
+        suggestions: kDatabases),
     _s('libraries', TagCategoryX(TagCategory.libraries).label,
-        'LAST: specific packages implementing the features — verify each via '
+        'Specific packages implementing the features — verify each via '
         '`lookup_package`, set `forLanguage`, propose as `libraries`.',
         vocab: SetupVocab.open),
+    _s('services', TagCategoryX(TagCategory.services).label,
+        'External services/integrations the product depends on (payments, auth, '
+        'SMS/email, maps, storage, push). Free entry. Propose `services` tags.',
+        suggestions: kServices),
   ],
   finalizeGuidance:
       'When satisfied, call `finalize_setup` to generate /PLANS (Overview + one '
