@@ -14,6 +14,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/providers/lean_context_provider.dart';
 import '../../core/providers/theme_provider.dart';
 import '../../infrastructure/nexus/providers/nexus_account_providers.dart';
 import '../../shared/ui/nexus_ui.dart';
@@ -33,6 +34,7 @@ class AccountView extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const _AppearancePicker(),
+          const _LeanContextToggle(),
           Expanded(
             child: auth.isSignedIn
                 ? const AccountDashboard()
@@ -43,6 +45,44 @@ class AccountView extends ConsumerWidget {
                     : const AccountAuthForms(),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Toggle for "Lean context" mode — reconstruct AI state from the harness (DB)
+/// instead of replaying full conversations / sending all tools. Persists via
+/// [leanContextNotifierProvider].
+class _LeanContextToggle extends ConsumerWidget {
+  const _LeanContextToggle();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final on = ref.watch(leanContextNotifierProvider);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.xl, AppSpacing.md, AppSpacing.xl, 0),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 860),
+        child: NexusCard(
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
+          child: SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: on,
+            onChanged: (v) =>
+                ref.read(leanContextNotifierProvider.notifier).set(v),
+            title: Text('Lean context',
+                style: Theme.of(context).textTheme.titleMedium),
+            subtitle: Text(
+              'Reconstruct setup/coordinator state from the project (the board, '
+              'plans, tasks) instead of replaying the full chat, and load tools '
+              'on demand. Lower token use. Turn off to use full history + all '
+              'tools every message.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ),
       ),
     );
   }

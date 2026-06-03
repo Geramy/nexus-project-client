@@ -1248,6 +1248,14 @@ class CoordinatorToolExecutor {
     if (start == null && due == null) {
       return 'set_task_dates: nothing to change (provide start_date and/or due_date).';
     }
+    // Enforce start <= due against the EFFECTIVE dates (the patch merged over
+    // whatever the task already has), so the AI can't set an invalid range.
+    final effStart = start != null ? start.value : task.startDate;
+    final effDue = due != null ? due.value : task.dueDate;
+    if (effStart != null && effDue != null && effStart.isAfter(effDue)) {
+      return 'set_task_dates failed: start date (${effStart.toIso8601String().substring(0, 10)}) '
+          'cannot be after the due date (${effDue.toIso8601String().substring(0, 10)}).';
+    }
     await db.setTaskDates(taskId, start: start, due: due);
     final parts = <String>[];
     if (start != null) parts.add('start=${(args['start_date'] as String?)?.isEmpty ?? true ? 'cleared' : args['start_date']}');

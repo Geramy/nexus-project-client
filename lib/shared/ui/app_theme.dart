@@ -239,9 +239,13 @@ class AppTheme {
           shape: pill,
         ),
       ),
+      // NB: don't force a global foregroundColor here. A plain IconButton's M3
+      // default is already onSurfaceVariant, but pinning it would override the
+      // FILLED/tonal variants too — painting a muted icon over the primary fill
+      // (the "purple send icon on a purple button" bug). Letting each variant
+      // resolve its own default keeps filled buttons at onPrimary contrast.
       iconButtonTheme: IconButtonThemeData(
         style: IconButton.styleFrom(
-          foregroundColor: scheme.onSurfaceVariant,
           shape: const CircleBorder(),
         ),
       ),

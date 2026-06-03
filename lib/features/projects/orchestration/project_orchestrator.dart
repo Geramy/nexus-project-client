@@ -249,10 +249,11 @@ class ProjectOrchestrator {
     final prompts = await _loadPrompts();
     final vars = _varsFor(task, branch, targetBranch: base);
 
-    // A fresh chat session is the worker's ephemeral context + provenance.
-    final workerSessionPk = await _db.createChatSession(
-      ChatSessionsCompanion.insert(project_fk: projectId),
-    );
+    // One conversation PER AGENT: reuse this worker's dedicated session so all
+    // of its tasks land in a single ongoing thread (the person can follow the
+    // agent there) instead of a brand-new session on every task update.
+    final workerSessionPk =
+        await _db.getOrCreateAgentChatSession(projectId, agentFk, persona.name);
     _attempts[task.task_pk] = (_attempts[task.task_pk] ?? 0) + 1;
     await _db.markTaskRunning(task.task_pk, workerSessionPk: workerSessionPk, workBranch: branch);
 
@@ -272,6 +273,9 @@ class ProjectOrchestrator {
       workspace: workspace,
       git: git,
       buildService: buildService,
+      // Autonomous coders need file/git/build tools directly — no progressive
+      // disclosure (that's for the interactive PM chat).
+      leanTools: false,
       systemPromptOverride:
           '${defaultSystemPrompt(role)}\n${prompts.render(OrchestratorPromptField.workerFraming, vars)}',
       enableThinking: resolveEnableThinking(
@@ -365,9 +369,9 @@ class ProjectOrchestrator {
 
     final prompts = await _loadPrompts();
     final vars = _varsFor(task, branch);
-    final sessionPk = await _db.createChatSession(
-      ChatSessionsCompanion.insert(project_fk: projectId),
-    );
+    // Reuse the Verification Agent's single per-agent session (see worker stage).
+    final sessionPk =
+        await _db.getOrCreateAgentChatSession(projectId, persona.agent_pk, persona.name);
 
     final session = ProjectCoordinatorSession(
       client: resolved.client,
@@ -382,6 +386,9 @@ class ProjectOrchestrator {
       workspace: handles.ws,
       git: handles.git,
       buildService: handles.build,
+      // Autonomous coders need file/git/build tools directly — no progressive
+      // disclosure (that's for the interactive PM chat).
+      leanTools: false,
       systemPromptOverride:
           '${defaultSystemPrompt(AgentRole.verificationAgent)}\n${prompts.render(OrchestratorPromptField.verifyFraming, vars)}',
       enableThinking: resolveEnableThinking(
@@ -518,9 +525,9 @@ class ProjectOrchestrator {
     final vars = _varsFor(task, branch, targetBranch: targetBranch);
     await _db.beginTaskMerge(task.task_pk);
 
-    final sessionPk = await _db.createChatSession(
-      ChatSessionsCompanion.insert(project_fk: projectId),
-    );
+    // Reuse the Coordinator's single per-agent session (see worker stage).
+    final sessionPk =
+        await _db.getOrCreateAgentChatSession(projectId, persona.agent_pk, persona.name);
 
     final session = ProjectCoordinatorSession(
       client: resolved.client,
@@ -535,6 +542,9 @@ class ProjectOrchestrator {
       workspace: handles.ws,
       git: handles.git,
       buildService: handles.build,
+      // Autonomous coders need file/git/build tools directly — no progressive
+      // disclosure (that's for the interactive PM chat).
+      leanTools: false,
       systemPromptOverride:
           '${defaultSystemPrompt(AgentRole.coordinator)}\n${prompts.render(OrchestratorPromptField.mergeFraming, vars)}',
       enableThinking: resolveEnableThinking(

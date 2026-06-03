@@ -102,6 +102,14 @@ class SetupVoiceSession {
       _speaking ||
       (_muteUntil != null && DateTime.now().isBefore(_muteUntil!));
 
+  /// User-controlled mic mute (the mute button / "m" hotkey). Independent of the
+  /// echo-suppression [_muted] above — when on, the user's mic is silenced to the
+  /// VAD so nothing they say is transcribed until they unmute.
+  bool _userMuted = false;
+  bool get isMuted => _userMuted;
+  void setMuted(bool value) => _userMuted = value;
+  bool toggleMute() => _userMuted = !_userMuted;
+
   Stream<VoiceState> get state => _stateController.stream;
   bool get isActive => _isActive;
 
@@ -123,7 +131,7 @@ class SetupVoiceSession {
   /// the AI's own TTS. This is what stops the AI transcribing itself and
   /// talking in a loop; the post-utterance [_muted] check is just a backstop.
   Stream<Uint8List> _gateForEcho(Stream<Uint8List> pcm) =>
-      pcm.map((frame) => _muted ? Uint8List(frame.length) : frame);
+      pcm.map((frame) => (_muted || _userMuted) ? Uint8List(frame.length) : frame);
 
   /// Speak [text] (e.g. a greeting or a spoken reply between questions),
   /// serialized behind any in-flight speech. Mic input is ignored while we talk.

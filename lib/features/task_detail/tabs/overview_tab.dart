@@ -74,12 +74,18 @@ class _OverviewTabState extends ConsumerState<OverviewTab> {
   }
 
   Future<void> _pickDate({required bool isStart}) async {
-    final initial = (isStart ? _startDate : _dueDate) ?? DateTime.now();
+    // Enforce start <= due right in the picker: a start can't be later than an
+    // existing due date, and a due can't be earlier than an existing start.
+    final firstDate = isStart ? DateTime(2020) : (_startDate ?? DateTime(2020));
+    final lastDate = isStart ? (_dueDate ?? DateTime(2100)) : DateTime(2100);
+    var initial = (isStart ? _startDate : _dueDate) ?? DateTime.now();
+    if (initial.isBefore(firstDate)) initial = firstDate;
+    if (initial.isAfter(lastDate)) initial = lastDate;
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
+      firstDate: firstDate,
+      lastDate: lastDate,
     );
     if (picked != null) {
       setState(() {
@@ -95,6 +101,13 @@ class _OverviewTabState extends ConsumerState<OverviewTab> {
   Future<void> _save() async {
     if (_titleCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Title is required.')));
+      return;
+    }
+    if (_startDate != null &&
+        _dueDate != null &&
+        _startDate!.isAfter(_dueDate!)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Start date can’t be after the due date.')));
       return;
     }
     setState(() => _saving = true);

@@ -82,7 +82,30 @@ class ProjectCoordinatorSession {
     this.buildService,
     this.systemPromptOverride,
     this.enableThinking,
+    this.leanTools = true,
   });
+
+  /// When true (default), only the core task/plan tools are offered each turn;
+  /// the file/git/CI groups are pulled in on demand via `request_tools`, cutting
+  /// the per-call tool payload. When false, all tools are offered every turn.
+  final bool leanTools;
+
+  /// Tool names gated behind `request_tools`, grouped by capability. Kept out of
+  /// the default payload; the model unlocks a group when it needs it.
+  static const Map<String, Set<String>> _gatedToolGroups = {
+    'files': {
+      'list_files', 'read_file', 'write_file', 'create_directory',
+      'move_path', 'delete_path', 'delete_file', 'delete_folder',
+    },
+    'git': {
+      'git_status', 'git_log', 'git_commit', 'git_branches',
+      'git_create_branch', 'git_checkout_branch',
+    },
+    'ci': {'build_docker_image', 'run_workflow', 'list_ci_runs', 'get_ci_run'},
+  };
+
+  /// Tool groups unlocked this conversation via `request_tools`.
+  final Set<String> _unlockedToolGroups = {};
 
   /// Effective model "thinking mode" for this session's requests: true/false
   /// forces `enable_thinking`; null omits it (model default). Resolved by the
@@ -94,6 +117,45 @@ class ProjectCoordinatorSession {
       (model != null && model!.trim().isNotEmpty) ? model!.trim() : 'default-coordinator';
 
   List<Map<String, dynamic>> get history => List.unmodifiable(_history);
+
+  /// Filter the full tool list to those active right now: every non-gated tool,
+  /// plus the tools of any unlocked group, plus the `request_tools` meta-tool.
+  /// When [leanTools] is off, returns the full list unchanged.
+  List<Map<String, dynamic>> _effectiveTools(List<Map<String, dynamic>> all) {
+    if (!leanTools) return all;
+    final hidden = <String>{};
+    _gatedToolGroups.forEach((group, names) {
+      if (!_unlockedToolGroups.contains(group)) hidden.addAll(names);
+    });
+    final out = all.where((t) {
+      final name = (t['function'] as Map?)?['name']?.toString() ?? '';
+      return !hidden.contains(name);
+    }).toList();
+    out.add(_requestToolsSchema);
+    return out;
+  }
+
+  static const Map<String, dynamic> _requestToolsSchema = {
+    'type': 'function',
+    'function': {
+      'name': 'request_tools',
+      'description':
+          'Unlock an additional group of tools for this conversation when you '
+              'need it, then use them on your next step. Groups: "files" '
+              '(read/write project files), "git" (repo status/commit/branches), '
+              '"ci" (build images, run CI workflows, read CI logs).',
+      'parameters': {
+        'type': 'object',
+        'properties': {
+          'group': {
+            'type': 'string',
+            'enum': ['files', 'git', 'ci'],
+          },
+        },
+        'required': ['group'],
+      },
+    },
+  };
 
   /// Builds rich live context from the DB when available (tasks + future plan metadata).
   Future<String> getRichProjectContext() async {
@@ -155,9 +217,26 @@ class ProjectCoordinatorSession {
     buffer.writeln('CRITICAL: every task MUST be assigned to a worker agent. When you create_task, pass agent_persona_id (call list_agents first to pick the best-fit specialist). Never leave a task unassigned — an unassigned task is invisible to the orchestrator and never gets worked. If you create a task without naming an agent, a default worker is auto-assigned, but you should choose the right one.');
     buffer.writeln('- Plans→tasks: when the user changes the idea, edit the PLAN first — add/adjust "- [ ] …" outline items in the relevant plan doc (update_plan/write_plan). Every plan write AUTOMATICALLY creates tasks for any new outline items (each line is annotated with its task id, so edits never double-create). Tell the user which tasks were created. sync_plans_to_tasks is also available to run the same pass on demand.');
     buffer.writeln('- Plans: list_plans, create_plan, read_plan, write_plan, rename_plan, delete_plan, link_task_to_plan. ${planFocus.isNotEmpty ? '($planFocus operate on the currently-open plan.) ' : ''}');
-    buffer.writeln('- Files (project workspace): list_files, read_file, write_file, create_directory, move_path, delete_path.');
-    buffer.writeln('- Git (workspace repo): git_status, git_log, git_commit, git_branches, git_create_branch, git_checkout_branch.');
-    buffer.writeln('- Build/CI: build_docker_image, run_workflow (GitHub-Actions YAML, runs locally), list_ci_runs, get_ci_run (read logs/errors to diagnose failures).');
+    final filesOn = !leanTools || _unlockedToolGroups.contains('files');
+    final gitOn = !leanTools || _unlockedToolGroups.contains('git');
+    final ciOn = !leanTools || _unlockedToolGroups.contains('ci');
+    if (filesOn) {
+      buffer.writeln('- Files (project workspace): list_files, read_file, write_file, create_directory, move_path, delete_path.');
+    }
+    if (gitOn) {
+      buffer.writeln('- Git (workspace repo): git_status, git_log, git_commit, git_branches, git_create_branch, git_checkout_branch.');
+    }
+    if (ciOn) {
+      buffer.writeln('- Build/CI: build_docker_image, run_workflow (GitHub-Actions YAML, runs locally), list_ci_runs, get_ci_run (read logs/errors to diagnose failures).');
+    }
+    if (!filesOn || !gitOn || !ciOn) {
+      final locked = [
+        if (!filesOn) 'files (read/write project files)',
+        if (!gitOn) 'git (repo status/commit/branches)',
+        if (!ciOn) 'ci (build/run workflows, read CI logs)',
+      ].join(', ');
+      buffer.writeln('- On request: $locked — call request_tools(group) to unlock the group, THEN use those tools next.');
+    }
     buffer.writeln('- Other: view_current_plan, generate_diagram, propose_plan_adjustment.');
     buffer.writeln('Prefer reading (list_/get_/read_) before mutating. Only delete when the user clearly asks.');
     buffer.writeln('After you call tools, ALWAYS follow up with a short spoken sentence telling the user what you found or did. Never end a turn with only tool calls and no words.');
@@ -254,13 +333,15 @@ class ProjectCoordinatorSession {
     // Offer the plan tools whenever a plan store is available — not only when a
     // specific plan is open — so the coordinator can list/read/create plans in
     // the general project chat (PLANS/ exists from the start of planning).
-    final tools = CoordinatorTools.buildToolSchemas(includePlanTools: planStore != null);
+    final allTools = CoordinatorTools.buildToolSchemas(includePlanTools: planStore != null);
     final executor = db != null
         ? CoordinatorToolExecutor(db: db!, projectId: projectId, inference: client, chatSessionPk: chatSessionPk, openPlanPath: openPlanPath, planStore: planStore, permissions: permissions, confirmAsk: confirmAsk, agentName: agentName, workspace: workspace, git: git, buildService: buildService)
         : null;
 
     try {
       for (var round = 0; round < maxToolRounds; round++) {
+        // Rebuilt each round so a request_tools unlock takes effect immediately.
+        final tools = _effectiveTools(allTools);
         final sys = await _buildSystemPrompt(currentPlanContext: currentPlanContext);
         final messages = _sanitizeForWire([
           {'role': 'system', 'content': sys},
@@ -314,6 +395,28 @@ class ProjectCoordinatorSession {
             final raw = call.function.arguments.trim();
             if (raw.startsWith('{')) args = (jsonDecode(raw) as Map).cast<String, dynamic>();
           } catch (_) {}
+
+          // Progressive tool disclosure: unlock a gated group for the rest of
+          // the conversation. Handled here (session state), not the executor.
+          if (call.function.name == 'request_tools') {
+            final group = args['group']?.toString() ?? '';
+            final String note;
+            if (_gatedToolGroups.containsKey(group)) {
+              _unlockedToolGroups.add(group);
+              note = 'Unlocked "$group" tools — they are now available; call '
+                  'them on your next step.';
+            } else {
+              note = 'Unknown tool group "$group". Valid groups: '
+                  '${_gatedToolGroups.keys.join(', ')}.';
+            }
+            onToolResult?.call(note);
+            _history.add({
+              'role': 'tool',
+              'tool_call_id': call.id,
+              'content': note,
+            });
+            continue;
+          }
 
           final action = _loopGuard.observe(call.function.name, args);
           if (action == LoopAction.block) {

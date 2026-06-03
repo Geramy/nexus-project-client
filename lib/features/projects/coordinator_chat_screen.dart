@@ -39,6 +39,8 @@ import 'package:nexus_projects_client/widgets/live_mic_visualizer.dart';
 
 import '../../shared/ui/nexus_ui.dart';
 import '../../shared/ui/sticky_scroll.dart';
+import '../../shared/ui/submit_on_enter.dart';
+import '../../core/providers/lean_context_provider.dart';
 
 /// Main interface for talking to a Project's Coordinator AI (the "Main Brain").
 /// Full bidirectional text + voice with live tool execution (the AI can create/update
@@ -269,6 +271,7 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
         enableThinking: resolveEnableThinking(
           agent: personaThinkingMode(persona?.configJson, personaName: persona?.name),
         ),
+        leanTools: ref.read(leanContextNotifierProvider),
       );
 
       // Load the session's persisted messages + restore the LLM history.
@@ -868,16 +871,22 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
                   : Row(
                       children: [
                         Expanded(
-                          child: TextField(
-                            controller: _messageController,
-                            decoration: InputDecoration(
-                              hintText: ready
-                                  ? 'Tell the Coordinator what to do (or tap the call button for voice)...'
-                                  : 'Configure an inference server in Agents Hub to enable the Coordinator',
-                              border: const OutlineInputBorder(),
-                            ),
-                            onSubmitted: (_) => _sendMessage(),
+                          child: SubmitOnEnter(
+                            onSubmit: _sendMessage,
                             enabled: ready && !_isSending,
+                            child: TextField(
+                              controller: _messageController,
+                              minLines: 1,
+                              maxLines: 5,
+                              textInputAction: TextInputAction.newline,
+                              decoration: InputDecoration(
+                                hintText: ready
+                                    ? 'Tell the Coordinator what to do — Enter to send, Shift+Enter for a new line'
+                                    : 'Configure an inference server in Agents Hub to enable the Coordinator',
+                                border: const OutlineInputBorder(),
+                              ),
+                              enabled: ready && !_isSending,
+                            ),
                           ),
                         ),
                         const SizedBox(width: AppSpacing.sm),

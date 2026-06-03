@@ -954,9 +954,27 @@ class NexusDatabase extends _$NexusDatabase {
   }
 
   /// Partial status update (used by Kanban drag-drop).
+  ///
+  /// A manual board move also reconciles the orchestration [executionStatus] so
+  /// the change is authoritative and sticks: dragging a card to **Done** marks
+  /// it `done` (the orchestrator never re-touches it), and back to **Todo**
+  /// resets it to `idle`. Without this, a card dropped on Done kept a stale
+  /// exec status (e.g. `running`/`submitted`) and an in-flight or next-tick
+  /// orchestrator pass could clobber the status straight back. Columns with no
+  /// clean 1:1 mapping (In Progress / Review) leave exec untouched.
   Future<void> updateTaskStatus(int taskPk, String newStatus) async {
-    await (update(tasks)..where((t) => t.task_pk.equals(taskPk)))
-        .write(TasksCompanion(status: Value(newStatus), updatedAt: Value(DateTime.now())));
+    final exec = switch (newStatus) {
+      TaskStatus.done => const Value(TaskExecStatus.done),
+      TaskStatus.todo => const Value(TaskExecStatus.idle),
+      _ => const Value<String>.absent(),
+    };
+    await (update(tasks)..where((t) => t.task_pk.equals(taskPk))).write(
+      TasksCompanion(
+        status: Value(newStatus),
+        executionStatus: exec,
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   /// Assign (or clear, with null) the agent persona responsible for a task.
@@ -1277,6 +1295,33 @@ class NexusDatabase extends _$NexusDatabase {
     return createChatSession(ChatSessionsCompanion.insert(
       project_fk: projectPk,
       plan_path: planPath != null ? Value(planPath) : const Value.absent(),
+    ));
+  }
+
+  /// Scope marker stored in [ChatSessions.plan_path] for an agent's dedicated
+  /// session. Lets all of one agent's autonomous task work show up as a SINGLE
+  /// ongoing conversation (keyed by agent) instead of a brand-new session per
+  /// task/stage. It can't collide with the general project chat (plan_path IS
+  /// NULL) or a plan chat (a real `/PLANS/...` path), so [getOrCreateChatSession]
+  /// keeps returning the human's project-level session untouched.
+  static String agentSessionScope(int agentPk) => '#agent:$agentPk';
+
+  /// The one chat session that belongs to [agentPk] within a project: created
+  /// once (titled [agentName] so it reads nicely in the sidebar) and reused for
+  /// every task that agent runs, so the board no longer spawns a fresh session
+  /// on each task update. Returns its pk.
+  Future<int> getOrCreateAgentChatSession(
+      int projectPk, int agentPk, String agentName) async {
+    final scope = agentSessionScope(agentPk);
+    final existing = await (select(chatSessions)
+          ..where((s) => s.project_fk.equals(projectPk) & s.plan_path.equals(scope))
+          ..orderBy([(s) => OrderingTerm(expression: s.updatedAt, mode: OrderingMode.desc)]))
+        .get();
+    if (existing.isNotEmpty) return existing.first.session_pk;
+    return createChatSession(ChatSessionsCompanion.insert(
+      project_fk: projectPk,
+      plan_path: Value(scope),
+      title: Value(agentName.trim().isEmpty ? 'Agent' : agentName.trim()),
     ));
   }
 

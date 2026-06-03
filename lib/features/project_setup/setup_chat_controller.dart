@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/database_provider.dart';
+import '../../core/providers/lean_context_provider.dart';
 import '../../infrastructure/registry/verification_service.dart';
 import '../../infrastructure/workspace/workspace_provider.dart';
 import '../../services/audio/audio_recorder_service.dart';
@@ -85,6 +86,17 @@ class SetupChatController extends ChangeNotifier {
 
   bool get callActive => _voice?.isActive ?? false;
 
+  /// Whether the user has muted their mic during call mode.
+  bool get micMuted => _voice?.isMuted ?? false;
+
+  /// Toggle the mic mute (mute button / "m" hotkey). No-op when not in a call.
+  void toggleMicMute() {
+    final v = _voice;
+    if (v == null || !v.isActive) return;
+    v.toggleMute();
+    notifyListeners();
+  }
+
   /// The recorder backing the active call, so the panel can show live levels.
   AudioRecorderService? get voiceRecorder => _voiceRecorder;
 
@@ -155,6 +167,7 @@ class SetupChatController extends ChangeNotifier {
       executor: executor,
       flow: flow,
       enableThinking: resolved.enableThinking,
+      leanContext: _ref.read(leanContextNotifierProvider),
     );
     // If we resumed into refinement (or already finalized), start in refine.
     if (refining) _session!.enterRefinePhase();
@@ -307,8 +320,9 @@ class SetupChatController extends ChangeNotifier {
   }
 
   /// Ends refinement: turns every plan outline item into a task (idempotently —
-  /// see [PlanTaskSync]), marks setup `complete`, and drops the user onto the
-  /// Chat tab where the coordinator can keep refining the breakdown.
+  /// see [PlanTaskSync]) and marks setup `complete`. The caller (the Setup tab's
+  /// "Done Refining - Finish" action) then closes the wizard and advances to the
+  /// Tasks workflow.
   Future<void> completeSetup() async {
     refining = false;
     final db = _ref.read(nexusDatabaseProvider);
