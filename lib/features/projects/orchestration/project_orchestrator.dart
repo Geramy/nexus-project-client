@@ -272,6 +272,9 @@ class ProjectOrchestrator {
       workspace: workspace,
       git: git,
       buildService: buildService,
+      // Autonomous coders need file/git/build tools directly — no progressive
+      // disclosure (that's for the interactive PM chat).
+      leanTools: false,
       systemPromptOverride:
           '${defaultSystemPrompt(role)}\n${prompts.render(OrchestratorPromptField.workerFraming, vars)}',
       enableThinking: resolveEnableThinking(
@@ -382,6 +385,9 @@ class ProjectOrchestrator {
       workspace: handles.ws,
       git: handles.git,
       buildService: handles.build,
+      // Autonomous coders need file/git/build tools directly — no progressive
+      // disclosure (that's for the interactive PM chat).
+      leanTools: false,
       systemPromptOverride:
           '${defaultSystemPrompt(AgentRole.verificationAgent)}\n${prompts.render(OrchestratorPromptField.verifyFraming, vars)}',
       enableThinking: resolveEnableThinking(
@@ -535,6 +541,9 @@ class ProjectOrchestrator {
       workspace: handles.ws,
       git: handles.git,
       buildService: handles.build,
+      // Autonomous coders need file/git/build tools directly — no progressive
+      // disclosure (that's for the interactive PM chat).
+      leanTools: false,
       systemPromptOverride:
           '${defaultSystemPrompt(AgentRole.coordinator)}\n${prompts.render(OrchestratorPromptField.mergeFraming, vars)}',
       enableThinking: resolveEnableThinking(

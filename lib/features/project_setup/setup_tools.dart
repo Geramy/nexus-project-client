@@ -394,6 +394,27 @@ class SetupToolExecutor {
     return (industries: industries, platforms: platforms, subAxes: subAxes);
   }
 
+  /// Compact snapshot of the project's current selections (proposed + accepted,
+  /// excluding rejected), grouped by category. Injected into the interview
+  /// system prompt so the host knows what's already chosen WITHOUT replaying the
+  /// whole transcript — the board (DB) is the source of truth.
+  Future<String> setupStateSummary() async {
+    final tags = await db.getTagsForProject(projectPk);
+    final byCat = <String, List<String>>{};
+    for (final t in tags) {
+      if (t.status == 'rejected') continue;
+      (byCat.putIfAbsent(t.category, () => <String>[])).add(t.value);
+    }
+    if (byCat.isEmpty) {
+      return 'BOARD STATE: nothing selected yet.';
+    }
+    final b = StringBuffer(
+        'BOARD STATE (the source of truth — do NOT re-ask what is already '
+        'chosen; build on it):');
+    byCat.forEach((cat, vals) => b.write('\n- $cat: ${vals.join(', ')}'));
+    return b.toString();
+  }
+
   Future<String> _scopeStatus() async {
     final s = await _readScope();
     if (s.industries.isEmpty) {

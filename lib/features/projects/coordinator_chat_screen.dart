@@ -39,6 +39,7 @@ import 'package:nexus_projects_client/widgets/live_mic_visualizer.dart';
 
 import '../../shared/ui/nexus_ui.dart';
 import '../../shared/ui/sticky_scroll.dart';
+import '../../core/providers/lean_context_provider.dart';
 
 /// Main interface for talking to a Project's Coordinator AI (the "Main Brain").
 /// Full bidirectional text + voice with live tool execution (the AI can create/update
@@ -269,6 +270,7 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
         enableThinking: resolveEnableThinking(
           agent: personaThinkingMode(persona?.configJson, personaName: persona?.name),
         ),
+        leanTools: ref.read(leanContextNotifierProvider),
       );
 
       // Load the session's persisted messages + restore the LLM history.

@@ -28,12 +28,18 @@ class SetupSession {
     required this.flow,
     this.maxToolRounds = 40,
     this.enableThinking,
+    this.leanContext = true,
   });
 
   final InferenceBackend client;
   final String model;
   final String projectName;
   final SetupToolExecutor executor;
+
+  /// When true (default), reconstruct state from the board (DB) + a short turn
+  /// window instead of replaying the whole transcript, and drop the interview
+  /// context at finalize. When false, send the full history every turn.
+  final bool leanContext;
 
   /// The configurable, DB-resolved interview definition (stages + guidance) for
   /// this project's type + sub-category. Drives the interview prompt + the
@@ -44,7 +50,22 @@ class SetupSession {
   /// from the project agent's ThinkingMode.
   final bool? enableThinking;
 
+  /// Working LLM context — TRIMMED each turn to the recent window and CLEARED at
+  /// the interview→refine boundary. The board (DB) is the durable state, so we
+  /// never need to replay the whole conversation to the model.
   final List<Map<String, dynamic>> _history = [];
+
+  /// Append-only record of user/assistant TEXT, decoupled from [_history] so the
+  /// persisted transcript (and UI restore) survives the working-context trim.
+  final List<Map<String, dynamic>> _transcript = [];
+
+  /// How many recent user-initiated turns of [_history] to send each request.
+  /// Older turns are represented by the injected board-state summary.
+  static const int _historyWindowTurns = 4;
+
+  /// Set once the interview history has been dropped on entering refine, so the
+  /// hard-drop happens exactly at the boundary.
+  bool _interviewDropped = false;
 
   /// Internal nudge injected to unstick a stalled turn; filtered out of the
   /// persisted transcript so it never shows to the user.
@@ -174,10 +195,25 @@ How to work:
     void Function(String text)? onAssistantText,
     void Function(String name, Map<String, dynamic> args)? onToolCall,
   }) async {
+    // Hard-drop the interview working context at the interview→refine boundary:
+    // the plans now exist and the refine stage starts fresh (the transcript is
+    // preserved separately for restore).
+    if (leanContext && phase == SetupPhase.refine && !_interviewDropped) {
+      _history.clear();
+      _interviewDropped = true;
+    }
+
     _history.add({'role': 'user', 'content': userMessage});
+    _transcript.add({'role': 'user', 'content': userMessage});
     final rollbackTo = _history.length - 1;
 
     try {
+      // Board-state summary (interview only) lets us trim the transcript without
+      // the model losing track of what's already chosen — the DB is the truth.
+      final stateSummary = (leanContext && phase == SetupPhase.interview)
+          ? await executor.setupStateSummary()
+          : '';
+
       // Counts consecutive rounds that produced neither tool calls nor spoken
       // text — a stalled turn. We auto-nudge it back into motion instead of
       // making the user type "?" by hand.
@@ -185,9 +221,12 @@ How to work:
       for (var round = 0; round < maxToolRounds; round++) {
         // Recompute per round: the system prompt and toolset both depend on the
         // phase, which can flip to refine the moment finalize_setup runs.
+        final systemContent = stateSummary.isEmpty
+            ? _systemPrompt()
+            : '${_systemPrompt()}\n\n$stateSummary';
         final messages = [
-          {'role': 'system', 'content': _systemPrompt()},
-          ..._history,
+          {'role': 'system', 'content': systemContent},
+          ...(leanContext ? _recentHistory() : _history),
         ];
         final tools = phase == SetupPhase.refine
             ? SetupTools.buildRefineToolSchemas()
@@ -204,6 +243,7 @@ How to work:
         }
         if (content.trim().isNotEmpty) {
           onAssistantText?.call(content.trim());
+          _transcript.add({'role': 'assistant', 'content': content.trim()});
         }
 
         _history.add({
@@ -317,20 +357,38 @@ How to work:
     throw lastError ?? StateError('inference failed');
   }
 
+  /// The recent slice of working [_history] to send: the last
+  /// [_historyWindowTurns] user-initiated turns (each with its assistant + tool
+  /// messages), sliced at a user-message boundary so tool_call/result pairs stay
+  /// intact. Nudges don't count as turns. Older context is carried by the
+  /// injected board-state summary, not the raw transcript.
+  List<Map<String, dynamic>> _recentHistory() {
+    final userIdx = <int>[];
+    for (var i = 0; i < _history.length; i++) {
+      if (_history[i]['role'] == 'user' &&
+          _history[i]['content'] != _continueNudge) {
+        userIdx.add(i);
+      }
+    }
+    if (userIdx.length <= _historyWindowTurns) return _history;
+    final start = userIdx[userIdx.length - _historyWindowTurns];
+    return _history.sublist(start);
+  }
+
   void clearHistory() {
     _history.clear();
+    _transcript.clear();
+    _interviewDropped = false;
     _loopGuard.reset();
   }
 
   /// Serialize the transcript (user/assistant text turns) for persistence in
-  /// `Projects.setupTranscriptJson`.
+  /// `Projects.setupTranscriptJson`. Sourced from [_transcript], which is
+  /// append-only and unaffected by working-context trimming.
   String toTranscriptJson() {
-    final turns = _history
+    final turns = _transcript
         .where((m) =>
-            (m['role'] == 'user' || m['role'] == 'assistant') &&
-            (m['content'] is String) &&
-            (m['content'] as String).isNotEmpty &&
-            m['content'] != _continueNudge)
+            (m['content'] is String) && (m['content'] as String).isNotEmpty)
         .map((m) => {'role': m['role'], 'content': m['content']})
         .toList();
     return jsonEncode(turns);
