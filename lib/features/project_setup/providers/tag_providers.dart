@@ -45,6 +45,44 @@ final projectTagsProvider =
       );
 });
 
+/// The adaptive scoping derived from a project's currently-selected industries:
+/// the sub-axis sections to surface (e.g. Gaming → "Genre" with its values) and
+/// scoped suggestion overrides for objectives/features/libraries. Drives the
+/// board so genres + industry-tailored vocab appear the moment an industry is
+/// picked — independent of whether the AI host calls the scope tools.
+class ScopedBoard {
+  const ScopedBoard({required this.subAxes, required this.scoped});
+  final List<({String name, String key, List<String> values})> subAxes;
+  final Map<String, List<String>> scoped; // category → scoped suggestions
+  static const ScopedBoard empty = ScopedBoard(subAxes: [], scoped: {});
+}
+
+final scopedBoardProvider =
+    FutureProvider.family<ScopedBoard, int>((ref, projectPk) async {
+  final db = ref.watch(nexusDatabaseProvider);
+  final tags = await ref.watch(projectTagsProvider(projectPk).future);
+  final industries = tags
+      .where((t) => t.category == 'industries' && !t.isRejected)
+      .map((t) => t.value)
+      .toList();
+  if (industries.isEmpty) return ScopedBoard.empty;
+
+  final axes = await db.subAxesForIndustries(industries);
+  final subValues = <String>[];
+  for (final a in axes) {
+    subValues.addAll(tags
+        .where((t) => t.category == a.key && !t.isRejected)
+        .map((t) => t.value));
+  }
+  final scoped = <String, List<String>>{};
+  for (final cat in const ['objectives', 'features', 'libraries']) {
+    final v = await db.scopeOptions(
+        industries: industries, subValues: subValues, category: cat);
+    if (v.isNotEmpty) scoped[cat] = v;
+  }
+  return ScopedBoard(subAxes: axes, scoped: scoped);
+});
+
 /// Tags for one section (by raw category key), excluding rejected.
 final tagsForCategoryProvider = Provider.family<List<ProjectTag>,
     ({int projectPk, String category})>((ref, args) {

@@ -25,6 +25,11 @@ class TagBoardView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final flowAsync = ref.watch(setupFlowForProjectProvider(projectPk));
     final tagsAsync = ref.watch(projectTagsProvider(projectPk));
+    // Adaptive scoping derived from the selected industries (sub-axis sections +
+    // scoped suggestions). Falls back to empty until it loads, so the board
+    // renders immediately and fills in the moment an industry is chosen.
+    final scoped =
+        ref.watch(scopedBoardProvider(projectPk)).valueOrNull ?? ScopedBoard.empty;
 
     return flowAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -32,29 +37,45 @@ class TagBoardView extends ConsumerWidget {
       data: (flow) => tagsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Failed to load tags: $e')),
-        data: (tags) => _board(context, ref, flow, tags),
+        data: (tags) => _board(context, ref, flow, tags, scoped),
       ),
     );
   }
 
-  Widget _board(BuildContext context, WidgetRef ref,
-      SetupFlowDefinition flow, List<ProjectTag> tags) {
+  Widget _board(BuildContext context, WidgetRef ref, SetupFlowDefinition flow,
+      List<ProjectTag> tags, ScopedBoard scoped) {
     final byCategory = <String, List<ProjectTag>>{
       for (final s in flow.stages) s.key: [],
+      for (final a in scoped.subAxes) a.key: [],
     };
     for (final t in tags) {
       (byCategory[t.category] ??= []).add(t);
     }
+    final subAxisKeys = scoped.subAxes.map((a) => a.key).toSet();
     // Orphan categories (tags whose section isn't in the current flow, e.g. a
     // legacy software tag on a re-typed project) get shown last so nothing is
-    // silently hidden.
+    // silently hidden. Sub-axis sections are rendered inline, so exclude them.
     final orphans = byCategory.keys
-        .where((k) => !flow.stages.any((s) => s.key == k))
+        .where((k) =>
+            !flow.stages.any((s) => s.key == k) && !subAxisKeys.contains(k))
         .toList();
 
     // The deterministic Client↔Server↔DB resolver is software-only; show its bar
     // only when this flow has the derived `languages` stage.
     final isSoftware = flow.stages.any((s) => s.key == 'languages');
+
+    // Merge scoped suggestions (industry/sub-axis tailored) ahead of the stage's
+    // static seeds, deduped case-insensitively.
+    List<String> merged(String key, List<String> static_) {
+      final scopedVals = scoped.scoped[key] ?? const <String>[];
+      if (scopedVals.isEmpty) return static_;
+      final seen = <String>{};
+      final out = <String>[];
+      for (final v in [...scopedVals, ...static_]) {
+        if (seen.add(v.toLowerCase())) out.add(v);
+      }
+      return out;
+    }
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -63,15 +84,28 @@ class TagBoardView extends ConsumerWidget {
           _ResolveBar(projectPk: projectPk),
           const SizedBox(height: 8),
         ],
-        for (final s in flow.stages)
+        for (final s in flow.stages) ...[
           _TagSection(
             projectPk: projectPk,
             sectionKey: s.key,
             title: s.title,
-            suggestions: s.suggestions,
+            suggestions: merged(s.key, s.suggestions),
             closed: s.vocab == SetupVocab.closed,
             tags: byCategory[s.key] ?? const [],
           ),
+          // Surface sub-axis sections (e.g. Genre for Gaming) right after the
+          // industries section, only when an industry introduces one.
+          if (s.key == 'industries')
+            for (final a in scoped.subAxes)
+              _TagSection(
+                projectPk: projectPk,
+                sectionKey: a.key,
+                title: a.name,
+                suggestions: a.values,
+                closed: false,
+                tags: byCategory[a.key] ?? const [],
+              ),
+        ],
         for (final k in orphans)
           _TagSection(
             projectPk: projectPk,

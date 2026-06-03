@@ -260,13 +260,28 @@ class NexusDatabase extends _$NexusDatabase {
   }
 
   // ==================== Setup scopes (adaptive scoped vocabulary) ========
-  /// Idempotently seed the scoped-vocabulary tree from a parsed catalog (the
-  /// research-generated `assets/setup/scoped_vocab.json`). Each catalog entry is
-  /// an industry "pack": an industry scope (optionally introducing a sub-axis
-  /// like Genre), its industry-level options, and one child scope per sub-axis
-  /// value with its own options + platform-conditional stacks. Skips industries
-  /// already present so it's safe to call every launch.
-  Future<void> seedSetupScopes(List<dynamic> packs) async {
+  /// Catalog version stored in the DB (null if never seeded). Kept as a sentinel
+  /// `__catalog_meta__` scope row so it's transactional with the data and needs
+  /// no extra table. The query helpers filter on `axis='industry'`/sub-axis keys,
+  /// so this sentinel row is never surfaced to the interview or board.
+  static const String _scopeMetaAxis = '__catalog_meta__';
+
+  Future<int?> scopedCatalogVersion() async {
+    final row = await (select(setupScopes)
+          ..where((s) => s.axis.equals(_scopeMetaAxis))
+          ..limit(1))
+        .getSingleOrNull();
+    return row == null ? null : int.tryParse(row.value);
+  }
+
+  /// Reconcile the scoped-vocabulary catalog (the research-generated
+  /// `assets/setup/scoped_vocab.json`) into the DB. INSERTS industries that
+  /// don't exist yet and UPDATES (replaces the subtree of) those that do, so a
+  /// bumped catalog propagates to existing installs. The caller version-gates
+  /// this (see the seeder), so on an unchanged launch it never runs and nothing
+  /// is wiped; only a changed catalog triggers the upsert.
+  Future<void> seedSetupScopes(List<dynamic> packs,
+      {required int version}) async {
     await transaction(() async {
       for (final raw in packs) {
         if (raw is! Map) continue;
@@ -274,13 +289,10 @@ class NexusDatabase extends _$NexusDatabase {
         final industry = (pack['industry'] ?? '').toString().trim();
         if (industry.isEmpty) continue;
 
-        final existing = await (select(setupScopes)
-              ..where((s) =>
-                  s.axis.equals('industry') &
-                  s.value.equals(industry) &
-                  s.parent_scope_fk.isNull()))
-            .getSingleOrNull();
-        if (existing != null) continue; // already seeded this industry
+        // Replace this industry's subtree: existing records get updated, new
+        // ones inserted. Scope rows are catalog-owned (no user data), so a
+        // delete-then-insert is a clean per-industry update.
+        await _deleteIndustrySubtree(industry);
 
         final subAxis = (pack['subAxis'] as Map?)?.cast<String, dynamic>();
         final subName = subAxis?['name']?.toString();
@@ -313,7 +325,39 @@ class NexusDatabase extends _$NexusDatabase {
           await _insertScopeOptions(childPk, valueMap);
         }
       }
+
+      // Stamp the catalog version so unchanged launches skip re-seeding.
+      await (delete(setupScopes)..where((s) => s.axis.equals(_scopeMetaAxis)))
+          .go();
+      await into(setupScopes).insert(SetupScopesCompanion.insert(
+        axis: _scopeMetaAxis,
+        value: version.toString(),
+      ));
     });
+  }
+
+  /// Delete an industry scope, its child (sub-axis) scopes, and every option row
+  /// belonging to any of them. Used to replace an industry on a catalog update.
+  Future<void> _deleteIndustrySubtree(String industry) async {
+    final ind = await (select(setupScopes)
+          ..where((s) =>
+              s.axis.equals('industry') &
+              s.value.equals(industry) &
+              s.parent_scope_fk.isNull()))
+        .getSingleOrNull();
+    if (ind == null) return;
+    final children = await (select(setupScopes)
+          ..where((s) => s.parent_scope_fk.equals(ind.setup_scope_pk)))
+        .get();
+    final pks = [ind.setup_scope_pk, ...children.map((c) => c.setup_scope_pk)];
+    await (delete(setupScopeOptions)..where((o) => o.setup_scope_fk.isIn(pks)))
+        .go();
+    await (delete(setupScopes)
+          ..where((s) => s.parent_scope_fk.equals(ind.setup_scope_pk)))
+        .go();
+    await (delete(setupScopes)
+          ..where((s) => s.setup_scope_pk.equals(ind.setup_scope_pk)))
+        .go();
   }
 
   /// Insert the option rows for one scope from its catalog map: plain

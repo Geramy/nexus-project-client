@@ -483,6 +483,7 @@ class SetupToolExecutor {
     final controller = TagController(db, projectPk);
     final accepted = <String>[];
     final skipped = <String>[];
+    final proposedIndustries = <String>[];
 
     for (final entry in raw) {
       if (entry is! Map) continue;
@@ -547,11 +548,26 @@ class SetupToolExecutor {
         verifiedAt: verifiedAt,
       ));
       accepted.add(value);
+      if (catStr == 'industries') proposedIndustries.add(value);
     }
 
     final b = StringBuffer();
     if (accepted.isNotEmpty) b.write('Proposed: ${accepted.join(', ')}.');
     if (skipped.isNotEmpty) b.write(' Skipped: ${skipped.join('; ')}.');
+    // When an industry is chosen, deterministically tell the host about the
+    // sub-axis it introduces (e.g. Gaming → Genre) so it asks that next without
+    // relying on it to remember to call scope_status.
+    if (proposedIndustries.isNotEmpty) {
+      final axes = await db.subAxesForIndustries(proposedIndustries);
+      for (final a in axes) {
+        b.write('\nNEXT: "${a.name}" applies to '
+            '${proposedIndustries.join(', ')} — ask which '
+            '${a.name.toLowerCase()}(s) via ask_question using these options: '
+            '${a.values.join(', ')}; then propose_tags(category `${a.key}`). '
+            'After that, call scope_options for objectives and features to get '
+            'vocabulary tailored to this selection.');
+      }
+    }
     return b.isEmpty ? 'No valid tags to propose.' : b.toString();
   }
 

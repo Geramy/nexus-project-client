@@ -39,11 +39,19 @@ Future<void> seedInitialData(NexusDatabase db) async {
   await _maybeCreateDefaults(db);
 }
 
-/// Load the bundled scoped-vocabulary catalog and seed it. Empty/missing asset
-/// is a no-op (the interview simply falls back to generic flow suggestions).
+/// Bundled scoped-vocabulary catalog version. BUMP THIS whenever
+/// `assets/setup/scoped_vocab.json` is regenerated so existing installs reconcile
+/// (insert new industries, update changed ones) on next launch.
+const int _scopedVocabVersion = 1;
+
+/// Load the bundled scoped-vocabulary catalog and reconcile it into the DB.
+/// Version-gated: if the stored catalog version already matches the bundled one,
+/// this returns immediately WITHOUT loading/parsing the (large) asset — so an
+/// unchanged launch does no work. On first seed (version null) or a bumped
+/// catalog, it inserts new records and updates existing ones. Empty/missing
+/// asset is a no-op (the interview falls back to generic flow suggestions).
 Future<void> _seedScopedVocab(NexusDatabase db) async {
-  // Already seeded — skip loading/parsing the (large) catalog asset entirely.
-  if (await db.hasSetupScopes()) return;
+  if (await db.scopedCatalogVersion() == _scopedVocabVersion) return;
   String raw;
   try {
     raw = await rootBundle.loadString('assets/setup/scoped_vocab.json');
@@ -53,7 +61,7 @@ Future<void> _seedScopedVocab(NexusDatabase db) async {
   if (raw.trim().isEmpty) return;
   final decoded = jsonDecode(raw);
   if (decoded is! List || decoded.isEmpty) return;
-  await db.seedSetupScopes(decoded);
+  await db.seedSetupScopes(decoded, version: _scopedVocabVersion);
 }
 
 Future<void> _maybeCreateDefaults(NexusDatabase db) async {

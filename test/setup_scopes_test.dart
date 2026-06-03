@@ -26,11 +26,19 @@ void main() {
     final packs = jsonDecode(raw) as List;
     expect(packs.length, 12, reason: 'all industries present');
 
-    await db.seedSetupScopes(packs);
+    await db.seedSetupScopes(packs, version: 1);
+    expect(await db.scopedCatalogVersion(), 1);
 
-    // Idempotent: a second seed must not duplicate.
-    await db.seedSetupScopes(packs);
+    // Idempotent reconcile: re-seeding the same catalog must not duplicate.
+    final genresBefore = (await db.subAxesForIndustries(['Gaming'])).first.values.length;
+    await db.seedSetupScopes(packs, version: 1);
     expect(await db.hasSetupScopes(), isTrue);
+    final genresAfter = (await db.subAxesForIndustries(['Gaming'])).first.values.length;
+    expect(genresAfter, genresBefore, reason: 'no duplication on re-seed');
+
+    // A bumped catalog updates the stored version.
+    await db.seedSetupScopes(packs, version: 2);
+    expect(await db.scopedCatalogVersion(), 2);
 
     // Gaming introduces the Genre sub-axis with real values.
     final axes = await db.subAxesForIndustries(['Gaming']);
