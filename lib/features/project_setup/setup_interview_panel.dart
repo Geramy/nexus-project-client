@@ -3,6 +3,7 @@
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/audio/audio_recorder_service.dart';
@@ -11,6 +12,7 @@ import '../../services/audio/coordinator_duplex_voice_session.dart'
 import '../../widgets/live_mic_visualizer.dart';
 import '../../shared/ui/chat_markdown.dart';
 import '../../shared/ui/sticky_scroll.dart';
+import '../../shared/ui/submit_on_enter.dart';
 import 'setup_chat_controller.dart';
 
 /// The Project Setup interview, rendered as a chat in the MainShell right outer
@@ -36,6 +38,9 @@ class SetupInterviewPanel extends ConsumerStatefulWidget {
 class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
   final _input = TextEditingController();
   final _sticky = StickyScrollController();
+  // Captures the "m" mute hotkey during a voice call without stealing keys from
+  // the text composer (a focused TextField consumes character keys itself).
+  final _hotkeyFocus = FocusNode(debugLabel: 'setup-interview-hotkeys');
 
   ({int projectId, int clientId}) get _key =>
       (projectId: widget.projectId, clientId: widget.clientId);
@@ -53,6 +58,7 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
   void dispose() {
     _input.dispose();
     _sticky.dispose();
+    _hotkeyFocus.dispose();
     super.dispose();
   }
 
@@ -69,7 +75,16 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
       await controller.endVoiceCall();
     } else {
       await controller.startVoiceCall();
+      // Grab focus so the "m" mute hotkey is live during the call (until the
+      // user taps the text field, which then takes the keys for typing).
+      if (mounted) _hotkeyFocus.requestFocus();
     }
+  }
+
+  /// "m" hotkey → toggle mic mute, but only while a voice call is active.
+  void _onMuteHotkey() {
+    final controller = ref.read(setupChatControllerProvider(_key));
+    if (controller.callActive) controller.toggleMicMute();
   }
 
   @override
@@ -81,10 +96,17 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
     // Pin to the bottom as messages stream in — unless the user has scrolled up.
     _sticky.stickToBottom();
 
-    return Container(
-      color: theme.colorScheme.surface,
-      child: Column(
-        children: [
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.keyM, includeRepeats: false):
+            _onMuteHotkey,
+      },
+      child: Focus(
+        focusNode: _hotkeyFocus,
+        child: Container(
+          color: theme.colorScheme.surface,
+          child: Column(
+            children: [
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -102,6 +124,21 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
                       style:
                           TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                 ),
+                if (controller.callActive)
+                  IconButton(
+                    tooltip: controller.micMuted
+                        ? 'Unmute mic (m)'
+                        : 'Mute mic (m)',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: controller.toggleMicMute,
+                    icon: Icon(
+                      controller.micMuted ? Icons.mic_off : Icons.mic,
+                      size: 18,
+                      color: controller.micMuted
+                          ? theme.colorScheme.error
+                          : theme.colorScheme.primary,
+                    ),
+                  ),
                 IconButton(
                   tooltip: controller.callActive
                       ? 'End voice call'
@@ -160,7 +197,9 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
                 ? 'Describe your UI, screens, behavior, data…'
                 : 'Tell the setup host about your project…',
           ),
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -544,17 +583,21 @@ class _Composer extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: TextField(
-              controller: controller,
+            child: SubmitOnEnter(
+              onSubmit: onSend,
               enabled: !busy,
-              minLines: 1,
-              maxLines: 3,
-              decoration: InputDecoration(
-                hintText: hintText,
-                border: const OutlineInputBorder(),
-                isDense: true,
+              child: TextField(
+                controller: controller,
+                enabled: !busy,
+                minLines: 1,
+                maxLines: 3,
+                textInputAction: TextInputAction.newline,
+                decoration: InputDecoration(
+                  hintText: hintText,
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
               ),
-              onSubmitted: (_) => onSend(),
             ),
           ),
           const SizedBox(width: 8),
@@ -569,6 +612,13 @@ class _Composer extends StatelessWidget {
                 )
               : IconButton.filled(
                   onPressed: onSend,
+                  // Explicit contrast: a violet fill needs an onPrimary icon.
+                  style: IconButton.styleFrom(
+                    backgroundColor:
+                        Theme.of(context).colorScheme.primary,
+                    foregroundColor:
+                        Theme.of(context).colorScheme.onPrimary,
+                  ),
                   icon: const Icon(Icons.send, size: 18),
                 ),
         ],

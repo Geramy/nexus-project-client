@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/providers/app_shell_provider.dart';
 import '../../core/providers/database_provider.dart';
 import '../../infrastructure/workspace/workspace_provider.dart';
 import 'setup_chat_controller.dart';
@@ -79,21 +80,32 @@ class _SetupTabState extends ConsumerState<SetupTab> {
   }
 
   Future<void> _complete() async {
+    // Capture navigator + messenger up front — we leave the setup wizard below,
+    // so we can't look these up off `context` after the await/pop.
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+
     await ref.read(setupChatControllerProvider(_key)).completeSetup();
     if (!mounted) return;
     // Setup is finished and tasks are created. Turn orchestration ON
     // automatically — no prompt, no "turn it off" question — so agents start
-    // working immediately. We just confirm with a toast.
+    // working immediately.
     final db = ref.read(nexusDatabaseProvider);
     final project = await db.getProjectById(widget.projectId);
     if (project?.orchestrationState != 'running') {
       await db.setProjectOrchestrationState(widget.projectId, 'running');
     }
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+
+    // The project-setup phase is DONE: advance to the next workflow (Tasks) and
+    // close the setup wizard, so its "Done" affordance is gone — the user lands
+    // on the freshly created tasks rather than back inside setup.
+    ref.read(currentMainViewProvider.notifier).setView(MainView.tasks);
+    navigator.maybePop();
+    messenger.showSnackBar(
       const SnackBar(
-        content: Text('Setup complete — plans generated, tasks created, and '
-            'orchestration turned on.'),
+        content: Text('Setup complete — tasks created and orchestration on. '
+            'Opening Tasks…'),
       ),
     );
   }
@@ -162,7 +174,7 @@ class _ActionBar extends StatelessWidget {
             FilledButton.icon(
               onPressed: busy ? null : onComplete,
               icon: const Icon(Icons.task_alt, size: 16),
-              label: const Text('Done refining → tasks'),
+              label: const Text('Done Refining - Finish'),
             ),
         ],
       ),
