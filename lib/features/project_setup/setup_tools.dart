@@ -51,7 +51,14 @@ class SetupTools {
               },
               'multi': {
                 'type': 'boolean',
-                'description': 'True if the user may pick more than one option.',
+                'description':
+                    'Whether the user may pick more than one option. DEFAULTS '
+                        'TO TRUE — most setup questions (platforms, languages, '
+                        'frameworks, libraries, industries, objectives) are '
+                        'additive and the user should be able to choose several. '
+                        'Set this to false ONLY for a strict single-choice '
+                        'question such as a yes/no or an end-of-stage '
+                        '"continue vs. add more" confirmation.',
               },
             },
             'required': ['question', 'options'],
@@ -260,7 +267,12 @@ class SetupToolExecutor {
     final options = ((args['options'] as List?) ?? const [])
         .map((e) => e.toString())
         .toList();
-    final multi = args['multi'] == true;
+    // Default to multi-select: setup questions (platforms, languages,
+    // frameworks, libraries, …) are additive, so the picker allows multiple
+    // unless the host explicitly marks the question a single-choice confirmation
+    // (multi:false). This guarantees e.g. Platform renders as checkboxes even if
+    // the model omits the flag.
+    final multi = args['multi'] != false;
     if (askQuestion == null) {
       return 'Cannot ask the user here (no input channel). Proceed with sensible defaults.';
     }

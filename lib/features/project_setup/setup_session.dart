@@ -94,9 +94,14 @@ Stages — drive them in order, finishing each before moving on:
 $stages
 Rules:
 - Ask ONE question at a time via `ask_question`; the user picks from options you
-  supply (unless a stage is free-form). After each answer, your VERY NEXT call
-  MUST be `propose_tags` using that stage's `category` — that is how answers
-  reach the board. Never ask two questions without a `propose_tags` between.
+  supply (unless a stage is free-form). Selection questions are MULTI-SELECT by
+  default — the user may pick several (e.g. multiple platforms, languages,
+  frameworks, libraries). Leave `multi` true (the default) for these. Set
+  `multi:false` ONLY for a strict single-choice question, such as a yes/no or the
+  end-of-stage "continue vs. add more" confirmation. After each answer, your VERY
+  NEXT call MUST be `propose_tags` using that stage's `category` — that is how
+  answers reach the board (propose one tag per selected value). Never ask two
+  questions without a `propose_tags` between.
 - END-OF-STAGE CHECK: before advancing a stage, ask the user (via
   `ask_question`) whether they're done with it or want to add/adjust more
   ("Looks good — continue" / "Add more"). Only advance when they choose to
