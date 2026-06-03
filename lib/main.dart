@@ -20,6 +20,36 @@ Future<void> _initializeDatabase(ProviderContainer container) async {
   }
 }
 
+/// Resyncs the framework's keyboard state with the engine whenever the app
+/// regains focus. Losing focus (a native dialog, Cmd-Tab) can drop a key-up so
+/// HardwareKeyboard thinks a key is still held; on return we reconcile so text
+/// input keeps working. Debug-only relevance (the desync assertion is stripped
+/// from release builds), but harmless everywhere.
+class _KeyboardResyncObserver extends WidgetsBindingObserver {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      HardwareKeyboard.instance.syncKeyboardState();
+    }
+  }
+}
+
+/// Detects the macOS HardwareKeyboard pressed-state desync assertion
+/// (flutter/flutter#125975). A missed key-up (focus loss to a native dialog,
+/// hot-restart, key autorepeat) leaves a key "stuck", after which every
+/// KeyDownEvent asserts and ALL text input dies in debug builds. When we see it,
+/// resync the framework's key state with the engine so typing recovers on the
+/// very next keystroke instead of staying broken.
+bool _recoverFromKeyboardDesync(Object exception) {
+  final msg = exception.toString();
+  if (msg.contains('is already pressed') ||
+      msg.contains('the physical key is not pressed')) {
+    HardwareKeyboard.instance.syncKeyboardState();
+    return true;
+  }
+  return false;
+}
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -27,10 +57,12 @@ void main() {
   // in-UI surfacing). Without this, exceptions thrown off the widget build
   // path (futures, platform channels, isolates) can be swallowed silently.
   FlutterError.onError = (FlutterErrorDetails details) {
+    if (_recoverFromKeyboardDesync(details.exception)) return;
     FlutterError.presentError(details);
     debugPrint('FlutterError: ${details.exceptionAsString()}\n${details.stack}');
   };
   WidgetsBinding.instance.platformDispatcher.onError = (error, stack) {
+    if (_recoverFromKeyboardDesync(error)) return true;
     debugPrint('Uncaught platform error: $error\n$stack');
     return true;
   };
@@ -49,6 +81,10 @@ void main() {
   // failing with "Channel was closed before receiving a response" on macOS — so
   // the Default client never got seeded. By the first post-frame callback the
   // channels are up. The seed is idempotent and widgets use AsyncValue.when(...).
+  // Keep keyboard state reconciled on every focus regain, not just startup, so a
+  // missed key-up during a focus change can't permanently break text input.
+  WidgetsBinding.instance.addObserver(_KeyboardResyncObserver());
+
   WidgetsBinding.instance.addPostFrameCallback((_) {
     _initializeDatabase(container);
     // Resync the framework's key state with the engine. A modifier key pressed
