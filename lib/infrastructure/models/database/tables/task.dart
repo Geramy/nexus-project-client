@@ -8,6 +8,7 @@ import 'client.dart';
 import 'project.dart';
 import 'chat_session.dart';
 import 'agent_persona.dart';
+import 'user_story.dart';
 
 /// Tasks table — supports a subtask tree and full provenance: every task links
 /// back to its client, project, originating plan, and the chat session that
@@ -35,6 +36,12 @@ class Tasks extends Table {
   /// The agent persona responsible for this task.
   IntColumn get task_agent_fk =>
       integer().nullable().references(AgentPersonas, #agent_pk)();
+
+  /// Provenance: the user-story item this task implements (set when tasks are
+  /// generated from the exploration story tree). Lets the system trace any task
+  /// back to its story, and a story to its task(s). Null for ad-hoc tasks.
+  IntColumn get task_story_fk =>
+      integer().nullable().references(UserStories, #story_pk)();
 
   TextColumn get title => text().withLength(min: 1, max: 200)();
   TextColumn get description => text().nullable()();

@@ -2655,6 +2655,19 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _explorationStatusMeta = const VerificationMeta(
+    'explorationStatus',
+  );
+  @override
+  late final GeneratedColumn<String> explorationStatus =
+      GeneratedColumn<String>(
+        'exploration_status',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('none'),
+      );
   static const VerificationMeta _projectSummaryMdMeta = const VerificationMeta(
     'projectSummaryMd',
   );
@@ -2752,6 +2765,7 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
     orchestratorPromptsJson,
     setupStatus,
     setupTranscriptJson,
+    explorationStatus,
     projectSummaryMd,
     summaryUpdatedAt,
     projectType,
@@ -2884,6 +2898,15 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         ),
       );
     }
+    if (data.containsKey('exploration_status')) {
+      context.handle(
+        _explorationStatusMeta,
+        explorationStatus.isAcceptableOrUnknown(
+          data['exploration_status']!,
+          _explorationStatusMeta,
+        ),
+      );
+    }
     if (data.containsKey('project_summary_md')) {
       context.handle(
         _projectSummaryMdMeta,
@@ -3002,6 +3025,10 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         DriftSqlType.string,
         data['${effectivePrefix}setup_transcript_json'],
       ),
+      explorationStatus: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}exploration_status'],
+      )!,
       projectSummaryMd: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}project_summary_md'],
@@ -3080,6 +3107,12 @@ class Project extends DataClass implements Insertable<Project> {
   /// The setup interview Q/A transcript (JSON) so decisions can be re-explained.
   final String? setupTranscriptJson;
 
+  /// Post-setup **Exploration** phase state: none | active | complete. After
+  /// setup finishes the project enters `active` — a discovery chat that builds
+  /// the user-story tree — and stays there (NO tasks generated) until the user
+  /// presses "Generate tasks from stories", which flips it to `complete`.
+  final String explorationStatus;
+
   /// AI-compiled, human-readable summary of the project (markdown), built from
   /// all /PLANS files. Regenerated on plan changes and by the coordinator's
   /// idle cycles. Null until first generated.
@@ -3114,6 +3147,7 @@ class Project extends DataClass implements Insertable<Project> {
     this.orchestratorPromptsJson,
     required this.setupStatus,
     this.setupTranscriptJson,
+    required this.explorationStatus,
     this.projectSummaryMd,
     this.summaryUpdatedAt,
     required this.projectType,
@@ -3154,6 +3188,7 @@ class Project extends DataClass implements Insertable<Project> {
     if (!nullToAbsent || setupTranscriptJson != null) {
       map['setup_transcript_json'] = Variable<String>(setupTranscriptJson);
     }
+    map['exploration_status'] = Variable<String>(explorationStatus);
     if (!nullToAbsent || projectSummaryMd != null) {
       map['project_summary_md'] = Variable<String>(projectSummaryMd);
     }
@@ -3199,6 +3234,7 @@ class Project extends DataClass implements Insertable<Project> {
       setupTranscriptJson: setupTranscriptJson == null && nullToAbsent
           ? const Value.absent()
           : Value(setupTranscriptJson),
+      explorationStatus: Value(explorationStatus),
       projectSummaryMd: projectSummaryMd == null && nullToAbsent
           ? const Value.absent()
           : Value(projectSummaryMd),
@@ -3240,6 +3276,7 @@ class Project extends DataClass implements Insertable<Project> {
       setupTranscriptJson: serializer.fromJson<String?>(
         json['setupTranscriptJson'],
       ),
+      explorationStatus: serializer.fromJson<String>(json['explorationStatus']),
       projectSummaryMd: serializer.fromJson<String?>(json['projectSummaryMd']),
       summaryUpdatedAt: serializer.fromJson<DateTime?>(
         json['summaryUpdatedAt'],
@@ -3270,6 +3307,7 @@ class Project extends DataClass implements Insertable<Project> {
       ),
       'setupStatus': serializer.toJson<String>(setupStatus),
       'setupTranscriptJson': serializer.toJson<String?>(setupTranscriptJson),
+      'explorationStatus': serializer.toJson<String>(explorationStatus),
       'projectSummaryMd': serializer.toJson<String?>(projectSummaryMd),
       'summaryUpdatedAt': serializer.toJson<DateTime?>(summaryUpdatedAt),
       'projectType': serializer.toJson<String>(projectType),
@@ -3294,6 +3332,7 @@ class Project extends DataClass implements Insertable<Project> {
     Value<String?> orchestratorPromptsJson = const Value.absent(),
     String? setupStatus,
     Value<String?> setupTranscriptJson = const Value.absent(),
+    String? explorationStatus,
     Value<String?> projectSummaryMd = const Value.absent(),
     Value<DateTime?> summaryUpdatedAt = const Value.absent(),
     String? projectType,
@@ -3323,6 +3362,7 @@ class Project extends DataClass implements Insertable<Project> {
     setupTranscriptJson: setupTranscriptJson.present
         ? setupTranscriptJson.value
         : this.setupTranscriptJson,
+    explorationStatus: explorationStatus ?? this.explorationStatus,
     projectSummaryMd: projectSummaryMd.present
         ? projectSummaryMd.value
         : this.projectSummaryMd,
@@ -3372,6 +3412,9 @@ class Project extends DataClass implements Insertable<Project> {
       setupTranscriptJson: data.setupTranscriptJson.present
           ? data.setupTranscriptJson.value
           : this.setupTranscriptJson,
+      explorationStatus: data.explorationStatus.present
+          ? data.explorationStatus.value
+          : this.explorationStatus,
       projectSummaryMd: data.projectSummaryMd.present
           ? data.projectSummaryMd.value
           : this.projectSummaryMd,
@@ -3408,6 +3451,7 @@ class Project extends DataClass implements Insertable<Project> {
           ..write('orchestratorPromptsJson: $orchestratorPromptsJson, ')
           ..write('setupStatus: $setupStatus, ')
           ..write('setupTranscriptJson: $setupTranscriptJson, ')
+          ..write('explorationStatus: $explorationStatus, ')
           ..write('projectSummaryMd: $projectSummaryMd, ')
           ..write('summaryUpdatedAt: $summaryUpdatedAt, ')
           ..write('projectType: $projectType, ')
@@ -3420,7 +3464,7 @@ class Project extends DataClass implements Insertable<Project> {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     project_pk,
     client_fk,
     name,
@@ -3434,6 +3478,7 @@ class Project extends DataClass implements Insertable<Project> {
     orchestratorPromptsJson,
     setupStatus,
     setupTranscriptJson,
+    explorationStatus,
     projectSummaryMd,
     summaryUpdatedAt,
     projectType,
@@ -3441,7 +3486,7 @@ class Project extends DataClass implements Insertable<Project> {
     experienceMode,
     createdAt,
     updatedAt,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -3459,6 +3504,7 @@ class Project extends DataClass implements Insertable<Project> {
           other.orchestratorPromptsJson == this.orchestratorPromptsJson &&
           other.setupStatus == this.setupStatus &&
           other.setupTranscriptJson == this.setupTranscriptJson &&
+          other.explorationStatus == this.explorationStatus &&
           other.projectSummaryMd == this.projectSummaryMd &&
           other.summaryUpdatedAt == this.summaryUpdatedAt &&
           other.projectType == this.projectType &&
@@ -3482,6 +3528,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
   final Value<String?> orchestratorPromptsJson;
   final Value<String> setupStatus;
   final Value<String?> setupTranscriptJson;
+  final Value<String> explorationStatus;
   final Value<String?> projectSummaryMd;
   final Value<DateTime?> summaryUpdatedAt;
   final Value<String> projectType;
@@ -3503,6 +3550,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     this.orchestratorPromptsJson = const Value.absent(),
     this.setupStatus = const Value.absent(),
     this.setupTranscriptJson = const Value.absent(),
+    this.explorationStatus = const Value.absent(),
     this.projectSummaryMd = const Value.absent(),
     this.summaryUpdatedAt = const Value.absent(),
     this.projectType = const Value.absent(),
@@ -3525,6 +3573,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     this.orchestratorPromptsJson = const Value.absent(),
     this.setupStatus = const Value.absent(),
     this.setupTranscriptJson = const Value.absent(),
+    this.explorationStatus = const Value.absent(),
     this.projectSummaryMd = const Value.absent(),
     this.summaryUpdatedAt = const Value.absent(),
     this.projectType = const Value.absent(),
@@ -3548,6 +3597,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     Expression<String>? orchestratorPromptsJson,
     Expression<String>? setupStatus,
     Expression<String>? setupTranscriptJson,
+    Expression<String>? explorationStatus,
     Expression<String>? projectSummaryMd,
     Expression<DateTime>? summaryUpdatedAt,
     Expression<String>? projectType,
@@ -3572,6 +3622,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
       if (setupStatus != null) 'setup_status': setupStatus,
       if (setupTranscriptJson != null)
         'setup_transcript_json': setupTranscriptJson,
+      if (explorationStatus != null) 'exploration_status': explorationStatus,
       if (projectSummaryMd != null) 'project_summary_md': projectSummaryMd,
       if (summaryUpdatedAt != null) 'summary_updated_at': summaryUpdatedAt,
       if (projectType != null) 'project_type': projectType,
@@ -3596,6 +3647,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     Value<String?>? orchestratorPromptsJson,
     Value<String>? setupStatus,
     Value<String?>? setupTranscriptJson,
+    Value<String>? explorationStatus,
     Value<String?>? projectSummaryMd,
     Value<DateTime?>? summaryUpdatedAt,
     Value<String>? projectType,
@@ -3619,6 +3671,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
           orchestratorPromptsJson ?? this.orchestratorPromptsJson,
       setupStatus: setupStatus ?? this.setupStatus,
       setupTranscriptJson: setupTranscriptJson ?? this.setupTranscriptJson,
+      explorationStatus: explorationStatus ?? this.explorationStatus,
       projectSummaryMd: projectSummaryMd ?? this.projectSummaryMd,
       summaryUpdatedAt: summaryUpdatedAt ?? this.summaryUpdatedAt,
       projectType: projectType ?? this.projectType,
@@ -3675,6 +3728,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
         setupTranscriptJson.value,
       );
     }
+    if (explorationStatus.present) {
+      map['exploration_status'] = Variable<String>(explorationStatus.value);
+    }
     if (projectSummaryMd.present) {
       map['project_summary_md'] = Variable<String>(projectSummaryMd.value);
     }
@@ -3715,6 +3771,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
           ..write('orchestratorPromptsJson: $orchestratorPromptsJson, ')
           ..write('setupStatus: $setupStatus, ')
           ..write('setupTranscriptJson: $setupTranscriptJson, ')
+          ..write('explorationStatus: $explorationStatus, ')
           ..write('projectSummaryMd: $projectSummaryMd, ')
           ..write('summaryUpdatedAt: $summaryUpdatedAt, ')
           ..write('projectType: $projectType, ')
@@ -4138,6 +4195,777 @@ class ChatSessionsCompanion extends UpdateCompanion<ChatSession> {
   }
 }
 
+class $UserStoriesTable extends UserStories
+    with TableInfo<$UserStoriesTable, UserStory> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $UserStoriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _story_pkMeta = const VerificationMeta(
+    'story_pk',
+  );
+  @override
+  late final GeneratedColumn<int> story_pk = GeneratedColumn<int>(
+    'story_pk',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _project_fkMeta = const VerificationMeta(
+    'project_fk',
+  );
+  @override
+  late final GeneratedColumn<int> project_fk = GeneratedColumn<int>(
+    'project_fk',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES projects (project_pk)',
+    ),
+  );
+  static const VerificationMeta _parent_story_fkMeta = const VerificationMeta(
+    'parent_story_fk',
+  );
+  @override
+  late final GeneratedColumn<int> parent_story_fk = GeneratedColumn<int>(
+    'parent_story_fk',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES user_stories (story_pk)',
+    ),
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(
+      minTextLength: 1,
+      maxTextLength: 200,
+    ),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _narrativeMeta = const VerificationMeta(
+    'narrative',
+  );
+  @override
+  late final GeneratedColumn<String> narrative = GeneratedColumn<String>(
+    'narrative',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _acceptanceCriteriaMeta =
+      const VerificationMeta('acceptanceCriteria');
+  @override
+  late final GeneratedColumn<String> acceptanceCriteria =
+      GeneratedColumn<String>(
+        'acceptance_criteria',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('story'),
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('draft'),
+  );
+  static const VerificationMeta _posXMeta = const VerificationMeta('posX');
+  @override
+  late final GeneratedColumn<double> posX = GeneratedColumn<double>(
+    'pos_x',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _posYMeta = const VerificationMeta('posY');
+  @override
+  late final GeneratedColumn<double> posY = GeneratedColumn<double>(
+    'pos_y',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _orderIndexMeta = const VerificationMeta(
+    'orderIndex',
+  );
+  @override
+  late final GeneratedColumn<int> orderIndex = GeneratedColumn<int>(
+    'order_index',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    story_pk,
+    project_fk,
+    parent_story_fk,
+    title,
+    narrative,
+    acceptanceCriteria,
+    kind,
+    status,
+    posX,
+    posY,
+    orderIndex,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'user_stories';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<UserStory> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('story_pk')) {
+      context.handle(
+        _story_pkMeta,
+        story_pk.isAcceptableOrUnknown(data['story_pk']!, _story_pkMeta),
+      );
+    }
+    if (data.containsKey('project_fk')) {
+      context.handle(
+        _project_fkMeta,
+        project_fk.isAcceptableOrUnknown(data['project_fk']!, _project_fkMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_project_fkMeta);
+    }
+    if (data.containsKey('parent_story_fk')) {
+      context.handle(
+        _parent_story_fkMeta,
+        parent_story_fk.isAcceptableOrUnknown(
+          data['parent_story_fk']!,
+          _parent_story_fkMeta,
+        ),
+      );
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('narrative')) {
+      context.handle(
+        _narrativeMeta,
+        narrative.isAcceptableOrUnknown(data['narrative']!, _narrativeMeta),
+      );
+    }
+    if (data.containsKey('acceptance_criteria')) {
+      context.handle(
+        _acceptanceCriteriaMeta,
+        acceptanceCriteria.isAcceptableOrUnknown(
+          data['acceptance_criteria']!,
+          _acceptanceCriteriaMeta,
+        ),
+      );
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('pos_x')) {
+      context.handle(
+        _posXMeta,
+        posX.isAcceptableOrUnknown(data['pos_x']!, _posXMeta),
+      );
+    }
+    if (data.containsKey('pos_y')) {
+      context.handle(
+        _posYMeta,
+        posY.isAcceptableOrUnknown(data['pos_y']!, _posYMeta),
+      );
+    }
+    if (data.containsKey('order_index')) {
+      context.handle(
+        _orderIndexMeta,
+        orderIndex.isAcceptableOrUnknown(data['order_index']!, _orderIndexMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {story_pk};
+  @override
+  UserStory map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return UserStory(
+      story_pk: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}story_pk'],
+      )!,
+      project_fk: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}project_fk'],
+      )!,
+      parent_story_fk: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}parent_story_fk'],
+      ),
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      narrative: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}narrative'],
+      )!,
+      acceptanceCriteria: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}acceptance_criteria'],
+      ),
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      posX: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}pos_x'],
+      ),
+      posY: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}pos_y'],
+      ),
+      orderIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}order_index'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $UserStoriesTable createAlias(String alias) {
+    return $UserStoriesTable(attachedDatabase, alias);
+  }
+}
+
+class UserStory extends DataClass implements Insertable<UserStory> {
+  final int story_pk;
+  final int project_fk;
+
+  /// Tree edge: the parent story (epic → story → sub-story). Null = root/epic.
+  final int? parent_story_fk;
+
+  /// Short node title shown on the canvas.
+  final String title;
+
+  /// The story narrative — "As a <role>, I want <goal>, so that <benefit>".
+  final String narrative;
+
+  /// Acceptance criteria (markdown bullet list), if captured.
+  final String? acceptanceCriteria;
+
+  /// Node kind: epic | story | substory. Drives the canvas styling.
+  final String kind;
+
+  /// Confirm state: draft | confirmed | done.
+  final String status;
+
+  /// Persisted canvas position (null until first auto-layout / drag).
+  final double? posX;
+  final double? posY;
+
+  /// Sibling order under the same parent.
+  final int orderIndex;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const UserStory({
+    required this.story_pk,
+    required this.project_fk,
+    this.parent_story_fk,
+    required this.title,
+    required this.narrative,
+    this.acceptanceCriteria,
+    required this.kind,
+    required this.status,
+    this.posX,
+    this.posY,
+    required this.orderIndex,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['story_pk'] = Variable<int>(story_pk);
+    map['project_fk'] = Variable<int>(project_fk);
+    if (!nullToAbsent || parent_story_fk != null) {
+      map['parent_story_fk'] = Variable<int>(parent_story_fk);
+    }
+    map['title'] = Variable<String>(title);
+    map['narrative'] = Variable<String>(narrative);
+    if (!nullToAbsent || acceptanceCriteria != null) {
+      map['acceptance_criteria'] = Variable<String>(acceptanceCriteria);
+    }
+    map['kind'] = Variable<String>(kind);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || posX != null) {
+      map['pos_x'] = Variable<double>(posX);
+    }
+    if (!nullToAbsent || posY != null) {
+      map['pos_y'] = Variable<double>(posY);
+    }
+    map['order_index'] = Variable<int>(orderIndex);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  UserStoriesCompanion toCompanion(bool nullToAbsent) {
+    return UserStoriesCompanion(
+      story_pk: Value(story_pk),
+      project_fk: Value(project_fk),
+      parent_story_fk: parent_story_fk == null && nullToAbsent
+          ? const Value.absent()
+          : Value(parent_story_fk),
+      title: Value(title),
+      narrative: Value(narrative),
+      acceptanceCriteria: acceptanceCriteria == null && nullToAbsent
+          ? const Value.absent()
+          : Value(acceptanceCriteria),
+      kind: Value(kind),
+      status: Value(status),
+      posX: posX == null && nullToAbsent ? const Value.absent() : Value(posX),
+      posY: posY == null && nullToAbsent ? const Value.absent() : Value(posY),
+      orderIndex: Value(orderIndex),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory UserStory.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return UserStory(
+      story_pk: serializer.fromJson<int>(json['story_pk']),
+      project_fk: serializer.fromJson<int>(json['project_fk']),
+      parent_story_fk: serializer.fromJson<int?>(json['parent_story_fk']),
+      title: serializer.fromJson<String>(json['title']),
+      narrative: serializer.fromJson<String>(json['narrative']),
+      acceptanceCriteria: serializer.fromJson<String?>(
+        json['acceptanceCriteria'],
+      ),
+      kind: serializer.fromJson<String>(json['kind']),
+      status: serializer.fromJson<String>(json['status']),
+      posX: serializer.fromJson<double?>(json['posX']),
+      posY: serializer.fromJson<double?>(json['posY']),
+      orderIndex: serializer.fromJson<int>(json['orderIndex']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'story_pk': serializer.toJson<int>(story_pk),
+      'project_fk': serializer.toJson<int>(project_fk),
+      'parent_story_fk': serializer.toJson<int?>(parent_story_fk),
+      'title': serializer.toJson<String>(title),
+      'narrative': serializer.toJson<String>(narrative),
+      'acceptanceCriteria': serializer.toJson<String?>(acceptanceCriteria),
+      'kind': serializer.toJson<String>(kind),
+      'status': serializer.toJson<String>(status),
+      'posX': serializer.toJson<double?>(posX),
+      'posY': serializer.toJson<double?>(posY),
+      'orderIndex': serializer.toJson<int>(orderIndex),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  UserStory copyWith({
+    int? story_pk,
+    int? project_fk,
+    Value<int?> parent_story_fk = const Value.absent(),
+    String? title,
+    String? narrative,
+    Value<String?> acceptanceCriteria = const Value.absent(),
+    String? kind,
+    String? status,
+    Value<double?> posX = const Value.absent(),
+    Value<double?> posY = const Value.absent(),
+    int? orderIndex,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => UserStory(
+    story_pk: story_pk ?? this.story_pk,
+    project_fk: project_fk ?? this.project_fk,
+    parent_story_fk: parent_story_fk.present
+        ? parent_story_fk.value
+        : this.parent_story_fk,
+    title: title ?? this.title,
+    narrative: narrative ?? this.narrative,
+    acceptanceCriteria: acceptanceCriteria.present
+        ? acceptanceCriteria.value
+        : this.acceptanceCriteria,
+    kind: kind ?? this.kind,
+    status: status ?? this.status,
+    posX: posX.present ? posX.value : this.posX,
+    posY: posY.present ? posY.value : this.posY,
+    orderIndex: orderIndex ?? this.orderIndex,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  UserStory copyWithCompanion(UserStoriesCompanion data) {
+    return UserStory(
+      story_pk: data.story_pk.present ? data.story_pk.value : this.story_pk,
+      project_fk: data.project_fk.present
+          ? data.project_fk.value
+          : this.project_fk,
+      parent_story_fk: data.parent_story_fk.present
+          ? data.parent_story_fk.value
+          : this.parent_story_fk,
+      title: data.title.present ? data.title.value : this.title,
+      narrative: data.narrative.present ? data.narrative.value : this.narrative,
+      acceptanceCriteria: data.acceptanceCriteria.present
+          ? data.acceptanceCriteria.value
+          : this.acceptanceCriteria,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      status: data.status.present ? data.status.value : this.status,
+      posX: data.posX.present ? data.posX.value : this.posX,
+      posY: data.posY.present ? data.posY.value : this.posY,
+      orderIndex: data.orderIndex.present
+          ? data.orderIndex.value
+          : this.orderIndex,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UserStory(')
+          ..write('story_pk: $story_pk, ')
+          ..write('project_fk: $project_fk, ')
+          ..write('parent_story_fk: $parent_story_fk, ')
+          ..write('title: $title, ')
+          ..write('narrative: $narrative, ')
+          ..write('acceptanceCriteria: $acceptanceCriteria, ')
+          ..write('kind: $kind, ')
+          ..write('status: $status, ')
+          ..write('posX: $posX, ')
+          ..write('posY: $posY, ')
+          ..write('orderIndex: $orderIndex, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    story_pk,
+    project_fk,
+    parent_story_fk,
+    title,
+    narrative,
+    acceptanceCriteria,
+    kind,
+    status,
+    posX,
+    posY,
+    orderIndex,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is UserStory &&
+          other.story_pk == this.story_pk &&
+          other.project_fk == this.project_fk &&
+          other.parent_story_fk == this.parent_story_fk &&
+          other.title == this.title &&
+          other.narrative == this.narrative &&
+          other.acceptanceCriteria == this.acceptanceCriteria &&
+          other.kind == this.kind &&
+          other.status == this.status &&
+          other.posX == this.posX &&
+          other.posY == this.posY &&
+          other.orderIndex == this.orderIndex &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class UserStoriesCompanion extends UpdateCompanion<UserStory> {
+  final Value<int> story_pk;
+  final Value<int> project_fk;
+  final Value<int?> parent_story_fk;
+  final Value<String> title;
+  final Value<String> narrative;
+  final Value<String?> acceptanceCriteria;
+  final Value<String> kind;
+  final Value<String> status;
+  final Value<double?> posX;
+  final Value<double?> posY;
+  final Value<int> orderIndex;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  const UserStoriesCompanion({
+    this.story_pk = const Value.absent(),
+    this.project_fk = const Value.absent(),
+    this.parent_story_fk = const Value.absent(),
+    this.title = const Value.absent(),
+    this.narrative = const Value.absent(),
+    this.acceptanceCriteria = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.status = const Value.absent(),
+    this.posX = const Value.absent(),
+    this.posY = const Value.absent(),
+    this.orderIndex = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  UserStoriesCompanion.insert({
+    this.story_pk = const Value.absent(),
+    required int project_fk,
+    this.parent_story_fk = const Value.absent(),
+    required String title,
+    this.narrative = const Value.absent(),
+    this.acceptanceCriteria = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.status = const Value.absent(),
+    this.posX = const Value.absent(),
+    this.posY = const Value.absent(),
+    this.orderIndex = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  }) : project_fk = Value(project_fk),
+       title = Value(title);
+  static Insertable<UserStory> custom({
+    Expression<int>? story_pk,
+    Expression<int>? project_fk,
+    Expression<int>? parent_story_fk,
+    Expression<String>? title,
+    Expression<String>? narrative,
+    Expression<String>? acceptanceCriteria,
+    Expression<String>? kind,
+    Expression<String>? status,
+    Expression<double>? posX,
+    Expression<double>? posY,
+    Expression<int>? orderIndex,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (story_pk != null) 'story_pk': story_pk,
+      if (project_fk != null) 'project_fk': project_fk,
+      if (parent_story_fk != null) 'parent_story_fk': parent_story_fk,
+      if (title != null) 'title': title,
+      if (narrative != null) 'narrative': narrative,
+      if (acceptanceCriteria != null) 'acceptance_criteria': acceptanceCriteria,
+      if (kind != null) 'kind': kind,
+      if (status != null) 'status': status,
+      if (posX != null) 'pos_x': posX,
+      if (posY != null) 'pos_y': posY,
+      if (orderIndex != null) 'order_index': orderIndex,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  UserStoriesCompanion copyWith({
+    Value<int>? story_pk,
+    Value<int>? project_fk,
+    Value<int?>? parent_story_fk,
+    Value<String>? title,
+    Value<String>? narrative,
+    Value<String?>? acceptanceCriteria,
+    Value<String>? kind,
+    Value<String>? status,
+    Value<double?>? posX,
+    Value<double?>? posY,
+    Value<int>? orderIndex,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return UserStoriesCompanion(
+      story_pk: story_pk ?? this.story_pk,
+      project_fk: project_fk ?? this.project_fk,
+      parent_story_fk: parent_story_fk ?? this.parent_story_fk,
+      title: title ?? this.title,
+      narrative: narrative ?? this.narrative,
+      acceptanceCriteria: acceptanceCriteria ?? this.acceptanceCriteria,
+      kind: kind ?? this.kind,
+      status: status ?? this.status,
+      posX: posX ?? this.posX,
+      posY: posY ?? this.posY,
+      orderIndex: orderIndex ?? this.orderIndex,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (story_pk.present) {
+      map['story_pk'] = Variable<int>(story_pk.value);
+    }
+    if (project_fk.present) {
+      map['project_fk'] = Variable<int>(project_fk.value);
+    }
+    if (parent_story_fk.present) {
+      map['parent_story_fk'] = Variable<int>(parent_story_fk.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (narrative.present) {
+      map['narrative'] = Variable<String>(narrative.value);
+    }
+    if (acceptanceCriteria.present) {
+      map['acceptance_criteria'] = Variable<String>(acceptanceCriteria.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (posX.present) {
+      map['pos_x'] = Variable<double>(posX.value);
+    }
+    if (posY.present) {
+      map['pos_y'] = Variable<double>(posY.value);
+    }
+    if (orderIndex.present) {
+      map['order_index'] = Variable<int>(orderIndex.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UserStoriesCompanion(')
+          ..write('story_pk: $story_pk, ')
+          ..write('project_fk: $project_fk, ')
+          ..write('parent_story_fk: $parent_story_fk, ')
+          ..write('title: $title, ')
+          ..write('narrative: $narrative, ')
+          ..write('acceptanceCriteria: $acceptanceCriteria, ')
+          ..write('kind: $kind, ')
+          ..write('status: $status, ')
+          ..write('posX: $posX, ')
+          ..write('posY: $posY, ')
+          ..write('orderIndex: $orderIndex, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
   @override
   final GeneratedDatabase attachedDatabase;
@@ -4236,6 +5064,20 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
     requiredDuringInsert: false,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
       'REFERENCES agent_personas (agent_pk)',
+    ),
+  );
+  static const VerificationMeta _task_story_fkMeta = const VerificationMeta(
+    'task_story_fk',
+  );
+  @override
+  late final GeneratedColumn<int> task_story_fk = GeneratedColumn<int>(
+    'task_story_fk',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES user_stories (story_pk)',
     ),
   );
   static const VerificationMeta _titleMeta = const VerificationMeta('title');
@@ -4492,6 +5334,7 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
     task_plan_path,
     task_chat_session_fk,
     task_agent_fk,
+    task_story_fk,
     title,
     description,
     status,
@@ -4587,6 +5430,15 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
         task_agent_fk.isAcceptableOrUnknown(
           data['task_agent_fk']!,
           _task_agent_fkMeta,
+        ),
+      );
+    }
+    if (data.containsKey('task_story_fk')) {
+      context.handle(
+        _task_story_fkMeta,
+        task_story_fk.isAcceptableOrUnknown(
+          data['task_story_fk']!,
+          _task_story_fkMeta,
         ),
       );
     }
@@ -4785,6 +5637,10 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
         DriftSqlType.int,
         data['${effectivePrefix}task_agent_fk'],
       ),
+      task_story_fk: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}task_story_fk'],
+      ),
       title: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}title'],
@@ -4895,6 +5751,11 @@ class Task extends DataClass implements Insertable<Task> {
 
   /// The agent persona responsible for this task.
   final int? task_agent_fk;
+
+  /// Provenance: the user-story item this task implements (set when tasks are
+  /// generated from the exploration story tree). Lets the system trace any task
+  /// back to its story, and a story to its task(s). Null for ad-hoc tasks.
+  final int? task_story_fk;
   final String title;
   final String? description;
   final String status;
@@ -4955,6 +5816,7 @@ class Task extends DataClass implements Insertable<Task> {
     this.task_plan_path,
     this.task_chat_session_fk,
     this.task_agent_fk,
+    this.task_story_fk,
     required this.title,
     this.description,
     required this.status,
@@ -4994,6 +5856,9 @@ class Task extends DataClass implements Insertable<Task> {
     }
     if (!nullToAbsent || task_agent_fk != null) {
       map['task_agent_fk'] = Variable<int>(task_agent_fk);
+    }
+    if (!nullToAbsent || task_story_fk != null) {
+      map['task_story_fk'] = Variable<int>(task_story_fk);
     }
     map['title'] = Variable<String>(title);
     if (!nullToAbsent || description != null) {
@@ -5060,6 +5925,9 @@ class Task extends DataClass implements Insertable<Task> {
       task_agent_fk: task_agent_fk == null && nullToAbsent
           ? const Value.absent()
           : Value(task_agent_fk),
+      task_story_fk: task_story_fk == null && nullToAbsent
+          ? const Value.absent()
+          : Value(task_story_fk),
       title: Value(title),
       description: description == null && nullToAbsent
           ? const Value.absent()
@@ -5123,6 +5991,7 @@ class Task extends DataClass implements Insertable<Task> {
         json['task_chat_session_fk'],
       ),
       task_agent_fk: serializer.fromJson<int?>(json['task_agent_fk']),
+      task_story_fk: serializer.fromJson<int?>(json['task_story_fk']),
       title: serializer.fromJson<String>(json['title']),
       description: serializer.fromJson<String?>(json['description']),
       status: serializer.fromJson<String>(json['status']),
@@ -5159,6 +6028,7 @@ class Task extends DataClass implements Insertable<Task> {
       'task_plan_path': serializer.toJson<String?>(task_plan_path),
       'task_chat_session_fk': serializer.toJson<int?>(task_chat_session_fk),
       'task_agent_fk': serializer.toJson<int?>(task_agent_fk),
+      'task_story_fk': serializer.toJson<int?>(task_story_fk),
       'title': serializer.toJson<String>(title),
       'description': serializer.toJson<String?>(description),
       'status': serializer.toJson<String>(status),
@@ -5191,6 +6061,7 @@ class Task extends DataClass implements Insertable<Task> {
     Value<String?> task_plan_path = const Value.absent(),
     Value<int?> task_chat_session_fk = const Value.absent(),
     Value<int?> task_agent_fk = const Value.absent(),
+    Value<int?> task_story_fk = const Value.absent(),
     String? title,
     Value<String?> description = const Value.absent(),
     String? status,
@@ -5228,6 +6099,9 @@ class Task extends DataClass implements Insertable<Task> {
     task_agent_fk: task_agent_fk.present
         ? task_agent_fk.value
         : this.task_agent_fk,
+    task_story_fk: task_story_fk.present
+        ? task_story_fk.value
+        : this.task_story_fk,
     title: title ?? this.title,
     description: description.present ? description.value : this.description,
     status: status ?? this.status,
@@ -5279,6 +6153,9 @@ class Task extends DataClass implements Insertable<Task> {
       task_agent_fk: data.task_agent_fk.present
           ? data.task_agent_fk.value
           : this.task_agent_fk,
+      task_story_fk: data.task_story_fk.present
+          ? data.task_story_fk.value
+          : this.task_story_fk,
       title: data.title.present ? data.title.value : this.title,
       description: data.description.present
           ? data.description.value
@@ -5335,6 +6212,7 @@ class Task extends DataClass implements Insertable<Task> {
           ..write('task_plan_path: $task_plan_path, ')
           ..write('task_chat_session_fk: $task_chat_session_fk, ')
           ..write('task_agent_fk: $task_agent_fk, ')
+          ..write('task_story_fk: $task_story_fk, ')
           ..write('title: $title, ')
           ..write('description: $description, ')
           ..write('status: $status, ')
@@ -5369,6 +6247,7 @@ class Task extends DataClass implements Insertable<Task> {
     task_plan_path,
     task_chat_session_fk,
     task_agent_fk,
+    task_story_fk,
     title,
     description,
     status,
@@ -5402,6 +6281,7 @@ class Task extends DataClass implements Insertable<Task> {
           other.task_plan_path == this.task_plan_path &&
           other.task_chat_session_fk == this.task_chat_session_fk &&
           other.task_agent_fk == this.task_agent_fk &&
+          other.task_story_fk == this.task_story_fk &&
           other.title == this.title &&
           other.description == this.description &&
           other.status == this.status &&
@@ -5433,6 +6313,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
   final Value<String?> task_plan_path;
   final Value<int?> task_chat_session_fk;
   final Value<int?> task_agent_fk;
+  final Value<int?> task_story_fk;
   final Value<String> title;
   final Value<String?> description;
   final Value<String> status;
@@ -5462,6 +6343,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
     this.task_plan_path = const Value.absent(),
     this.task_chat_session_fk = const Value.absent(),
     this.task_agent_fk = const Value.absent(),
+    this.task_story_fk = const Value.absent(),
     this.title = const Value.absent(),
     this.description = const Value.absent(),
     this.status = const Value.absent(),
@@ -5492,6 +6374,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
     this.task_plan_path = const Value.absent(),
     this.task_chat_session_fk = const Value.absent(),
     this.task_agent_fk = const Value.absent(),
+    this.task_story_fk = const Value.absent(),
     required String title,
     this.description = const Value.absent(),
     this.status = const Value.absent(),
@@ -5524,6 +6407,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
     Expression<String>? task_plan_path,
     Expression<int>? task_chat_session_fk,
     Expression<int>? task_agent_fk,
+    Expression<int>? task_story_fk,
     Expression<String>? title,
     Expression<String>? description,
     Expression<String>? status,
@@ -5555,6 +6439,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
       if (task_chat_session_fk != null)
         'task_chat_session_fk': task_chat_session_fk,
       if (task_agent_fk != null) 'task_agent_fk': task_agent_fk,
+      if (task_story_fk != null) 'task_story_fk': task_story_fk,
       if (title != null) 'title': title,
       if (description != null) 'description': description,
       if (status != null) 'status': status,
@@ -5587,6 +6472,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
     Value<String?>? task_plan_path,
     Value<int?>? task_chat_session_fk,
     Value<int?>? task_agent_fk,
+    Value<int?>? task_story_fk,
     Value<String>? title,
     Value<String?>? description,
     Value<String>? status,
@@ -5617,6 +6503,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
       task_plan_path: task_plan_path ?? this.task_plan_path,
       task_chat_session_fk: task_chat_session_fk ?? this.task_chat_session_fk,
       task_agent_fk: task_agent_fk ?? this.task_agent_fk,
+      task_story_fk: task_story_fk ?? this.task_story_fk,
       title: title ?? this.title,
       description: description ?? this.description,
       status: status ?? this.status,
@@ -5664,6 +6551,9 @@ class TasksCompanion extends UpdateCompanion<Task> {
     }
     if (task_agent_fk.present) {
       map['task_agent_fk'] = Variable<int>(task_agent_fk.value);
+    }
+    if (task_story_fk.present) {
+      map['task_story_fk'] = Variable<int>(task_story_fk.value);
     }
     if (title.present) {
       map['title'] = Variable<String>(title.value);
@@ -5741,6 +6631,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
           ..write('task_plan_path: $task_plan_path, ')
           ..write('task_chat_session_fk: $task_chat_session_fk, ')
           ..write('task_agent_fk: $task_agent_fk, ')
+          ..write('task_story_fk: $task_story_fk, ')
           ..write('title: $title, ')
           ..write('description: $description, ')
           ..write('status: $status, ')
@@ -13656,6 +14547,7 @@ abstract class _$NexusDatabase extends GeneratedDatabase {
   late final $AgentPersonasTable agentPersonas = $AgentPersonasTable(this);
   late final $ProjectsTable projects = $ProjectsTable(this);
   late final $ChatSessionsTable chatSessions = $ChatSessionsTable(this);
+  late final $UserStoriesTable userStories = $UserStoriesTable(this);
   late final $TasksTable tasks = $TasksTable(this);
   late final $SkillsTable skills = $SkillsTable(this);
   late final $DeploymentsTable deployments = $DeploymentsTable(this);
@@ -13682,6 +14574,7 @@ abstract class _$NexusDatabase extends GeneratedDatabase {
     agentPersonas,
     projects,
     chatSessions,
+    userStories,
     tasks,
     skills,
     deployments,
@@ -16366,6 +17259,7 @@ typedef $$ProjectsTableCreateCompanionBuilder =
       Value<String?> orchestratorPromptsJson,
       Value<String> setupStatus,
       Value<String?> setupTranscriptJson,
+      Value<String> explorationStatus,
       Value<String?> projectSummaryMd,
       Value<DateTime?> summaryUpdatedAt,
       Value<String> projectType,
@@ -16389,6 +17283,7 @@ typedef $$ProjectsTableUpdateCompanionBuilder =
       Value<String?> orchestratorPromptsJson,
       Value<String> setupStatus,
       Value<String?> setupTranscriptJson,
+      Value<String> explorationStatus,
       Value<String?> projectSummaryMd,
       Value<DateTime?> summaryUpdatedAt,
       Value<String> projectType,
@@ -16461,6 +17356,29 @@ final class $$ProjectsTableReferences
         );
 
     final cache = $_typedResult.readTableOrNull(_chatSessionsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$UserStoriesTable, List<UserStory>>
+  _userStoriesRefsTable(_$NexusDatabase db) => MultiTypedResultKey.fromTable(
+    db.userStories,
+    aliasName: $_aliasNameGenerator(
+      db.projects.project_pk,
+      db.userStories.project_fk,
+    ),
+  );
+
+  $$UserStoriesTableProcessedTableManager get userStoriesRefs {
+    final manager = $$UserStoriesTableTableManager($_db, $_db.userStories)
+        .filter(
+          (f) => f.project_fk.project_pk.sqlEquals(
+            $_itemColumn<int>('project_pk')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_userStoriesRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -16668,6 +17586,11 @@ class $$ProjectsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get explorationStatus => $composableBuilder(
+    column: $table.explorationStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get projectSummaryMd => $composableBuilder(
     column: $table.projectSummaryMd,
     builder: (column) => ColumnFilters(column),
@@ -16765,6 +17688,31 @@ class $$ProjectsTableFilterComposer
           }) => $$ChatSessionsTableFilterComposer(
             $db: $db,
             $table: $db.chatSessions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> userStoriesRefs(
+    Expression<bool> Function($$UserStoriesTableFilterComposer f) f,
+  ) {
+    final $$UserStoriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.project_pk,
+      referencedTable: $db.userStories,
+      getReferencedColumn: (t) => t.project_fk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UserStoriesTableFilterComposer(
+            $db: $db,
+            $table: $db.userStories,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -16989,6 +17937,11 @@ class $$ProjectsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get explorationStatus => $composableBuilder(
+    column: $table.explorationStatus,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get projectSummaryMd => $composableBuilder(
     column: $table.projectSummaryMd,
     builder: (column) => ColumnOrderings(column),
@@ -17133,6 +18086,11 @@ class $$ProjectsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get explorationStatus => $composableBuilder(
+    column: $table.explorationStatus,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get projectSummaryMd => $composableBuilder(
     column: $table.projectSummaryMd,
     builder: (column) => column,
@@ -17226,6 +18184,31 @@ class $$ProjectsTableAnnotationComposer
           }) => $$ChatSessionsTableAnnotationComposer(
             $db: $db,
             $table: $db.chatSessions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> userStoriesRefs<T extends Object>(
+    Expression<T> Function($$UserStoriesTableAnnotationComposer a) f,
+  ) {
+    final $$UserStoriesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.project_pk,
+      referencedTable: $db.userStories,
+      getReferencedColumn: (t) => t.project_fk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UserStoriesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.userStories,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -17403,6 +18386,7 @@ class $$ProjectsTableTableManager
             bool client_fk,
             bool agent_persona_fk,
             bool chatSessionsRefs,
+            bool userStoriesRefs,
             bool tasksRefs,
             bool deploymentsRefs,
             bool activityLogsRefs,
@@ -17437,6 +18421,7 @@ class $$ProjectsTableTableManager
                 Value<String?> orchestratorPromptsJson = const Value.absent(),
                 Value<String> setupStatus = const Value.absent(),
                 Value<String?> setupTranscriptJson = const Value.absent(),
+                Value<String> explorationStatus = const Value.absent(),
                 Value<String?> projectSummaryMd = const Value.absent(),
                 Value<DateTime?> summaryUpdatedAt = const Value.absent(),
                 Value<String> projectType = const Value.absent(),
@@ -17458,6 +18443,7 @@ class $$ProjectsTableTableManager
                 orchestratorPromptsJson: orchestratorPromptsJson,
                 setupStatus: setupStatus,
                 setupTranscriptJson: setupTranscriptJson,
+                explorationStatus: explorationStatus,
                 projectSummaryMd: projectSummaryMd,
                 summaryUpdatedAt: summaryUpdatedAt,
                 projectType: projectType,
@@ -17481,6 +18467,7 @@ class $$ProjectsTableTableManager
                 Value<String?> orchestratorPromptsJson = const Value.absent(),
                 Value<String> setupStatus = const Value.absent(),
                 Value<String?> setupTranscriptJson = const Value.absent(),
+                Value<String> explorationStatus = const Value.absent(),
                 Value<String?> projectSummaryMd = const Value.absent(),
                 Value<DateTime?> summaryUpdatedAt = const Value.absent(),
                 Value<String> projectType = const Value.absent(),
@@ -17502,6 +18489,7 @@ class $$ProjectsTableTableManager
                 orchestratorPromptsJson: orchestratorPromptsJson,
                 setupStatus: setupStatus,
                 setupTranscriptJson: setupTranscriptJson,
+                explorationStatus: explorationStatus,
                 projectSummaryMd: projectSummaryMd,
                 summaryUpdatedAt: summaryUpdatedAt,
                 projectType: projectType,
@@ -17523,6 +18511,7 @@ class $$ProjectsTableTableManager
                 client_fk = false,
                 agent_persona_fk = false,
                 chatSessionsRefs = false,
+                userStoriesRefs = false,
                 tasksRefs = false,
                 deploymentsRefs = false,
                 activityLogsRefs = false,
@@ -17534,6 +18523,7 @@ class $$ProjectsTableTableManager
                   db: db,
                   explicitlyWatchedTables: [
                     if (chatSessionsRefs) db.chatSessions,
+                    if (userStoriesRefs) db.userStories,
                     if (tasksRefs) db.tasks,
                     if (deploymentsRefs) db.deployments,
                     if (activityLogsRefs) db.activityLogs,
@@ -17603,6 +18593,27 @@ class $$ProjectsTableTableManager
                                 table,
                                 p0,
                               ).chatSessionsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.project_fk == item.project_pk,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (userStoriesRefs)
+                        await $_getPrefetchedData<
+                          Project,
+                          $ProjectsTable,
+                          UserStory
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProjectsTableReferences
+                              ._userStoriesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProjectsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).userStoriesRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.project_fk == item.project_pk,
@@ -17759,6 +18770,7 @@ typedef $$ProjectsTableProcessedTableManager =
         bool client_fk,
         bool agent_persona_fk,
         bool chatSessionsRefs,
+        bool userStoriesRefs,
         bool tasksRefs,
         bool deploymentsRefs,
         bool activityLogsRefs,
@@ -18410,6 +19422,676 @@ typedef $$ChatSessionsTableProcessedTableManager =
         bool chatMessagesRefs,
       })
     >;
+typedef $$UserStoriesTableCreateCompanionBuilder =
+    UserStoriesCompanion Function({
+      Value<int> story_pk,
+      required int project_fk,
+      Value<int?> parent_story_fk,
+      required String title,
+      Value<String> narrative,
+      Value<String?> acceptanceCriteria,
+      Value<String> kind,
+      Value<String> status,
+      Value<double?> posX,
+      Value<double?> posY,
+      Value<int> orderIndex,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+typedef $$UserStoriesTableUpdateCompanionBuilder =
+    UserStoriesCompanion Function({
+      Value<int> story_pk,
+      Value<int> project_fk,
+      Value<int?> parent_story_fk,
+      Value<String> title,
+      Value<String> narrative,
+      Value<String?> acceptanceCriteria,
+      Value<String> kind,
+      Value<String> status,
+      Value<double?> posX,
+      Value<double?> posY,
+      Value<int> orderIndex,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+
+final class $$UserStoriesTableReferences
+    extends BaseReferences<_$NexusDatabase, $UserStoriesTable, UserStory> {
+  $$UserStoriesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $ProjectsTable _project_fkTable(_$NexusDatabase db) =>
+      db.projects.createAlias(
+        $_aliasNameGenerator(db.userStories.project_fk, db.projects.project_pk),
+      );
+
+  $$ProjectsTableProcessedTableManager get project_fk {
+    final $_column = $_itemColumn<int>('project_fk')!;
+
+    final manager = $$ProjectsTableTableManager(
+      $_db,
+      $_db.projects,
+    ).filter((f) => f.project_pk.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_project_fkTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UserStoriesTable _parent_story_fkTable(_$NexusDatabase db) =>
+      db.userStories.createAlias(
+        $_aliasNameGenerator(
+          db.userStories.parent_story_fk,
+          db.userStories.story_pk,
+        ),
+      );
+
+  $$UserStoriesTableProcessedTableManager? get parent_story_fk {
+    final $_column = $_itemColumn<int>('parent_story_fk');
+    if ($_column == null) return null;
+    final manager = $$UserStoriesTableTableManager(
+      $_db,
+      $_db.userStories,
+    ).filter((f) => f.story_pk.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_parent_story_fkTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$TasksTable, List<Task>> _tasksRefsTable(
+    _$NexusDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.tasks,
+    aliasName: $_aliasNameGenerator(
+      db.userStories.story_pk,
+      db.tasks.task_story_fk,
+    ),
+  );
+
+  $$TasksTableProcessedTableManager get tasksRefs {
+    final manager = $$TasksTableTableManager($_db, $_db.tasks).filter(
+      (f) => f.task_story_fk.story_pk.sqlEquals($_itemColumn<int>('story_pk')!),
+    );
+
+    final cache = $_typedResult.readTableOrNull(_tasksRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$UserStoriesTableFilterComposer
+    extends Composer<_$NexusDatabase, $UserStoriesTable> {
+  $$UserStoriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get story_pk => $composableBuilder(
+    column: $table.story_pk,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get narrative => $composableBuilder(
+    column: $table.narrative,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get acceptanceCriteria => $composableBuilder(
+    column: $table.acceptanceCriteria,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get posX => $composableBuilder(
+    column: $table.posX,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get posY => $composableBuilder(
+    column: $table.posY,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get orderIndex => $composableBuilder(
+    column: $table.orderIndex,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ProjectsTableFilterComposer get project_fk {
+    final $$ProjectsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.project_fk,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.project_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableFilterComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UserStoriesTableFilterComposer get parent_story_fk {
+    final $$UserStoriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.parent_story_fk,
+      referencedTable: $db.userStories,
+      getReferencedColumn: (t) => t.story_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UserStoriesTableFilterComposer(
+            $db: $db,
+            $table: $db.userStories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> tasksRefs(
+    Expression<bool> Function($$TasksTableFilterComposer f) f,
+  ) {
+    final $$TasksTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.story_pk,
+      referencedTable: $db.tasks,
+      getReferencedColumn: (t) => t.task_story_fk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TasksTableFilterComposer(
+            $db: $db,
+            $table: $db.tasks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$UserStoriesTableOrderingComposer
+    extends Composer<_$NexusDatabase, $UserStoriesTable> {
+  $$UserStoriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get story_pk => $composableBuilder(
+    column: $table.story_pk,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get narrative => $composableBuilder(
+    column: $table.narrative,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get acceptanceCriteria => $composableBuilder(
+    column: $table.acceptanceCriteria,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get posX => $composableBuilder(
+    column: $table.posX,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get posY => $composableBuilder(
+    column: $table.posY,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get orderIndex => $composableBuilder(
+    column: $table.orderIndex,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ProjectsTableOrderingComposer get project_fk {
+    final $$ProjectsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.project_fk,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.project_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableOrderingComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UserStoriesTableOrderingComposer get parent_story_fk {
+    final $$UserStoriesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.parent_story_fk,
+      referencedTable: $db.userStories,
+      getReferencedColumn: (t) => t.story_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UserStoriesTableOrderingComposer(
+            $db: $db,
+            $table: $db.userStories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$UserStoriesTableAnnotationComposer
+    extends Composer<_$NexusDatabase, $UserStoriesTable> {
+  $$UserStoriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get story_pk =>
+      $composableBuilder(column: $table.story_pk, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get narrative =>
+      $composableBuilder(column: $table.narrative, builder: (column) => column);
+
+  GeneratedColumn<String> get acceptanceCriteria => $composableBuilder(
+    column: $table.acceptanceCriteria,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<double> get posX =>
+      $composableBuilder(column: $table.posX, builder: (column) => column);
+
+  GeneratedColumn<double> get posY =>
+      $composableBuilder(column: $table.posY, builder: (column) => column);
+
+  GeneratedColumn<int> get orderIndex => $composableBuilder(
+    column: $table.orderIndex,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$ProjectsTableAnnotationComposer get project_fk {
+    final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.project_fk,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.project_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UserStoriesTableAnnotationComposer get parent_story_fk {
+    final $$UserStoriesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.parent_story_fk,
+      referencedTable: $db.userStories,
+      getReferencedColumn: (t) => t.story_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UserStoriesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.userStories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> tasksRefs<T extends Object>(
+    Expression<T> Function($$TasksTableAnnotationComposer a) f,
+  ) {
+    final $$TasksTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.story_pk,
+      referencedTable: $db.tasks,
+      getReferencedColumn: (t) => t.task_story_fk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TasksTableAnnotationComposer(
+            $db: $db,
+            $table: $db.tasks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$UserStoriesTableTableManager
+    extends
+        RootTableManager<
+          _$NexusDatabase,
+          $UserStoriesTable,
+          UserStory,
+          $$UserStoriesTableFilterComposer,
+          $$UserStoriesTableOrderingComposer,
+          $$UserStoriesTableAnnotationComposer,
+          $$UserStoriesTableCreateCompanionBuilder,
+          $$UserStoriesTableUpdateCompanionBuilder,
+          (UserStory, $$UserStoriesTableReferences),
+          UserStory,
+          PrefetchHooks Function({
+            bool project_fk,
+            bool parent_story_fk,
+            bool tasksRefs,
+          })
+        > {
+  $$UserStoriesTableTableManager(_$NexusDatabase db, $UserStoriesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$UserStoriesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$UserStoriesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$UserStoriesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> story_pk = const Value.absent(),
+                Value<int> project_fk = const Value.absent(),
+                Value<int?> parent_story_fk = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String> narrative = const Value.absent(),
+                Value<String?> acceptanceCriteria = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<double?> posX = const Value.absent(),
+                Value<double?> posY = const Value.absent(),
+                Value<int> orderIndex = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => UserStoriesCompanion(
+                story_pk: story_pk,
+                project_fk: project_fk,
+                parent_story_fk: parent_story_fk,
+                title: title,
+                narrative: narrative,
+                acceptanceCriteria: acceptanceCriteria,
+                kind: kind,
+                status: status,
+                posX: posX,
+                posY: posY,
+                orderIndex: orderIndex,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> story_pk = const Value.absent(),
+                required int project_fk,
+                Value<int?> parent_story_fk = const Value.absent(),
+                required String title,
+                Value<String> narrative = const Value.absent(),
+                Value<String?> acceptanceCriteria = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<double?> posX = const Value.absent(),
+                Value<double?> posY = const Value.absent(),
+                Value<int> orderIndex = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => UserStoriesCompanion.insert(
+                story_pk: story_pk,
+                project_fk: project_fk,
+                parent_story_fk: parent_story_fk,
+                title: title,
+                narrative: narrative,
+                acceptanceCriteria: acceptanceCriteria,
+                kind: kind,
+                status: status,
+                posX: posX,
+                posY: posY,
+                orderIndex: orderIndex,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$UserStoriesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                project_fk = false,
+                parent_story_fk = false,
+                tasksRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [if (tasksRefs) db.tasks],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (project_fk) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.project_fk,
+                                    referencedTable:
+                                        $$UserStoriesTableReferences
+                                            ._project_fkTable(db),
+                                    referencedColumn:
+                                        $$UserStoriesTableReferences
+                                            ._project_fkTable(db)
+                                            .project_pk,
+                                  )
+                                  as T;
+                        }
+                        if (parent_story_fk) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.parent_story_fk,
+                                    referencedTable:
+                                        $$UserStoriesTableReferences
+                                            ._parent_story_fkTable(db),
+                                    referencedColumn:
+                                        $$UserStoriesTableReferences
+                                            ._parent_story_fkTable(db)
+                                            .story_pk,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (tasksRefs)
+                        await $_getPrefetchedData<
+                          UserStory,
+                          $UserStoriesTable,
+                          Task
+                        >(
+                          currentTable: table,
+                          referencedTable: $$UserStoriesTableReferences
+                              ._tasksRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$UserStoriesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).tasksRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.task_story_fk == item.story_pk,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$UserStoriesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$NexusDatabase,
+      $UserStoriesTable,
+      UserStory,
+      $$UserStoriesTableFilterComposer,
+      $$UserStoriesTableOrderingComposer,
+      $$UserStoriesTableAnnotationComposer,
+      $$UserStoriesTableCreateCompanionBuilder,
+      $$UserStoriesTableUpdateCompanionBuilder,
+      (UserStory, $$UserStoriesTableReferences),
+      UserStory,
+      PrefetchHooks Function({
+        bool project_fk,
+        bool parent_story_fk,
+        bool tasksRefs,
+      })
+    >;
 typedef $$TasksTableCreateCompanionBuilder =
     TasksCompanion Function({
       Value<int> task_pk,
@@ -18419,6 +20101,7 @@ typedef $$TasksTableCreateCompanionBuilder =
       Value<String?> task_plan_path,
       Value<int?> task_chat_session_fk,
       Value<int?> task_agent_fk,
+      Value<int?> task_story_fk,
       required String title,
       Value<String?> description,
       Value<String> status,
@@ -18450,6 +20133,7 @@ typedef $$TasksTableUpdateCompanionBuilder =
       Value<String?> task_plan_path,
       Value<int?> task_chat_session_fk,
       Value<int?> task_agent_fk,
+      Value<int?> task_story_fk,
       Value<String> title,
       Value<String?> description,
       Value<String> status,
@@ -18571,6 +20255,25 @@ final class $$TasksTableReferences
       $_db.agentPersonas,
     ).filter((f) => f.agent_pk.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_task_agent_fkTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UserStoriesTable _task_story_fkTable(_$NexusDatabase db) =>
+      db.userStories.createAlias(
+        $_aliasNameGenerator(db.tasks.task_story_fk, db.userStories.story_pk),
+      );
+
+  $$UserStoriesTableProcessedTableManager? get task_story_fk {
+    final $_column = $_itemColumn<int>('task_story_fk');
+    if ($_column == null) return null;
+    final manager = $$UserStoriesTableTableManager(
+      $_db,
+      $_db.userStories,
+    ).filter((f) => f.story_pk.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_task_story_fkTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -18844,6 +20547,29 @@ class $$TasksTableFilterComposer
           }) => $$AgentPersonasTableFilterComposer(
             $db: $db,
             $table: $db.agentPersonas,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UserStoriesTableFilterComposer get task_story_fk {
+    final $$UserStoriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.task_story_fk,
+      referencedTable: $db.userStories,
+      getReferencedColumn: (t) => t.story_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UserStoriesTableFilterComposer(
+            $db: $db,
+            $table: $db.userStories,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -19136,6 +20862,29 @@ class $$TasksTableOrderingComposer
     return composer;
   }
 
+  $$UserStoriesTableOrderingComposer get task_story_fk {
+    final $$UserStoriesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.task_story_fk,
+      referencedTable: $db.userStories,
+      getReferencedColumn: (t) => t.story_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UserStoriesTableOrderingComposer(
+            $db: $db,
+            $table: $db.userStories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   $$ChatSessionsTableOrderingComposer get worker_session_fk {
     final $$ChatSessionsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -19372,6 +21121,29 @@ class $$TasksTableAnnotationComposer
     return composer;
   }
 
+  $$UserStoriesTableAnnotationComposer get task_story_fk {
+    final $$UserStoriesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.task_story_fk,
+      referencedTable: $db.userStories,
+      getReferencedColumn: (t) => t.story_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UserStoriesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.userStories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   $$ChatSessionsTableAnnotationComposer get worker_session_fk {
     final $$ChatSessionsTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -19440,6 +21212,7 @@ class $$TasksTableTableManager
             bool task_parent_fk,
             bool task_chat_session_fk,
             bool task_agent_fk,
+            bool task_story_fk,
             bool worker_session_fk,
             bool ciRunsRefs,
           })
@@ -19464,6 +21237,7 @@ class $$TasksTableTableManager
                 Value<String?> task_plan_path = const Value.absent(),
                 Value<int?> task_chat_session_fk = const Value.absent(),
                 Value<int?> task_agent_fk = const Value.absent(),
+                Value<int?> task_story_fk = const Value.absent(),
                 Value<String> title = const Value.absent(),
                 Value<String?> description = const Value.absent(),
                 Value<String> status = const Value.absent(),
@@ -19493,6 +21267,7 @@ class $$TasksTableTableManager
                 task_plan_path: task_plan_path,
                 task_chat_session_fk: task_chat_session_fk,
                 task_agent_fk: task_agent_fk,
+                task_story_fk: task_story_fk,
                 title: title,
                 description: description,
                 status: status,
@@ -19524,6 +21299,7 @@ class $$TasksTableTableManager
                 Value<String?> task_plan_path = const Value.absent(),
                 Value<int?> task_chat_session_fk = const Value.absent(),
                 Value<int?> task_agent_fk = const Value.absent(),
+                Value<int?> task_story_fk = const Value.absent(),
                 required String title,
                 Value<String?> description = const Value.absent(),
                 Value<String> status = const Value.absent(),
@@ -19553,6 +21329,7 @@ class $$TasksTableTableManager
                 task_plan_path: task_plan_path,
                 task_chat_session_fk: task_chat_session_fk,
                 task_agent_fk: task_agent_fk,
+                task_story_fk: task_story_fk,
                 title: title,
                 description: description,
                 status: status,
@@ -19588,6 +21365,7 @@ class $$TasksTableTableManager
                 task_parent_fk = false,
                 task_chat_session_fk = false,
                 task_agent_fk = false,
+                task_story_fk = false,
                 worker_session_fk = false,
                 ciRunsRefs = false,
               }) {
@@ -19675,6 +21453,19 @@ class $$TasksTableTableManager
                                   )
                                   as T;
                         }
+                        if (task_story_fk) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.task_story_fk,
+                                    referencedTable: $$TasksTableReferences
+                                        ._task_story_fkTable(db),
+                                    referencedColumn: $$TasksTableReferences
+                                        ._task_story_fkTable(db)
+                                        .story_pk,
+                                  )
+                                  as T;
+                        }
                         if (worker_session_fk) {
                           state =
                               state.withJoin(
@@ -19732,6 +21523,7 @@ typedef $$TasksTableProcessedTableManager =
         bool task_parent_fk,
         bool task_chat_session_fk,
         bool task_agent_fk,
+        bool task_story_fk,
         bool worker_session_fk,
         bool ciRunsRefs,
       })
@@ -25561,6 +27353,8 @@ class $NexusDatabaseManager {
       $$ProjectsTableTableManager(_db, _db.projects);
   $$ChatSessionsTableTableManager get chatSessions =>
       $$ChatSessionsTableTableManager(_db, _db.chatSessions);
+  $$UserStoriesTableTableManager get userStories =>
+      $$UserStoriesTableTableManager(_db, _db.userStories);
   $$TasksTableTableManager get tasks =>
       $$TasksTableTableManager(_db, _db.tasks);
   $$SkillsTableTableManager get skills =>

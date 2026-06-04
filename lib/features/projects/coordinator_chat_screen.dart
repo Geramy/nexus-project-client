@@ -57,11 +57,21 @@ class ProjectCoordinatorChatScreen extends ConsumerStatefulWidget {
   /// e.g. `/PLANS/Roadmap.md`.
   final String? openPlanPath;
 
+  /// Post-setup Exploration (discovery) mode: the coordinator gets ONLY the
+  /// user-story tools and a discovery [systemPromptOverride], and proactively
+  /// opens with [autoOpenPrompt] (the AI speaks first, no visible user bubble).
+  final bool discoveryMode;
+  final String? systemPromptOverride;
+  final String? autoOpenPrompt;
+
   const ProjectCoordinatorChatScreen({
     super.key,
     required this.projectId,
     required this.projectName,
     this.openPlanPath,
+    this.discoveryMode = false,
+    this.systemPromptOverride,
+    this.autoOpenPrompt,
   });
 
   @override
@@ -310,6 +320,8 @@ class _ProjectCoordinatorChatScreenState
           ),
         ),
         leanTools: ref.read(leanContextNotifierProvider),
+        discoveryMode: widget.discoveryMode,
+        systemPromptOverride: widget.systemPromptOverride,
       );
 
       // Load the session's persisted messages + restore the LLM history.
@@ -370,7 +382,7 @@ class _ProjectCoordinatorChatScreenState
           _messages
             ..clear()
             ..addAll(restored);
-          if (_messages.isEmpty) {
+          if (_messages.isEmpty && !widget.discoveryMode) {
             // Ephemeral greeting (not persisted) shown only for an empty session.
             _messages.add(
               _ChatMessage(
@@ -381,6 +393,15 @@ class _ProjectCoordinatorChatScreenState
             );
           }
         });
+      }
+
+      // Discovery: the coordinator speaks first — proactively kick off the
+      // interview (no visible user bubble) when the session is fresh.
+      if (mounted &&
+          widget.discoveryMode &&
+          _messages.isEmpty &&
+          (widget.autoOpenPrompt ?? '').isNotEmpty) {
+        unawaited(_sendMessage(hiddenPrompt: widget.autoOpenPrompt));
       }
     } catch (e) {
       if (mounted) {
@@ -526,17 +547,20 @@ class _ProjectCoordinatorChatScreenState
     }
   }
 
-  Future<void> _sendMessage() async {
-    final text = _messageController.text.trim();
+  Future<void> _sendMessage({String? hiddenPrompt}) async {
+    // A hidden prompt (the discovery auto-opener) drives a turn WITHOUT showing
+    // a user bubble or persisting it — so the coordinator appears to speak first.
+    final hidden = hiddenPrompt != null;
+    final text = (hiddenPrompt ?? _messageController.text).trim();
     if (text.isEmpty || _isSending || !_clientReady || _session == null) return;
 
     setState(() {
-      _messages.add(_ChatMessage(text: text, isUser: true));
-      _messageController.clear();
+      if (!hidden) _messages.add(_ChatMessage(text: text, isUser: true));
+      if (!hidden) _messageController.clear();
       _isSending = true;
       _isThinking = true;
     });
-    final userMsgPk = await _persist('user', text);
+    final userMsgPk = hidden ? null : await _persist('user', text);
 
     try {
       final assistantBuffer = StringBuffer();

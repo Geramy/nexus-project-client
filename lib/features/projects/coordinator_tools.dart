@@ -37,7 +37,13 @@ class CoordinatorTools {
     bool includePlanTools = false,
     bool includePlannerComplete = false,
     bool includePlannerReview = false,
+    bool includeStoryTools = false,
+    bool discoveryOnly = false,
   }) {
+    // The post-setup Exploration (discovery) session gets ONLY the user-story
+    // tools — deliberately NO task/plan-write tools, so it can't be "eager" and
+    // create work before the user presses "Generate tasks".
+    if (discoveryOnly) return [..._storyToolSchemas];
     return [
       if (includePlannerComplete)
         {
@@ -1220,8 +1226,88 @@ class CoordinatorTools {
           },
         },
       },
+      if (includeStoryTools) ..._storyToolSchemas,
     ];
   }
+
+  /// User-story tools for the post-setup Exploration phase. Build the discovery
+  /// story tree; intentionally read/write stories only (never tasks).
+  static const List<Map<String, dynamic>> _storyToolSchemas = [
+    {
+      'type': 'function',
+      'function': {
+        'name': 'add_user_story',
+        'description':
+            'Add a user story to the project story tree during discovery. Use '
+            'this to capture each distinct piece of the idea as you interview '
+            'the user. Make it a child of an epic/story via parent_story_id to '
+            'build the tree (epics → stories → sub-stories).',
+        'parameters': {
+          'type': 'object',
+          'properties': {
+            'title': {
+              'type': 'string',
+              'description': 'Short node title (e.g. "Sign up").',
+            },
+            'narrative': {
+              'type': 'string',
+              'description':
+                  'The story in "As a <role>, I want <goal>, so that '
+                  '<benefit>" form.',
+            },
+            'acceptance_criteria': {
+              'type': 'string',
+              'description': 'Optional acceptance criteria (markdown bullets).',
+            },
+            'parent_story_id': {
+              'type': 'string',
+              'description':
+                  'Optional id of the parent story/epic to nest under.',
+            },
+            'kind': {
+              'type': 'string',
+              'enum': ['epic', 'story', 'substory'],
+              'description': 'Node kind (default "story").',
+            },
+          },
+          'required': ['title'],
+        },
+      },
+    },
+    {
+      'type': 'function',
+      'function': {
+        'name': 'update_user_story',
+        'description':
+            'Update an existing user story (title, narrative, acceptance '
+            'criteria, or status) as the idea is refined.',
+        'parameters': {
+          'type': 'object',
+          'properties': {
+            'story_id': {'type': 'string'},
+            'title': {'type': 'string'},
+            'narrative': {'type': 'string'},
+            'acceptance_criteria': {'type': 'string'},
+            'status': {
+              'type': 'string',
+              'enum': ['draft', 'confirmed', 'done'],
+            },
+          },
+          'required': ['story_id'],
+        },
+      },
+    },
+    {
+      'type': 'function',
+      'function': {
+        'name': 'list_user_stories',
+        'description':
+            'List the current user-story tree (ids, titles, parents, status) so '
+            'you stay grounded in what has already been captured.',
+        'parameters': {'type': 'object', 'properties': {}},
+      },
+    },
+  ];
 }
 
 /// Executes a tool call returned by the LLM against the live database.
@@ -1351,6 +1437,12 @@ class CoordinatorToolExecutor {
       if (blocked != null) return blocked;
 
       switch (name) {
+        case 'add_user_story':
+          return await _addUserStory(args);
+        case 'update_user_story':
+          return await _updateUserStory(args);
+        case 'list_user_stories':
+          return await _listUserStories();
         case 'create_task':
           return await _createTask(args);
         case 'update_task_status':
@@ -1487,6 +1579,76 @@ class CoordinatorToolExecutor {
     } catch (e) {
       return 'Tool "$name" failed: $e';
     }
+  }
+
+  // ── User-story (Exploration discovery) tools ──────────────────────────────
+
+  Future<String> _addUserStory(Map<String, dynamic> args) async {
+    final title = (args['title'] as String? ?? '').trim();
+    if (title.isEmpty) return 'add_user_story failed: title is required.';
+    final parentId = _asInt(args['parent_story_id']);
+    if (parentId != null && await db.getUserStoryById(parentId) == null) {
+      return 'add_user_story failed: parent story #$parentId not found.';
+    }
+    final kind = (args['kind'] as String? ?? 'story').trim();
+    final id = await db.createUserStory(
+      UserStoriesCompanion.insert(
+        project_fk: projectId,
+        parent_story_fk: Value(parentId),
+        title: title,
+        narrative: Value((args['narrative'] as String? ?? '').trim()),
+        acceptanceCriteria: Value(
+          (args['acceptance_criteria'] as String?)?.trim().isEmpty ?? true
+              ? null
+              : (args['acceptance_criteria'] as String).trim(),
+        ),
+        kind: Value(kind.isEmpty ? 'story' : kind),
+      ),
+    );
+    return 'Added user story "$title" (id: $id)'
+        '${parentId != null ? ' under #$parentId' : ''}.';
+  }
+
+  Future<String> _updateUserStory(Map<String, dynamic> args) async {
+    final id = _asInt(args['story_id']);
+    if (id == null) return 'update_user_story failed: story_id is required.';
+    if (await db.getUserStoryById(id) == null) {
+      return 'update_user_story failed: story #$id not found.';
+    }
+    String? s(String k) {
+      final v = (args[k] as String?)?.trim();
+      return (v == null || v.isEmpty) ? null : v;
+    }
+
+    await db.updateUserStory(
+      id,
+      UserStoriesCompanion(
+        title: s('title') != null ? Value(s('title')!) : const Value.absent(),
+        narrative: s('narrative') != null
+            ? Value(s('narrative')!)
+            : const Value.absent(),
+        acceptanceCriteria: s('acceptance_criteria') != null
+            ? Value(s('acceptance_criteria'))
+            : const Value.absent(),
+        status: s('status') != null ? Value(s('status')!) : const Value.absent(),
+      ),
+    );
+    return 'Updated user story #$id.';
+  }
+
+  Future<String> _listUserStories() async {
+    final stories = await db.getUserStoriesForProject(projectId);
+    if (stories.isEmpty) {
+      return 'No user stories captured yet.';
+    }
+    final b = StringBuffer('User stories (${stories.length}):\n');
+    for (final s in stories) {
+      final parent = s.parent_story_fk != null
+          ? ' (child of #${s.parent_story_fk})'
+          : '';
+      b.writeln('- #${s.story_pk} [${s.kind}/${s.status}] ${s.title}$parent');
+    }
+    return b.toString();
   }
 
   Future<String> _createTask(Map<String, dynamic> args) async {

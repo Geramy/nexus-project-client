@@ -81,7 +81,9 @@ jobs:
           NEXUS_SHOTS_DIR: ${{ github.workspace }}/setup_shots
           NEXUS_METRICS_DIR: ${{ github.workspace }}/build/metrics
         run: |
-          xvfb-run -a flutter test integration_test/setup_flow_screens_test.dart \
+          # Runs the setup-flow walkthrough AND the post-setup exploration
+          # workflow (discovery → user-story tree → generate linked tasks).
+          xvfb-run -a flutter test integration_test/ \
             -d linux --reporter expanded
 
       - name: Bundle screenshots + timing into a ZIP

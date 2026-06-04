@@ -3,8 +3,10 @@
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'steps/project_step.dart';
+import '../../core/providers/app_shell_provider.dart';
 import '../../shared/ui/nexus_ui.dart';
 
 /// Presents the SAME project-setup screen the onboarding wizard uses (name +
@@ -31,7 +33,16 @@ Future<void> showProjectSetupDialog(BuildContext context) {
                 subhead:
                     'Name it and choose the project type. You can change both later.',
                 defaultName: 'New Project',
-                onCreated: () => Navigator.of(ctx).pop(),
+                onCreated: () {
+                  // Land on the project workspace so the setup wizard auto-opens
+                  // for the new (notStarted) project — otherwise the user is left
+                  // on whatever view they were on (e.g. Launch) and has to open
+                  // setup by hand.
+                  ProviderScope.containerOf(ctx, listen: false)
+                      .read(currentMainViewProvider.notifier)
+                      .setView(MainView.projectPlans);
+                  Navigator.of(ctx).pop();
+                },
               ),
             ),
             Positioned(

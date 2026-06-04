@@ -739,57 +739,106 @@ class _PersonaEditorState extends ConsumerState<PersonaEditor> {
               ),
             ],
           ),
-          for (final category in kToolCategories) ...[
-            Padding(
-              padding: const EdgeInsets.only(top: AppSpacing.sm, bottom: 2),
-              child: Text(
-                category,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-            ...kCoordinatorToolSpecs
-                .where((t) => t.category == category)
-                .map(
-                  (t) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  t.label,
-                                  style: const TextStyle(fontSize: 12),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              if (t.destructive)
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                    left: AppSpacing.xs,
-                                  ),
-                                  child: Icon(
-                                    Icons.warning_amber_rounded,
-                                    size: 13,
-                                    color: context.nx.warning,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        _permChip(t.name),
-                      ],
-                    ),
-                  ),
-                ),
-          ],
+          // Each category is a collapsible group (collapsed by default) so the
+          // long tool list stays scannable; expand the groups you care about.
+          for (final category in kToolCategories)
+            _toolGroup(context, category),
         ],
       ),
     );
+  }
+
+  /// One collapsible tool-permission group with a per-group Grant/Ask/Deny.
+  Widget _toolGroup(BuildContext context, String category) {
+    final tools = kCoordinatorToolSpecs
+        .where((t) => t.category == category)
+        .toList();
+    if (tools.isEmpty) return const SizedBox.shrink();
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        dense: true,
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(
+          left: AppSpacing.sm,
+          bottom: AppSpacing.xs,
+        ),
+        title: Text(
+          category,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+        ),
+        subtitle: Text(
+          '${tools.length} tool${tools.length == 1 ? '' : 's'}',
+          style: TextStyle(fontSize: 11, color: context.nx.textMuted),
+        ),
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Wrap(
+              spacing: 4,
+              children: [
+                for (final p in ToolPerm.values)
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () => _setGroupPerms(category, p),
+                    child: Text(
+                      switch (p) {
+                        ToolPerm.grant => 'Grant all',
+                        ToolPerm.ask => 'Ask all',
+                        ToolPerm.deny => 'Deny all',
+                      },
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          for (final t in tools)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            t.label,
+                            style: const TextStyle(fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (t.destructive)
+                          Padding(
+                            padding: const EdgeInsets.only(left: AppSpacing.xs),
+                            child: Icon(
+                              Icons.warning_amber_rounded,
+                              size: 13,
+                              color: context.nx.warning,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  _permChip(t.name),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _setGroupPerms(String category, ToolPerm p) {
+    setState(() {
+      for (final t in kCoordinatorToolSpecs.where((t) => t.category == category)) {
+        _toolPerms[t.name] = p;
+      }
+    });
   }
 
   void _setAllPerms(ToolPerm p) {

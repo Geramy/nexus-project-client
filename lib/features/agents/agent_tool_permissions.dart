@@ -209,6 +209,15 @@ const List<ToolSpec> kCoordinatorToolSpecs = [
     destructive: true,
   ),
   ToolSpec('git_merge', 'Git', 'Merge branch', ToolPerm.ask, destructive: true),
+  // User stories (post-setup Exploration / discovery)
+  ToolSpec('add_user_story', 'Stories', 'Add a user story', ToolPerm.grant),
+  ToolSpec(
+    'update_user_story',
+    'Stories',
+    'Update a user story',
+    ToolPerm.grant,
+  ),
+  ToolSpec('list_user_stories', 'Stories', 'List user stories', ToolPerm.grant),
   // Build / CI
   ToolSpec(
     'build_docker_image',

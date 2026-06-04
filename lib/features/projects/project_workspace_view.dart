@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nexus_projects_client/core/providers/app_shell_provider.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/features/projects/coordinator_chat_screen.dart';
+import 'package:nexus_projects_client/features/projects/exploration/project_exploration_view.dart';
+import 'package:nexus_projects_client/features/projects/exploration/story_tree_canvas.dart';
 import 'package:nexus_projects_client/features/projects/orchestration/project_orchestrator.dart';
 import 'package:nexus_projects_client/features/projects/widgets/project_orchestration_controls.dart';
 import 'package:nexus_projects_client/features/projects/workspace_nav.dart';
@@ -55,7 +57,7 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 4, vsync: this);
+    _tabs = TabController(length: 5, vsync: this);
     // Publish whether Setup is the active tab so the MainShell right outer
     // panel can swap to the interview chat (instead of the Plan explorer).
     _tabs.addListener(_publishSetupMode);
@@ -124,10 +126,18 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
 
     // Setup is now a resumable full-screen WIZARD (not a tab). On a fresh
     // project we auto-open it once; it's also reachable from the Summary tab.
-    final setupStatus = ref
-        .watch(projectRowProvider(projectId))
-        .valueOrNull
-        ?.setupStatus;
+    final projectRow = ref.watch(projectRowProvider(projectId)).valueOrNull;
+    final setupStatus = projectRow?.setupStatus;
+
+    // After setup, the project enters the Exploration (discovery) phase: a
+    // dedicated two-pane screen (user-story tree + discovery chat) that REPLACES
+    // the normal tabbed workspace until the user generates tasks from stories.
+    if (projectRow?.explorationStatus == 'active') {
+      return ProjectExplorationView(
+        projectId: projectId,
+        projectName: projectName,
+      );
+    }
 
     // External nudges (e.g. the setup "Done" flow) can ask us to surface the
     // Overview tab, where the orchestration Start button lives.
@@ -157,6 +167,10 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
       icon: Icon(Icons.description_outlined, size: 18),
       text: 'Plan',
     );
+    const storiesTab = Tab(
+      icon: Icon(Icons.account_tree_outlined, size: 18),
+      text: 'User Stories',
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,7 +179,7 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
           controller: _tabs,
           isScrollable: true,
           tabAlignment: TabAlignment.start,
-          tabs: const [chatTab, summaryTab, overviewTab, planTab],
+          tabs: const [chatTab, summaryTab, overviewTab, planTab, storiesTab],
         ),
         const Divider(height: 1),
         if (setupStatus == 'notStarted' ||
@@ -195,6 +209,10 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
               ),
               _ProjectOverviewTab(projectId: projectId, clientId: clientId),
               const PlanWorkspaceView(),
+              UserStoriesView(
+                key: ValueKey('project-stories-$projectId'),
+                projectId: projectId,
+              ),
             ],
           ),
         ),

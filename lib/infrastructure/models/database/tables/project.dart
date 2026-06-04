@@ -55,6 +55,13 @@ class Projects extends Table {
   /// The setup interview Q/A transcript (JSON) so decisions can be re-explained.
   TextColumn get setupTranscriptJson => text().nullable()();
 
+  /// Post-setup **Exploration** phase state: none | active | complete. After
+  /// setup finishes the project enters `active` — a discovery chat that builds
+  /// the user-story tree — and stays there (NO tasks generated) until the user
+  /// presses "Generate tasks from stories", which flips it to `complete`.
+  TextColumn get explorationStatus =>
+      text().withDefault(const Constant('none'))();
+
   /// AI-compiled, human-readable summary of the project (markdown), built from
   /// all /PLANS files. Regenerated on plan changes and by the coordinator's
   /// idle cycles. Null until first generated.

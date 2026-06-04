@@ -11,9 +11,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/providers/lean_context_provider.dart';
 import '../../infrastructure/registry/verification_service.dart';
-import '../../infrastructure/workspace/git/git_engine_provider.dart';
-import '../../infrastructure/workspace/git/nxtprj_git_engine.dart';
-import '../../infrastructure/workspace/workspace.dart';
 import '../../infrastructure/workspace/workspace_provider.dart';
 import '../../services/audio/audio_recorder_service.dart';
 import '../../services/audio/coordinator_duplex_voice_session.dart'
@@ -21,11 +18,8 @@ import '../../services/audio/coordinator_duplex_voice_session.dart'
 import '../../services/audio/setup_voice_session.dart';
 import '../../services/audio/tts_service.dart';
 import '../project_plans/plan_store.dart';
-import '../projects/planning/planning_progress.dart';
-import '../projects/planning/project_planning_run.dart';
 import 'config/setup_flow.dart';
 import 'config/setup_flow_catalog.dart';
-import 'plan_task_sync.dart';
 import 'setup_inference.dart';
 import 'setup_session.dart';
 import 'setup_tools.dart';
@@ -388,96 +382,35 @@ class SetupChatController extends ChangeNotifier {
   /// orchestrator starts. Progress streams into the interview chat. Marks setup
   /// `complete`. Falls back to a plain deterministic plan→task sync when no
   /// inference server is configured (so setup still completes offline).
+  /// Finish setup and enter the post-setup **Exploration** phase. Crucially we
+  /// NO LONGER generate tasks here — that was "too eager". Instead the project
+  /// moves into discovery: the Coordinator interviews the user and builds the
+  /// user-story tree, and tasks are only created later when the user presses
+  /// "Generate tasks from stories" (see `generateTasksFromStories`).
   Future<void> completeSetup() async {
     refining = false;
     final db = _ref.read(nexusDatabaseProvider);
-    final progress = _ref.read(planningProgressProvider(projectId).notifier);
     busy = true;
     notifyListeners();
     try {
-      final planStore = await _ref.read(planStoreProvider(projectId).future);
-      await _ensureSession();
-      final resolved = _resolved;
-      if (resolved != null) {
-        progress.start();
-        final proj = await db.getProjectById(projectId);
-        // Workspace + git for the scaffolding phase (best-effort).
-        Workspace? ws;
-        NxtprjGitEngine? git;
-        try {
-          ws = await _ref.read(workspaceFsProvider(projectId).future);
-          git = await _ref.read(gitEngineProvider(projectId).future);
-        } catch (_) {}
-        await ProjectPlanningRun(
-          db: db,
-          planStore: planStore,
-          backend: resolved.backend,
-          projectId: projectId,
-          projectName: proj?.name ?? 'Project',
-          model: resolved.model,
-          enableThinking: resolved.enableThinking,
-          workspace: ws,
-          git: git,
-          scaffold: (proj?.projectType ?? '') == 'application-development',
-          brief: _buildBrief(),
-          // Stream to BOTH the setup chat and the project-wide planning banner,
-          // so progress is visible after the user is redirected to Tasks.
-          onProgress: (line) {
-            _append(SetupMsg(kind: SetupMsgKind.system, text: line));
-            progress.add(line);
-          },
-        ).run();
-        _bumpWorkspace();
-      } else {
-        // No inference: keep the old deterministic behavior.
-        final result = await PlanTaskSync(
-          db: db,
-          planStore: planStore,
-          projectId: projectId,
-        ).sync();
-        _bumpWorkspace();
-        _append(
-          SetupMsg(
-            kind: SetupMsgKind.assistant,
-            text:
-                '${result.describe()} Add an inference server to have the '
-                'planning agent flesh this out automatically.',
-          ),
-        );
-      }
-    } catch (e) {
+      await db.setProjectSetupStatus(projectId, 'complete');
+      await db.setProjectExplorationStatus(projectId, 'active');
+      _bumpWorkspace();
       _append(
         SetupMsg(
           kind: SetupMsgKind.system,
           text:
-              'Could not build the plan automatically ($e). You can ask the '
-              'coordinator to create tasks in the Chat tab.',
+              'Setup complete. Let\'s explore the idea — I\'ll ask a few '
+              'questions and build out your user stories before any tasks are '
+              'created.',
         ),
       );
     } finally {
-      progress.finish();
       busy = false;
+      notifyListeners();
     }
-    await db.setProjectSetupStatus(projectId, 'complete');
-    notifyListeners();
   }
 
-  /// The visible interview transcript flattened to text — the "brief" the
-  /// planning agent expands from (every word the PM gave).
-  String _buildBrief() {
-    final b = StringBuffer();
-    for (final m in messages) {
-      final who = switch (m.kind) {
-        SetupMsgKind.user => 'PM',
-        SetupMsgKind.assistant => 'Host',
-        _ => null,
-      };
-      if (who != null && m.text.trim().isNotEmpty) {
-        b.writeln('$who: ${m.text.trim()}');
-      }
-    }
-    return b.toString().trim();
-  }
 
   Future<void> skip() async {
     await _ref

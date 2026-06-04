@@ -270,7 +270,7 @@ final nexusGatewayBaseUrlProvider =
     );
 
 typedef _$NexusGatewayBaseUrl = AutoDisposeNotifier<String>;
-String _$nexusAuthHash() => r'0e14e9283a0362e97f213504acf9b39df7188f17';
+String _$nexusAuthHash() => r'3485c394f6780ff7ba3b7457e50f15e716d937fd';
 
 /// Signed-in account state. Hydrates the token + cached identity from secure
 /// storage on build, then exposes login / register / logout.

@@ -101,7 +101,14 @@ class ProjectCoordinatorSession {
     this.onPlanReview,
     this.workBranch,
     this.gitLane,
+    this.discoveryMode = false,
   });
+
+  /// Post-setup Exploration (discovery) mode: the model is offered ONLY the
+  /// user-story tools (build the story tree) — no task/plan-write tools — so it
+  /// can't generate work before the user presses "Generate tasks". The
+  /// discovery framing is supplied via [systemPromptOverride].
+  final bool discoveryMode;
 
   /// When true (default), only the core task/plan tools are offered each turn;
   /// the file/git/CI groups are pulled in on demand via `request_tools`, cutting
@@ -415,11 +422,13 @@ class ProjectCoordinatorSession {
     // Offer the plan tools whenever a plan store is available — not only when a
     // specific plan is open — so the coordinator can list/read/create plans in
     // the general project chat (PLANS/ exists from the start of planning).
-    final allTools = CoordinatorTools.buildToolSchemas(
-      includePlanTools: planStore != null,
-      includePlannerComplete: onPlanningComplete != null,
-      includePlannerReview: onPlanReview != null,
-    );
+    final allTools = discoveryMode
+        ? CoordinatorTools.buildToolSchemas(discoveryOnly: true)
+        : CoordinatorTools.buildToolSchemas(
+            includePlanTools: planStore != null,
+            includePlannerComplete: onPlanningComplete != null,
+            includePlannerReview: onPlanReview != null,
+          );
     final executor = db != null
         ? CoordinatorToolExecutor(
             db: db!,
@@ -444,7 +453,9 @@ class ProjectCoordinatorSession {
     try {
       for (var round = 0; round < maxToolRounds; round++) {
         // Rebuilt each round so a request_tools unlock takes effect immediately.
-        final tools = _effectiveTools(allTools);
+        // Discovery mode uses the curated story-tool list verbatim (no lean
+        // gating / request_tools — it must not reach task tools).
+        final tools = discoveryMode ? allTools : _effectiveTools(allTools);
         final sys = await _buildSystemPrompt(
           currentPlanContext: currentPlanContext,
         );

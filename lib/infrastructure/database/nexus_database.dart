@@ -34,6 +34,7 @@ import '../models/database/tables/call_system.dart';
 import '../models/database/tables/setup_flow.dart';
 import '../models/database/tables/setup_scope.dart';
 import '../models/database/tables/setup_scope_option.dart';
+import '../models/database/tables/user_story.dart';
 import '../../features/project_setup/config/setup_flow_catalog.dart'
     as setup_cat;
 import '../../features/agents/agent_role.dart';
@@ -85,6 +86,7 @@ class TaskCompletedEvent {
     SetupFlows,
     SetupScopes,
     SetupScopeOptions,
+    UserStories,
   ],
 )
 class NexusDatabase extends _$NexusDatabase {
@@ -108,7 +110,7 @@ class NexusDatabase extends _$NexusDatabase {
       _taskCompletedController.stream;
 
   @override
-  int get schemaVersion => 30;
+  int get schemaVersion => 31;
 
   @override
   MigrationStrategy get migration {
@@ -215,6 +217,13 @@ class NexusDatabase extends _$NexusDatabase {
         if (from < 30) {
           await m.createTable(setupScopes);
           await m.createTable(setupScopeOptions);
+        }
+        if (from < 31) {
+          // Post-setup Exploration phase: the user-story tree, the task→story
+          // backlink, and the project exploration-phase flag.
+          await m.createTable(userStories);
+          await m.addColumn(tasks, tasks.task_story_fk);
+          await m.addColumn(projects, projects.explorationStatus);
         }
       },
     );
@@ -936,6 +945,18 @@ class NexusDatabase extends _$NexusDatabase {
     );
   }
 
+  /// Post-setup Exploration phase: none | active | complete.
+  Future<void> setProjectExplorationStatus(int projectPk, String status) async {
+    await (update(
+      projects,
+    )..where((p) => p.project_pk.equals(projectPk))).write(
+      ProjectsCompanion(
+        explorationStatus: Value(status),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
   /// Persist the setup interview transcript (JSON), or null to clear it.
   Future<void> setProjectSetupTranscript(int projectPk, String? json) async {
     await (update(
@@ -1015,6 +1036,71 @@ class NexusDatabase extends _$NexusDatabase {
     await (delete(projectTags)..where((t) => t.tag_pk.equals(tagPk))).go();
   }
 
+  // ==================== User stories (Exploration phase) ====================
+  /// Insert a user story; returns its new pk.
+  Future<int> createUserStory(UserStoriesCompanion entry) =>
+      into(userStories).insert(entry);
+
+  /// All stories for a project (the whole tree, flat), ordered for stable layout.
+  Future<List<UserStory>> getUserStoriesForProject(int projectPk) {
+    return (select(userStories)
+          ..where((s) => s.project_fk.equals(projectPk))
+          ..orderBy([
+            (s) => OrderingTerm(expression: s.orderIndex),
+            (s) => OrderingTerm(expression: s.story_pk),
+          ]))
+        .get();
+  }
+
+  /// Live story tree for the canvas (rebuilds as the Coordinator adds stories).
+  Stream<List<UserStory>> watchUserStoriesForProject(int projectPk) {
+    return (select(userStories)
+          ..where((s) => s.project_fk.equals(projectPk))
+          ..orderBy([
+            (s) => OrderingTerm(expression: s.orderIndex),
+            (s) => OrderingTerm(expression: s.story_pk),
+          ]))
+        .watch();
+  }
+
+  Future<UserStory?> getUserStoryById(int storyPk) {
+    return (select(
+      userStories,
+    )..where((s) => s.story_pk.equals(storyPk))).getSingleOrNull();
+  }
+
+  /// Patch a story (any subset of fields); always bumps `updatedAt`.
+  Future<void> updateUserStory(int storyPk, UserStoriesCompanion patch) async {
+    await (update(userStories)..where((s) => s.story_pk.equals(storyPk))).write(
+      patch.copyWith(updatedAt: Value(DateTime.now())),
+    );
+  }
+
+  /// Persist a node's canvas position (after a drag / auto-layout).
+  Future<void> setUserStoryPosition(int storyPk, double x, double y) async {
+    await (update(userStories)..where((s) => s.story_pk.equals(storyPk))).write(
+      UserStoriesCompanion(posX: Value(x), posY: Value(y)),
+    );
+  }
+
+  /// Delete a story and all of its descendants (depth-first).
+  Future<void> deleteUserStory(int storyPk) async {
+    final kids = await (select(
+      userStories,
+    )..where((s) => s.parent_story_fk.equals(storyPk))).get();
+    for (final k in kids) {
+      await deleteUserStory(k.story_pk);
+    }
+    await (delete(userStories)..where((s) => s.story_pk.equals(storyPk))).go();
+  }
+
+  /// Tasks generated from a given story item (story → task(s)).
+  Future<List<Task>> getTasksForStory(int storyPk) {
+    return (select(
+      tasks,
+    )..where((t) => t.task_story_fk.equals(storyPk))).get();
+  }
+
   // ==================== Library verification cache ====================
   /// Cached freshness check for (ecosystem, name), or null if absent.
   Future<LibraryVerification?> getCachedVerification(
@@ -1089,6 +1175,7 @@ class NexusDatabase extends _$NexusDatabase {
     String? planPath,
     int? chatSessionPk,
     int? agentPk,
+    int? storyPk,
     String description = '',
     String status = 'Todo',
     String priority = 'MED',
@@ -1127,6 +1214,7 @@ class NexusDatabase extends _$NexusDatabase {
             ? Value(chatSessionPk)
             : const Value.absent(),
         task_agent_fk: agentPk != null ? Value(agentPk) : const Value.absent(),
+        task_story_fk: storyPk != null ? Value(storyPk) : const Value.absent(),
         description: Value(description),
         status: Value(status),
         priority: Value(priority),
