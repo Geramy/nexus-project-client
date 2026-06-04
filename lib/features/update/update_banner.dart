@@ -2,6 +2,8 @@
 // Author: Geramy Loveless <support@nexus-projects.ai>
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -52,8 +54,15 @@ class _UpdateBanner extends StatelessWidget {
     final theme = Theme.of(context);
     final c = controller;
 
+    // Never wider than the screen (minus margins) so the floating card scales
+    // down on narrow windows / phones instead of overflowing off-screen.
+    final maxW = math.min(
+      380.0,
+      MediaQuery.sizeOf(context).width - AppSpacing.lg * 2,
+    );
+
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 380),
+      constraints: BoxConstraints(maxWidth: maxW),
       child: NexusCard(
         glow: true,
         accent: theme.colorScheme.primary,
@@ -103,18 +112,22 @@ class _UpdateBanner extends StatelessWidget {
             ],
             if (c.phase == UpdatePhase.available) ...[
               const SizedBox(height: AppSpacing.md),
-              Row(
+              // Wrap so the actions reflow onto a second line on narrow widths
+              // instead of overflowing the card.
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.xs,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   TextButton(
                     onPressed: c.skipThisVersion,
                     child: const Text('Skip'),
                   ),
-                  const Spacer(),
                   TextButton(
                     onPressed: c.openReleaseNotes,
                     child: const Text('What\'s new'),
                   ),
-                  const SizedBox(width: AppSpacing.sm),
                   GradientButton(
                     onPressed: c.startUpdate,
                     label: 'Update now',

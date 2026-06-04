@@ -11,6 +11,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/providers/lean_context_provider.dart';
 import '../../infrastructure/registry/verification_service.dart';
+import '../../infrastructure/workspace/git/git_engine_provider.dart';
+import '../../infrastructure/workspace/git/nxtprj_git_engine.dart';
+import '../../infrastructure/workspace/workspace.dart';
 import '../../infrastructure/workspace/workspace_provider.dart';
 import '../../services/audio/audio_recorder_service.dart';
 import '../../services/audio/coordinator_duplex_voice_session.dart'
@@ -18,6 +21,7 @@ import '../../services/audio/coordinator_duplex_voice_session.dart'
 import '../../services/audio/setup_voice_session.dart';
 import '../../services/audio/tts_service.dart';
 import '../project_plans/plan_store.dart';
+import '../projects/planning/planning_progress.dart';
 import '../projects/planning/project_planning_run.dart';
 import 'config/setup_flow.dart';
 import 'config/setup_flow_catalog.dart';
@@ -387,6 +391,7 @@ class SetupChatController extends ChangeNotifier {
   Future<void> completeSetup() async {
     refining = false;
     final db = _ref.read(nexusDatabaseProvider);
+    final progress = _ref.read(planningProgressProvider(projectId).notifier);
     busy = true;
     notifyListeners();
     try {
@@ -394,7 +399,15 @@ class SetupChatController extends ChangeNotifier {
       await _ensureSession();
       final resolved = _resolved;
       if (resolved != null) {
+        progress.start();
         final proj = await db.getProjectById(projectId);
+        // Workspace + git for the scaffolding phase (best-effort).
+        Workspace? ws;
+        NxtprjGitEngine? git;
+        try {
+          ws = await _ref.read(workspaceFsProvider(projectId).future);
+          git = await _ref.read(gitEngineProvider(projectId).future);
+        } catch (_) {}
         await ProjectPlanningRun(
           db: db,
           planStore: planStore,
@@ -403,9 +416,16 @@ class SetupChatController extends ChangeNotifier {
           projectName: proj?.name ?? 'Project',
           model: resolved.model,
           enableThinking: resolved.enableThinking,
+          workspace: ws,
+          git: git,
+          scaffold: (proj?.projectType ?? '') == 'application-development',
           brief: _buildBrief(),
-          onProgress: (line) =>
-              _append(SetupMsg(kind: SetupMsgKind.system, text: line)),
+          // Stream to BOTH the setup chat and the project-wide planning banner,
+          // so progress is visible after the user is redirected to Tasks.
+          onProgress: (line) {
+            _append(SetupMsg(kind: SetupMsgKind.system, text: line));
+            progress.add(line);
+          },
         ).run();
         _bumpWorkspace();
       } else {
@@ -435,6 +455,7 @@ class SetupChatController extends ChangeNotifier {
         ),
       );
     } finally {
+      progress.finish();
       busy = false;
     }
     await db.setProjectSetupStatus(projectId, 'complete');

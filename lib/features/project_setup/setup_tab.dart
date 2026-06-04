@@ -2,6 +2,8 @@
 // Author: Geramy Loveless <support@nexus-projects.ai>
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -39,8 +41,9 @@ class _SetupTabState extends ConsumerState<SetupTab> {
   /// workspace-sourced tags so the board reflects what's actually in the tree.
   Future<void> _observeWorkspace() async {
     try {
-      final workspace =
-          await ref.read(workspaceFsProvider(widget.projectId).future);
+      final workspace = await ref.read(
+        workspaceFsProvider(widget.projectId).future,
+      );
       final observer = WorkspaceTagObserver(
         workspace: workspace,
         db: ref.read(nexusDatabaseProvider),
@@ -62,9 +65,9 @@ class _SetupTabState extends ConsumerState<SetupTab> {
       }
     } catch (_) {
       if (mounted && controller.error != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(controller.error!)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(controller.error!)));
       }
     }
   }
@@ -74,38 +77,33 @@ class _SetupTabState extends ConsumerState<SetupTab> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('Setup skipped — you can finish it any time.')),
+          content: Text('Setup skipped — you can finish it any time.'),
+        ),
       );
     }
   }
 
   Future<void> _complete() async {
-    // Capture navigator + messenger up front — we leave the setup wizard below,
-    // so we can't look these up off `context` after the await/pop.
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
 
-    await ref.read(setupChatControllerProvider(_key)).completeSetup();
-    if (!mounted) return;
-    // Setup is finished and tasks are created. Turn orchestration ON
-    // automatically — no prompt, no "turn it off" question — so agents start
-    // working immediately.
-    final db = ref.read(nexusDatabaseProvider);
-    final project = await db.getProjectById(widget.projectId);
-    if (project?.orchestrationState != 'running') {
-      await db.setProjectOrchestrationState(widget.projectId, 'running');
-    }
-    if (!mounted) return;
+    // Kick the planning run off in the BACKGROUND — it expands the plan, the
+    // engineers review it, tasks are built, and orchestration starts, which can
+    // take a minute. We don't block the UI on it: jump straight to Tasks so the
+    // board fills in and agents start working in view, rather than holding the
+    // user on the setup screen the whole time.
+    unawaited(ref.read(setupChatControllerProvider(_key)).completeSetup());
 
-    // The project-setup phase is DONE: advance to the next workflow (Tasks) and
-    // close the setup wizard, so its "Done" affordance is gone — the user lands
-    // on the freshly created tasks rather than back inside setup.
+    if (!mounted) return;
     ref.read(currentMainViewProvider.notifier).setView(MainView.tasks);
     navigator.maybePop();
     messenger.showSnackBar(
       const SnackBar(
-        content: Text('Setup complete — tasks created and orchestration on. '
-            'Opening Tasks…'),
+        duration: Duration(seconds: 6),
+        content: Text(
+          'Planning your project… tasks will appear in Tasks and '
+          'agents will start working as it completes (this can take a minute).',
+        ),
       ),
     );
   }
@@ -114,9 +112,11 @@ class _SetupTabState extends ConsumerState<SetupTab> {
   Widget build(BuildContext context) {
     // Watch so the action bar tracks the shared interview's busy + phase state.
     final busy = ref.watch(
-        setupChatControllerProvider(_key).select((c) => c.busy));
+      setupChatControllerProvider(_key).select((c) => c.busy),
+    );
     final refining = ref.watch(
-        setupChatControllerProvider(_key).select((c) => c.refining));
+      setupChatControllerProvider(_key).select((c) => c.refining),
+    );
     return Column(
       children: [
         _ActionBar(
@@ -157,13 +157,16 @@ class _ActionBar extends StatelessWidget {
           const Icon(Icons.checklist_rtl, size: 18),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(refining ? 'Refining Plans' : 'Project Setup',
-                style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.w700)),
+            child: Text(
+              refining ? 'Refining Plans' : 'Project Setup',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
           ),
           if (!refining) ...[
             TextButton(
-                onPressed: busy ? null : onSkip, child: const Text('Skip')),
+              onPressed: busy ? null : onSkip,
+              child: const Text('Skip'),
+            ),
             const SizedBox(width: 8),
             FilledButton.icon(
               onPressed: busy ? null : onFinalize,
