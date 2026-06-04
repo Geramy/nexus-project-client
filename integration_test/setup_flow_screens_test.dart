@@ -181,7 +181,7 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 600));
 
       final controller = container.read(
         setupChatControllerProvider((projectId: projectId, clientId: clientId)),
@@ -208,12 +208,22 @@ void main() {
         }
       }
 
-      // Pump real frames until the host turn finishes (busy clears) or timeout.
-      Future<void> waitIdle(int maxSeconds) async {
+      // Pump real frames until the host turn settles. CRITICAL: the host's
+      // `ask_question` tool leaves the turn `busy` while it AWAITS the user's
+      // answer, so we must also stop the moment a question is pending (else we'd
+      // block the whole timeout). Returns on: idle, pending question, or cap.
+      Future<void> waitTurn(int maxSeconds) async {
         final end = DateTime.now().add(Duration(seconds: maxSeconds));
-        while (controller.busy && DateTime.now().isBefore(end)) {
+        while (DateTime.now().isBefore(end)) {
+          if (!controller.busy || controller.pendingQuestion != null) return;
           await tester.pump(const Duration(milliseconds: 250));
         }
+      }
+
+      // Bounded settle that never hangs on a perpetual animation (busy spinner).
+      Future<void> settle([int ms = 600]) async {
+        await tester.pump(const Duration(milliseconds: 80));
+        await tester.pump(Duration(milliseconds: ms));
       }
 
       String latestHostText() {
@@ -235,7 +245,7 @@ void main() {
       await shot('overview');
       expect(find.text('Start setup'), findsOneWidget);
       await tester.tap(find.text('Start setup'));
-      await tester.pumpAndSettle();
+      await settle();
       await shot('interview_start');
 
       // ── Steps 2..N: walk the host's questions, timing each turn. ─────────
@@ -252,7 +262,7 @@ void main() {
         final sw = Stopwatch()..start();
         await tester.tap(find.byIcon(Icons.send));
         await tester.pump(const Duration(milliseconds: 120));
-        await waitIdle(120);
+        await waitTurn(60);
         sw.stop();
 
         final q = latestHostText();
@@ -272,7 +282,7 @@ void main() {
           ..writeln('Q: $q')
           ..writeln('A: ${answers[i]}');
 
-        await tester.pump(const Duration(milliseconds: 300));
+        await settle(300);
         await shot('turn_${(i + 1).toString().padLeft(2, '0')}');
       }
 
@@ -283,7 +293,11 @@ void main() {
           final sw = Stopwatch()..start();
           await tester.tap(fin);
           await tester.pump(const Duration(milliseconds: 150));
-          await waitIdle(180);
+          // Finalize generates the plan files; wait for busy to clear.
+          final end = DateTime.now().add(const Duration(seconds: 180));
+          while (controller.busy && DateTime.now().isBefore(end)) {
+            await tester.pump(const Duration(milliseconds: 300));
+          }
           sw.stop();
           metrics.record(
             'phase',
@@ -298,7 +312,7 @@ void main() {
           );
         }
       }
-      await tester.pump(const Duration(milliseconds: 400));
+      await settle(400);
       await shot('refine_ready');
 
       // ── Persist timing + transcript; assert we navigated the real flow. ──
