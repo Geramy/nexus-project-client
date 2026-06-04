@@ -25,8 +25,9 @@ on:
 
 jobs:
   screenshots:
-    # macOS desktop is a turnkey integration_test target (no xvfb/driver needed).
-    runs-on: macos-latest
+    # Linux desktop is the integration_test target: it builds unsigned (no
+    # code-signing cert needed, unlike macOS on CI) and runs headless via xvfb.
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
@@ -35,8 +36,12 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Enable macOS desktop
-        run: flutter config --enable-macos-desktop
+      - name: Linux desktop + native build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libsqlite3-0 libsqlite3-dev xvfb
+          flutter config --enable-linux-desktop
 
       - name: Install dependencies
         run: flutter pub get
@@ -62,8 +67,8 @@ jobs:
           NEXUS_SHOTS_DIR: ${{ github.workspace }}/screenshots
           NEXUS_METRICS_DIR: ${{ github.workspace }}/build/metrics
         run: |
-          flutter test integration_test/setup_flow_screens_test.dart \
-            -d macos --reporter expanded
+          xvfb-run -a flutter test integration_test/setup_flow_screens_test.dart \
+            -d linux --reporter expanded
 
       - name: Bundle screenshots + timing into a ZIP
         id: zip
