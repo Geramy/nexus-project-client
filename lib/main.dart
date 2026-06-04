@@ -2,12 +2,14 @@
 // Author: Geramy Loveless <support@nexus-projects.ai>
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/app.dart';
 import 'core/providers/database_provider.dart';
+import 'core/providers/update_provider.dart';
 import 'infrastructure/database/database_seeder.dart';
 
 Future<void> _initializeDatabase(ProviderContainer container) async {
@@ -59,7 +61,9 @@ void main() {
   FlutterError.onError = (FlutterErrorDetails details) {
     if (_recoverFromKeyboardDesync(details.exception)) return;
     FlutterError.presentError(details);
-    debugPrint('FlutterError: ${details.exceptionAsString()}\n${details.stack}');
+    debugPrint(
+      'FlutterError: ${details.exceptionAsString()}\n${details.stack}',
+    );
   };
   WidgetsBinding.instance.platformDispatcher.onError = (error, stack) {
     if (_recoverFromKeyboardDesync(error)) return true;
@@ -87,6 +91,12 @@ void main() {
 
   WidgetsBinding.instance.addPostFrameCallback((_) {
     _initializeDatabase(container);
+    // Check GitHub for a newer release on launch (desktop release builds only,
+    // throttled + gated by the user's "Automatic updates" toggle). Dev/debug
+    // builds never auto-update so we don't replace a working local build.
+    if (kReleaseMode) {
+      container.read(updateControllerProvider).maybeAutoCheck();
+    }
     // Resync the framework's key state with the engine. A modifier key pressed
     // during startup/hot-restart can leave a key "stuck" in HardwareKeyboard,
     // which then asserts on the next key-down and kills all text input in debug

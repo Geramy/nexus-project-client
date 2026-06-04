@@ -20,6 +20,7 @@ import '../../infrastructure/nexus/providers/nexus_account_providers.dart';
 import '../../shared/ui/nexus_ui.dart';
 import 'widgets/account_auth_forms.dart';
 import 'widgets/account_dashboard.dart';
+import 'widgets/update_settings_card.dart';
 
 class AccountView extends ConsumerWidget {
   const AccountView({super.key});
@@ -35,14 +36,15 @@ class AccountView extends ConsumerWidget {
         children: [
           const _AppearancePicker(),
           const _LeanContextToggle(),
+          const UpdateSettingsCard(),
           Expanded(
             child: auth.isSignedIn
                 ? const AccountDashboard()
                 // While hydrating the saved token from secure storage, show a
                 // spinner instead of flashing the login form.
                 : (auth.busy && auth.token == null)
-                    ? const Center(child: CircularProgressIndicator())
-                    : const AccountAuthForms(),
+                ? const Center(child: CircularProgressIndicator())
+                : const AccountAuthForms(),
           ),
         ],
       ),
@@ -61,19 +63,27 @@ class _LeanContextToggle extends ConsumerWidget {
     final on = ref.watch(leanContextNotifierProvider);
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-          AppSpacing.xl, AppSpacing.md, AppSpacing.xl, 0),
+        AppSpacing.xl,
+        AppSpacing.md,
+        AppSpacing.xl,
+        0,
+      ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 860),
         child: NexusCard(
           padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.xs,
+          ),
           child: SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: on,
             onChanged: (v) =>
                 ref.read(leanContextNotifierProvider.notifier).set(v),
-            title: Text('Lean context',
-                style: Theme.of(context).textTheme.titleMedium),
+            title: Text(
+              'Lean context',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             subtitle: Text(
               'Reconstruct setup/coordinator state from the project (the board, '
               'plans, tasks) instead of replaying the full chat, and load tools '
@@ -96,82 +106,88 @@ class _AppearancePicker extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final choice = ref.watch(appThemeNotifierProvider);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.xl, AppSpacing.xl, 0),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.xl,
+        AppSpacing.xl,
+        0,
+      ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 860),
         child: NexusCard(
           padding: const EdgeInsets.all(AppSpacing.lg),
           child: LayoutBuilder(
-              builder: (context, constraints) {
-                final swatch = Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    gradient: AppTheme.brandGradient,
-                    borderRadius: AppRadius.mdAll,
+            builder: (context, constraints) {
+              final swatch = Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  gradient: AppTheme.brandGradient,
+                  borderRadius: AppRadius.mdAll,
+                ),
+              );
+              final labels = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Appearance',
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
-                );
-                final labels = Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('Appearance',
-                        style: Theme.of(context).textTheme.titleMedium),
-                    Text(choice.description,
-                        style: Theme.of(context).textTheme.bodySmall),
-                  ],
-                );
-                final dropdown = DropdownButton<AppThemeChoice>(
-                  value: choice,
-                  isExpanded: true,
-                  underline: const SizedBox.shrink(),
-                  onChanged: (next) {
-                    if (next != null) {
-                      ref
-                          .read(appThemeNotifierProvider.notifier)
-                          .setChoice(next);
-                    }
-                  },
-                  items: AppThemeChoice.values
-                      .map((c) => DropdownMenuItem(
-                            value: c,
-                            child: Text(c.label),
-                          ))
-                      .toList(),
-                );
+                  Text(
+                    choice.description,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              );
+              final dropdown = DropdownButton<AppThemeChoice>(
+                value: choice,
+                isExpanded: true,
+                underline: const SizedBox.shrink(),
+                onChanged: (next) {
+                  if (next != null) {
+                    ref.read(appThemeNotifierProvider.notifier).setChoice(next);
+                  }
+                },
+                items: AppThemeChoice.values
+                    .map(
+                      (c) => DropdownMenuItem(value: c, child: Text(c.label)),
+                    )
+                    .toList(),
+              );
 
-                // Narrow layout: stack vertically so nothing overflows.
-                if (constraints.maxWidth < 360) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          swatch,
-                          const SizedBox(width: AppSpacing.lg),
-                          Expanded(child: labels),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      dropdown,
-                    ],
-                  );
-                }
-
-                return Row(
+              // Narrow layout: stack vertically so nothing overflows.
+              if (constraints.maxWidth < 360) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    swatch,
-                    const SizedBox(width: AppSpacing.lg),
-                    Expanded(child: labels),
-                    const SizedBox(width: AppSpacing.lg),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 160),
-                      child: dropdown,
+                    Row(
+                      children: [
+                        swatch,
+                        const SizedBox(width: AppSpacing.lg),
+                        Expanded(child: labels),
+                      ],
                     ),
+                    const SizedBox(height: AppSpacing.md),
+                    dropdown,
                   ],
                 );
-              },
-            ),
+              }
+
+              return Row(
+                children: [
+                  swatch,
+                  const SizedBox(width: AppSpacing.lg),
+                  Expanded(child: labels),
+                  const SizedBox(width: AppSpacing.lg),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 160),
+                    child: dropdown,
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
