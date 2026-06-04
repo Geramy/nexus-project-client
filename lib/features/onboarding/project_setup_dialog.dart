@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'steps/project_step.dart';
 import '../../core/providers/app_shell_provider.dart';
+import '../../features/project_setup/project_setup_wizard.dart';
 import '../../shared/ui/nexus_ui.dart';
 
 /// Presents the SAME project-setup screen the onboarding wizard uses (name +
@@ -34,14 +35,27 @@ Future<void> showProjectSetupDialog(BuildContext context) {
                     'Name it and choose the project type. You can change both later.',
                 defaultName: 'New Project',
                 onCreated: () {
-                  // Land on the project workspace so the setup wizard auto-opens
-                  // for the new (notStarted) project — otherwise the user is left
-                  // on whatever view they were on (e.g. Launch) and has to open
-                  // setup by hand.
-                  ProviderScope.containerOf(ctx, listen: false)
+                  // Land on the project workspace AND open the setup wizard for
+                  // the just-created project. We open it directly (not relying on
+                  // the workspace's auto-open heuristic) so it ALWAYS appears
+                  // instead of leaving the user on their previous view (e.g.
+                  // Launch). showProjectSetupWizard is idempotent, so the
+                  // workspace auto-open can't stack a second one.
+                  final container = ProviderScope.containerOf(
+                    context,
+                    listen: false,
+                  );
+                  container
                       .read(currentMainViewProvider.notifier)
                       .setView(MainView.projectPlans);
+                  final projectId = container.read(currentProjectIdProvider);
+                  final clientId = container.read(currentClientIdProvider);
                   Navigator.of(ctx).pop();
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (context.mounted) {
+                      showProjectSetupWizard(context, projectId, clientId);
+                    }
+                  });
                 },
               ),
             ),

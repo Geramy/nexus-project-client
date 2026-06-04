@@ -72,7 +72,11 @@ jobs:
           fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
 
-      - name: Run setup-flow UI walkthrough (live, on-device, screenshots)
+      # Each integration_test FILE needs its own app launch, so run them as
+      # SEPARATE steps (a single `flutter test integration_test/` only launches
+      # the app once and the 2nd file fails with "log reader stopped"). Both
+      # write to the same shots/metrics dirs so artifacts accumulate.
+      - name: Setup-flow UI walkthrough (live, screenshots)
         env:
           NEXUS_EMAIL: ${{ secrets.NEXUS_EMAIL }}
           NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
@@ -81,9 +85,20 @@ jobs:
           NEXUS_SHOTS_DIR: ${{ github.workspace }}/setup_shots
           NEXUS_METRICS_DIR: ${{ github.workspace }}/build/metrics
         run: |
-          # Runs the setup-flow walkthrough AND the post-setup exploration
-          # workflow (discovery → user-story tree → generate linked tasks).
-          xvfb-run -a flutter test integration_test/ \
+          xvfb-run -a flutter test integration_test/setup_flow_screens_test.dart \
+            -d linux --reporter expanded
+
+      - name: Exploration workflow — discovery → story tree → tasks (live)
+        if: always()
+        env:
+          NEXUS_EMAIL: ${{ secrets.NEXUS_EMAIL }}
+          NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+          NEXUS_GATEWAY: ${{ secrets.NEXUS_GATEWAY }}
+          NEXUS_MODEL: ${{ secrets.NEXUS_MODEL }}
+          NEXUS_SHOTS_DIR: ${{ github.workspace }}/setup_shots
+          NEXUS_METRICS_DIR: ${{ github.workspace }}/build/metrics
+        run: |
+          xvfb-run -a flutter test integration_test/exploration_flow_screens_test.dart \
             -d linux --reporter expanded
 
       - name: Bundle screenshots + timing into a ZIP

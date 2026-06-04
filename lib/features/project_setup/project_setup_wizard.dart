@@ -15,18 +15,30 @@ import 'setup_tab.dart';
 /// project creation and from the project Summary; resuming lands on the Overview
 /// section. Saving is automatic (setup status + transcript persist), so closing
 /// any time is safe.
+/// The project whose setup wizard is currently open, so two callers (the
+/// "New Project" action opening it directly AND the workspace's auto-open
+/// heuristic) can't stack two wizards for the same project.
+int? _openWizardProjectId;
+
 Future<void> showProjectSetupWizard(
   BuildContext context,
   int projectId,
   int clientId,
 ) {
-  return Navigator.of(context, rootNavigator: true).push(
-    MaterialPageRoute(
-      fullscreenDialog: true,
-      builder: (_) =>
-          ProjectSetupWizard(projectId: projectId, clientId: clientId),
-    ),
-  );
+  // Idempotent: if this project's wizard is already open, do nothing.
+  if (_openWizardProjectId == projectId) return Future<void>.value();
+  _openWizardProjectId = projectId;
+  return Navigator.of(context, rootNavigator: true)
+      .push(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) =>
+              ProjectSetupWizard(projectId: projectId, clientId: clientId),
+        ),
+      )
+      .whenComplete(() {
+        if (_openWizardProjectId == projectId) _openWizardProjectId = null;
+      });
 }
 
 enum _Section { overview, interview }
