@@ -921,8 +921,12 @@ class ProjectOrchestrator {
       selectedModel: chosen.selectedModel,
       availableModels: models,
     );
+    // Per-agent session id → the Router gives each agent its own warm backend and
+    // spreads different agents across the fleet (agent 1..N → server 1..N), instead
+    // of every agent piling onto one box.
     return (
-      client: backendForServer(uiServer, agentName: persona.name),
+      client: backendForServer(uiServer,
+          agentName: persona.name, sessionId: 'agent-${persona.agent_pk}'),
       model: model,
     );
   }

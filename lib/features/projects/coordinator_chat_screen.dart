@@ -236,7 +236,9 @@ class _ProjectCoordinatorChatScreenState
         selectedModel: chosen.selectedModel,
         availableModels: models,
       );
-      _inferenceClient = backendForServer(uiServer);
+      // The backend is created AFTER the chat session is resolved (below) so it
+      // can carry the X-Nexus-Session header — the Router pins this conversation
+      // to one warm backend while balancing other sessions across the fleet.
 
       // Resolve (or create) the active chat session FIRST, so the coordinator
       // session can record it on any task it creates (provenance).
@@ -266,6 +268,8 @@ class _ProjectCoordinatorChatScreenState
             .select(sessionId);
       }
       _sessionId = sessionId;
+      _inferenceClient =
+          backendForServer(uiServer, sessionId: 'chat-$sessionId');
 
       // Workspace + git + build access for the file/git/build agent tools.
       // Resolved best-effort; if any fail those tools degrade to "unavailable"

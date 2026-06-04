@@ -22,12 +22,13 @@ class LemonadeBackend implements iface.InferenceBackend {
   final ui_model.InferenceServer _row;
   late final LemonadeApiClient _client;
 
-  LemonadeBackend(this._row, {String? agentName}) {
+  LemonadeBackend(this._row, {String? agentName, String? sessionId}) {
     final cfg = ServerConfig(
       name: _row.name,
       baseUrl: _row.baseUrl,
       apiKey: _row.apiKey,
       agentName: agentName,
+      sessionId: sessionId,
     );
     _client = LemonadeApiClient(cfg);
   }

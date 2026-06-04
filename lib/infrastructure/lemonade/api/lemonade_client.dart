@@ -79,6 +79,13 @@ class LemonadeApiClient {
           ? agent.substring(0, 128)
           : agent;
     }
+    final session = server.sessionId?.trim();
+    if (session != null && session.isNotEmpty) {
+      // Per message-session pin: the Router keeps this conversation on one warm
+      // backend, and spreads different sessions across the fleet.
+      headers['X-Nexus-Session'] =
+          session.length > 128 ? session.substring(0, 128) : session;
+    }
     return headers;
   }
 

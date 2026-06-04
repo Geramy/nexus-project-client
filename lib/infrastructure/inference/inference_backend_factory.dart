@@ -18,21 +18,27 @@ import '../lemonade/lemonade_backend.dart' show LemonadeBackend;
 /// [agentName] is forwarded as the `X-Nexus-Agent` header so the Router can
 /// attribute per-agent cost; pass it when the call is made on behalf of a
 /// specific agent persona.
+///
+/// [sessionId] is forwarded as the `X-Nexus-Session` header — a stable id for the
+/// message session (conversation / agent run). The Router pins a session to one
+/// warm backend and balances different sessions across the fleet, so a single
+/// conversation stays warm while concurrent agents fan out across servers.
 InferenceBackend backendForServer(
   ui_model.InferenceServer server, {
   String? agentName,
+  String? sessionId,
 }) {
   final type = server.providerType.toLowerCase();
 
   switch (type) {
     case 'lemonade':
-      return LemonadeBackend(server, agentName: agentName);
+      return LemonadeBackend(server, agentName: agentName, sessionId: sessionId);
 
     // The Nexus Router subscription gateway is OpenAI-compatible and is reached
     // through the same transport (ServerConfig maps api.nexus-projects.ai to
     // /api/v1, which the Router proxy serves).
     case 'routed':
-      return LemonadeBackend(server, agentName: agentName);
+      return LemonadeBackend(server, agentName: agentName, sessionId: sessionId);
 
     default:
       throw UnimplementedError(

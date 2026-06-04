@@ -17,11 +17,18 @@ class ServerConfig {
   /// calls, which roll up as unattributed.
   final String? agentName;
 
+  /// Optional message-session id sent as the `X-Nexus-Session` header. The Router
+  /// pins a session to one warm backend for its whole life and balances DIFFERENT
+  /// sessions across the fleet — so one conversation stays warm while concurrent
+  /// agents (distinct session ids) spread across servers. Null = no pin.
+  final String? sessionId;
+
   ServerConfig({
     required this.baseUrl,
     this.apiKey,
     required this.name,
     this.agentName,
+    this.sessionId,
   });
 
   /// Returns the base URL normalized for API use.
