@@ -261,6 +261,8 @@ void main() {
       // give each turn room but stop the whole loop on a wall-clock budget.
       final interviewDeadline = DateTime.now().add(const Duration(minutes: 9));
       var turnsRun = 0;
+      String? lastQ; // detect a stalled host (same prompt, no progress)
+      var stall = 0;
       for (
         var i = 0;
         i < answers.length &&
@@ -277,6 +279,16 @@ void main() {
           await shot('turn_${(i + 1).toString().padLeft(2, '0')}_busy');
           break;
         }
+
+        // If the host keeps showing the SAME prompt, it has stopped advancing
+        // the interview (a weak model) — don't record no-op repeat turns.
+        final qNow = latestHostText();
+        if (qNow == lastQ) {
+          if (++stall >= 2) break;
+        } else {
+          stall = 0;
+        }
+        lastQ = qNow;
 
         await tester.enterText(composer, answers[i]);
         await tester.pump(const Duration(milliseconds: 120));
@@ -315,8 +327,8 @@ void main() {
           final sw = Stopwatch()..start();
           await tester.tap(fin);
           await tester.pump(const Duration(milliseconds: 150));
-          // Finalize generates the plan files; wait for busy to clear.
-          final end = DateTime.now().add(const Duration(seconds: 180));
+          // Finalize generates the plan files; wait (bounded) for busy to clear.
+          final end = DateTime.now().add(const Duration(seconds: 90));
           while (controller.busy && DateTime.now().isBefore(end)) {
             await tester.pump(const Duration(milliseconds: 300));
           }
