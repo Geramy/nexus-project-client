@@ -210,6 +210,12 @@ const List<ToolSpec> kCoordinatorToolSpecs = [
   ),
   ToolSpec('git_merge', 'Git', 'Merge branch', ToolPerm.ask, destructive: true),
   // User stories (post-setup Exploration / discovery)
+  ToolSpec(
+    'draft_stories_from_text',
+    'Stories',
+    'Split + rephrase text into stories',
+    ToolPerm.grant,
+  ),
   ToolSpec('add_user_story', 'Stories', 'Add a user story', ToolPerm.grant),
   ToolSpec(
     'update_user_story',

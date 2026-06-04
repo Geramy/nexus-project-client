@@ -8,6 +8,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart';
 // Backward-compat types (InferenceClient = InferenceBackend).
 import 'package:nexus_projects_client/infrastructure/inference/inference_backend.dart';
+import 'package:nexus_projects_client/infrastructure/inference/scoped_completion.dart';
 import 'package:nexus_projects_client/features/agents/agent_tool_permissions.dart';
 import 'package:nexus_projects_client/features/projects/agent_assignment.dart';
 import 'package:nexus_projects_client/features/project_plans/plan_store.dart';
@@ -1236,6 +1237,34 @@ class CoordinatorTools {
     {
       'type': 'function',
       'function': {
+        'name': 'draft_stories_from_text',
+        'description':
+            'When the user pastes/says a big chunk describing several things at '
+            'once, pass their RAW text here. A focused helper splits it and '
+            'REPHRASES each part into a clean user story (title + "As a… I want… '
+            'so that…" description) plus a concise note, and adds them to the '
+            'tree (optionally under parent_story_id). Use this instead of hand-'
+            'writing many add_user_story calls — then nest/refine with '
+            'move_user_story.',
+        'parameters': {
+          'type': 'object',
+          'properties': {
+            'text': {
+              'type': 'string',
+              'description': 'The user\'s raw description to split + rephrase.',
+            },
+            'parent_story_id': {
+              'type': 'string',
+              'description': 'Optional parent to add the drafted stories under.',
+            },
+          },
+          'required': ['text'],
+        },
+      },
+    },
+    {
+      'type': 'function',
+      'function': {
         'name': 'add_user_story',
         'description':
             'Add a user story to the project story tree during discovery. Use '
@@ -1419,6 +1448,10 @@ class CoordinatorToolExecutor {
   /// Backend instance (used for image generation / diagram tools).
   final InferenceBackend? inference;
 
+  /// The model id, so tools can make small SCOPED sub-calls (e.g. rephrasing a
+  /// chunk of input into clean stories) without dragging the session history.
+  final String? model;
+
   /// Provenance: the chat session and/or plan this conversation is about, so
   /// created tasks can be backtracked to why/where they came from.
   final int? chatSessionPk;
@@ -1471,6 +1504,7 @@ class CoordinatorToolExecutor {
     required this.db,
     required this.projectId,
     this.inference,
+    this.model,
     this.chatSessionPk,
     this.openPlanPath,
     this.planStore,
@@ -1536,6 +1570,8 @@ class CoordinatorToolExecutor {
       if (blocked != null) return blocked;
 
       switch (name) {
+        case 'draft_stories_from_text':
+          return await _draftStoriesFromText(args);
         case 'add_user_story':
           return await _addUserStory(args);
         case 'update_user_story':
@@ -1693,6 +1729,70 @@ class CoordinatorToolExecutor {
   }
 
   // ── User-story (Exploration discovery) tools ──────────────────────────────
+
+  /// Split a big chunk of user text into clean stories via a SMALL SCOPED call
+  /// (fresh, minimal context — no session history), each rephrased into a story
+  /// + a note, then created in the tree. This keeps the heavy split/rephrase off
+  /// the main discovery session.
+  Future<String> _draftStoriesFromText(Map<String, dynamic> args) async {
+    final text = (args['text'] as String? ?? '').trim();
+    if (text.isEmpty) return 'draft_stories_from_text failed: text is required.';
+    final backend = inference;
+    final mdl = model;
+    if (backend == null || mdl == null || mdl.isEmpty) {
+      return 'draft_stories_from_text is unavailable (no inference model here). '
+          'Add the stories with add_user_story instead.';
+    }
+    final parentId = _asInt(args['parent_story_id']);
+    if (parentId != null && await db.getUserStoryById(parentId) == null) {
+      return 'draft_stories_from_text failed: parent story #$parentId not found.';
+    }
+
+    const system =
+        'You split a product/feature description into concrete USER STORIES and '
+        'rephrase each into clean wording. Return ONLY a JSON array (no prose, '
+        'no code fences). Each item: {"title": a short title, "description": the '
+        'story as "As a <role>, I want <goal>, so that <benefit>" rephrased from '
+        'the input, "note": one concise extra detail/constraint/flow step taken '
+        'from the input}. Produce 3–8 items in a sensible order. Keep it faithful '
+        'to the input — do not invent features.';
+    final raw = await scopedComplete(
+      backend: backend,
+      model: mdl,
+      system: system,
+      user: text,
+      maxTokens: 900,
+    );
+    final items = parseJsonObjectArray(raw);
+    if (items.isEmpty) {
+      return 'Could not draft stories from that text — try add_user_story.';
+    }
+
+    var made = 0;
+    for (final it in items) {
+      final title = (it['title'] ?? '').toString().trim();
+      if (title.isEmpty) continue;
+      final desc = (it['description'] ?? '').toString().trim();
+      final note = (it['note'] ?? '').toString().trim();
+      final existing = await db.getUserStoriesForProject(projectId);
+      final sib = existing.where((s) => s.parent_story_fk == parentId).length;
+      final id = await db.createUserStory(
+        UserStoriesCompanion.insert(
+          project_fk: projectId,
+          parent_story_fk: Value(parentId),
+          title: title,
+          narrative: Value(desc),
+          orderIndex: Value(sib),
+        ),
+      );
+      if (note.isNotEmpty) await db.createStoryNote(id, note);
+      made++;
+    }
+    return 'Drafted $made user stor${made == 1 ? 'y' : 'ies'} '
+        '(rephrased descriptions + notes)'
+        '${parentId != null ? ' under #$parentId' : ''}. '
+        'Now nest/order them with move_user_story so the tree is correct.';
+  }
 
   Future<String> _addUserStory(Map<String, dynamic> args) async {
     final title = (args['title'] as String? ?? '').trim();
