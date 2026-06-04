@@ -78,7 +78,7 @@ jobs:
           NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
           NEXUS_GATEWAY: ${{ secrets.NEXUS_GATEWAY }}
           NEXUS_MODEL: ${{ secrets.NEXUS_MODEL }}
-          NEXUS_SHOTS_DIR: ${{ github.workspace }}/screenshots
+          NEXUS_SHOTS_DIR: ${{ github.workspace }}/setup_shots
           NEXUS_METRICS_DIR: ${{ github.workspace }}/build/metrics
         run: |
           xvfb-run -a flutter test integration_test/setup_flow_screens_test.dart \
@@ -89,8 +89,8 @@ jobs:
         run: |
           NAME="nexus-setup-screenshots-${{ steps.ver.outputs.version }}"
           mkdir -p "dist/$NAME"
-          # Screenshots + transcript (if the live test produced them).
-          cp -R screenshots/. "dist/$NAME/" 2>/dev/null || true
+          # Live setup-flow screenshots + transcript (if the test produced them).
+          cp -R setup_shots/. "dist/$NAME/" 2>/dev/null || true
           # Timing data (jsonl + csv) for statistics.
           mkdir -p "dist/$NAME/metrics"
           cp build/metrics/setup_flow.* "dist/$NAME/metrics/" 2>/dev/null || true
@@ -115,6 +115,6 @@ jobs:
         with:
           name: setup-screenshots-raw
           path: |
-            screenshots/**
+            setup_shots/**
             build/metrics/**
           if-no-files-found: ignore
