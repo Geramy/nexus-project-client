@@ -33,6 +33,8 @@ import 'package:nexus_projects_client/infrastructure/workspace/async_lock.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/git/nxtprj_git_engine.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/vhd_workspace.dart';
 
+import 'support/model_picker.dart';
+
 void main() {
   final email = Platform.environment['NEXUS_EMAIL'];
   final password = Platform.environment['NEXUS_PASSWORD'];
@@ -78,7 +80,7 @@ void main() {
       );
       // Pick a TEXT/chat model: prefer an explicit NEXUS_MODEL, else skip
       // image/audio models (e.g. SD-Turbo) and favor known LLM families.
-      final model = _pickTextModel(
+      final model = pickTextModel(
         models.map((m) => m.id).toList(),
         Platform.environment['NEXUS_MODEL'],
       );
@@ -205,57 +207,4 @@ void main() {
     skip: skip,
     timeout: const Timeout(Duration(minutes: 10)),
   );
-}
-
-/// Choose a TEXT/chat model from the routed catalog for the worker agent.
-///
-/// The router serves mixed modalities (e.g. `SD-Turbo` is an image model that
-/// 503s a chat call), so we cannot just take `models.first`. Resolution order:
-///   1. an explicit [override] (the optional NEXUS_MODEL secret), if present
-///      in the catalog (case-insensitive) — or used verbatim if the catalog
-///      can't confirm it (operator knows best);
-///   2. the first model whose id matches a known LLM family
-///      (llama/qwen/mistral/…);
-///   3. the first model that is NOT obviously image/audio/embedding/vision;
-///   4. as a last resort, the first model (keeps the test running rather than
-///      failing on an empty pick).
-String _pickTextModel(List<String> ids, String? override) {
-  if (ids.isEmpty) return '';
-
-  final ov = override?.trim();
-  if (ov != null && ov.isNotEmpty) {
-    final hit = ids.firstWhere(
-      (id) => id.toLowerCase() == ov.toLowerCase(),
-      orElse: () => '',
-    );
-    return hit.isNotEmpty ? hit : ov;
-  }
-
-  // Non-text modalities to skip when auto-picking.
-  const nonText = [
-    'turbo', 'stable', 'diffusion', 'sdxl', 'sd-', 'flux', 'dall', 'imagen',
-    'whisper', 'tts', 'stt', 'voice', 'audio', 'speech',
-    'embed', 'rerank', 'bge', 'vision', 'image', 'video', 'clip',
-  ];
-  // Known text/LLM families to prefer.
-  const llm = [
-    'llama', 'qwen', 'mistral', 'mixtral', 'gemma', 'phi', 'deepseek', 'glm',
-    'gpt', 'claude', 'instruct', 'chat', 'yi', 'command', 'nemo', 'hermes',
-  ];
-
-  bool isNonText(String id) {
-    final l = id.toLowerCase();
-    return nonText.any(l.contains);
-  }
-
-  final preferred = ids.firstWhere(
-    (id) => !isNonText(id) && llm.any(id.toLowerCase().contains),
-    orElse: () => '',
-  );
-  if (preferred.isNotEmpty) return preferred;
-
-  final anyText = ids.firstWhere((id) => !isNonText(id), orElse: () => '');
-  if (anyText.isNotEmpty) return anyText;
-
-  return ids.first;
 }
