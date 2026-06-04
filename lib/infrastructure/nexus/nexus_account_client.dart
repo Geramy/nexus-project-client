@@ -26,6 +26,11 @@ import 'package:http/http.dart' as http;
 import '../lemonade/api/exceptions.dart';
 import 'models/nexus_account_models.dart';
 
+/// Stable app name reported to the gateway as `app_name`, part of the router's
+/// per-device token bucket (user, device_id, app_name). Shown in the account's
+/// device list and used to rotate this app's token independently.
+const String kNexusAppName = 'Nexus Projects';
+
 class NexusAccountClient {
   /// Default production gateway. Override for local dev (http://localhost:5098).
   static const String defaultGatewayBaseUrl = 'https://api.nexus-projects.ai';
@@ -88,25 +93,61 @@ class NexusAccountClient {
     required String clientName,
     required String email,
     required String password,
+    String? deviceId,
+    String? deviceName,
+    String? appName,
   }) async {
     final json = await _postJson(_uri('/auth/register'), {
       'client_name': clientName,
       'email': email,
       'password': password,
+      ..._deviceFields(deviceId, deviceName, appName),
     });
     return AuthResult.fromJson(json);
   }
 
   /// POST /auth/login → AuthResult. 401 → UnauthorizedException.
+  ///
+  /// [deviceId]/[deviceName]/[appName] identify this install to the router so it
+  /// mints a per-(user, device_id, app_name) token. They are REQUIRED for the
+  /// routed (subscription) server to accept the token — omitting them yields a
+  /// 401 on every inference call.
   Future<AuthResult> login({
     required String email,
     required String password,
+    String? deviceId,
+    String? deviceName,
+    String? appName,
   }) async {
     final json = await _postJson(_uri('/auth/login'), {
       'email': email,
       'password': password,
+      ..._deviceFields(deviceId, deviceName, appName),
     });
     return AuthResult.fromJson(json);
+  }
+
+  /// The router's per-device token bucket: `device_id`, `device_name`,
+  /// `app_name` (each trimmed/clipped). Empty fields are dropped.
+  Map<String, String> _deviceFields(
+    String? deviceId,
+    String? deviceName,
+    String? appName,
+  ) {
+    String? clip(String? v) {
+      final t = v?.trim();
+      if (t == null || t.isEmpty) return null;
+      return t.length > 200 ? t.substring(0, 200) : t;
+    }
+
+    final id = clip(deviceId);
+    final name = clip(deviceName);
+    final app = clip(appName);
+    return {
+      if (id != null) 'device_id': id,
+      if (name != null) 'device_name': name,
+      if (app != null) 'app_name': app,
+    };
   }
 
   // ── Billing / Plans ─────────────────────────────────────────────────

@@ -14,6 +14,8 @@
 ///   - [nexusAccountSummary]  — Future account + subscription (auth).
 library;
 
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -130,12 +132,34 @@ class NexusAuth extends _$NexusAuth {
 
   NexusAccountClient _client() => authedClient();
 
+  /// This install's identity for the router's per-device token bucket. The
+  /// device_id is REQUIRED for the routed (subscription) server to accept the
+  /// minted token; without it every inference call 401s.
+  Future<({String deviceId, String deviceName, String appName})>
+  _deviceMeta() async {
+    final id = await NexusAccountStore.deviceId();
+    String name;
+    try {
+      name = Platform.localHostname;
+    } catch (_) {
+      name = Platform.operatingSystem;
+    }
+    return (deviceId: id, deviceName: name, appName: kNexusAppName);
+  }
+
   /// Sign in with email/password. Throws on failure (caller surfaces the
   /// server's message); state is updated on success.
   Future<void> login({required String email, required String password}) async {
     state = state.copyWith(busy: true);
     try {
-      final result = await _client().login(email: email, password: password);
+      final d = await _deviceMeta();
+      final result = await _client().login(
+        email: email,
+        password: password,
+        deviceId: d.deviceId,
+        deviceName: d.deviceName,
+        appName: d.appName,
+      );
       await _persist(result);
     } finally {
       state = state.copyWith(busy: false);
@@ -151,10 +175,14 @@ class NexusAuth extends _$NexusAuth {
   }) async {
     state = state.copyWith(busy: true);
     try {
+      final d = await _deviceMeta();
       final result = await _client().register(
         clientName: clientName,
         email: email,
         password: password,
+        deviceId: d.deviceId,
+        deviceName: d.deviceName,
+        appName: d.appName,
       );
       await _persist(result);
     } finally {

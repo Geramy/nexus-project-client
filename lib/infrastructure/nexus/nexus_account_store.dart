@@ -20,6 +20,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -35,6 +36,25 @@ class NexusAccountStore {
   static const _tokenKey = 'nexus/account_token';
   static const _identityKey = 'nexus/account_identity';
   static const _gatewayKey = 'nexus/gateway_base_url';
+  static const _deviceIdKey = 'nexus/device_id';
+
+  // ── Device id ───────────────────────────────────────────────────────
+  // A stable, per-install id sent on login/register as `device_id`. The router
+  // mints a per-(user, device_id, app_name) token, so a fresh login on this
+  // device rotates only this device's token. Generated once, persisted in the
+  // keychain, and NOT cleared on sign-out (so the same device keeps its bucket).
+
+  static Future<String> deviceId() async {
+    final existing = await _store.read(key: _deviceIdKey);
+    if (existing != null && existing.isNotEmpty) return existing;
+    final r = Random.secure();
+    final id = List<int>.generate(
+      16,
+      (_) => r.nextInt(256),
+    ).map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    await _store.write(key: _deviceIdKey, value: id);
+    return id;
+  }
 
   // ── Token ───────────────────────────────────────────────────────────
 
