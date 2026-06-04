@@ -16,6 +16,7 @@ import '../coordinator_chat_screen.dart';
 import 'exploration_session.dart';
 import 'story_providers.dart';
 import 'story_tree_canvas.dart';
+import 'task_generator.dart';
 
 /// The discovery system prompt, seeded from the project's setup profile.
 final discoveryPromptProvider =
@@ -38,19 +39,20 @@ class ProjectExplorationView extends ConsumerWidget {
   final String projectName;
 
   Future<void> _generate(BuildContext context, WidgetRef ref) async {
-    final db = ref.read(nexusDatabaseProvider);
-    final n = await generateTasksFromStories(db, projectId);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            n == 0
-                ? 'No stories to build from — add some first.'
-                : 'Generated $n task${n == 1 ? '' : 's'} from your stories.',
-          ),
+    final messenger = ScaffoldMessenger.of(context);
+    // Walk the tree: each story → its own scoped AI session → 1..N tasks. The
+    // run keeps us on this screen (explorationStatus stays 'active' until done)
+    // and updates per-story progress; the canvas shows a bar on each story.
+    await ref.read(taskGeneratorProvider(projectId)).run();
+    final p = ref.read(taskGeneratorProvider(projectId)).progress;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Generated ${p.totalTasks} task${p.totalTasks == 1 ? '' : 's'} '
+          'from ${p.totalStories} stor${p.totalStories == 1 ? 'y' : 'ies'}.',
         ),
-      );
-    }
+      ),
+    );
   }
 
   @override
@@ -60,6 +62,7 @@ class ProjectExplorationView extends ConsumerWidget {
     final promptAsync = ref.watch(
       discoveryPromptProvider((projectId: projectId, projectName: projectName)),
     );
+    final progress = ref.watch(taskGeneratorProvider(projectId)).progress;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -97,19 +100,47 @@ class ProjectExplorationView extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              TextButton(
-                onPressed: () => _generate(context, ref),
-                child: const Text('Skip & generate'),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: stories.isEmpty ? null : () => _generate(context, ref),
-                icon: const Icon(Icons.playlist_add_check, size: 18),
-                label: Text(
-                  'Generate tasks from stories'
-                  '${stories.isEmpty ? '' : ' (${stories.length})'}',
+              if (progress.running)
+                // Stay on this screen while building; show overall progress.
+                SizedBox(
+                  width: 260,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        'Building tasks… ${progress.doneStories}/'
+                        '${progress.totalStories} stories · '
+                        '${progress.totalTasks} tasks',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 4),
+                      LinearProgressIndicator(
+                        value: progress.totalStories == 0
+                            ? null
+                            : progress.fraction,
+                        minHeight: 5,
+                      ),
+                    ],
+                  ),
+                )
+              else ...[
+                TextButton(
+                  onPressed: () => _generate(context, ref),
+                  child: const Text('Skip & generate'),
                 ),
-              ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: stories.isEmpty
+                      ? null
+                      : () => _generate(context, ref),
+                  icon: const Icon(Icons.playlist_add_check, size: 18),
+                  label: Text(
+                    'Generate tasks from stories'
+                    '${stories.isEmpty ? '' : ' (${stories.length})'}',
+                  ),
+                ),
+              ],
             ],
           ),
         ),

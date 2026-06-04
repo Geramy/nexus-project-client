@@ -26,6 +26,11 @@ enum OrchestratorPromptField {
   /// how it interviews the user and builds the user-story TREE. Configurable
   /// here so the hierarchy behavior is a system setting, not buried in code.
   discoverySystem,
+
+  /// The base prompt for breaking ONE user story into engineering tasks. Used by
+  /// the "Generate tasks from stories" run, which feeds each story into its own
+  /// small scoped AI session with this prompt.
+  taskGenSystem,
 }
 
 extension OrchestratorPromptFieldX on OrchestratorPromptField {
@@ -45,6 +50,8 @@ extension OrchestratorPromptFieldX on OrchestratorPromptField {
     OrchestratorPromptField.mergeContinue => 'Merge — continue message',
     OrchestratorPromptField.discoverySystem =>
       'Discovery — system prompt (user-story interview)',
+    OrchestratorPromptField.taskGenSystem =>
+      'Task generation — system prompt (story → tasks)',
   };
 
   /// Which pipeline stage this template belongs to (for UI grouping).
@@ -58,7 +65,8 @@ extension OrchestratorPromptFieldX on OrchestratorPromptField {
     OrchestratorPromptField.mergeFraming ||
     OrchestratorPromptField.mergeKickoff ||
     OrchestratorPromptField.mergeContinue => 'Merge',
-    OrchestratorPromptField.discoverySystem => 'Exploration (user stories)',
+    OrchestratorPromptField.discoverySystem ||
+    OrchestratorPromptField.taskGenSystem => 'Exploration (user stories)',
   };
 
   /// True for the multi-line framing templates (rendered with a taller editor).
@@ -66,7 +74,8 @@ extension OrchestratorPromptFieldX on OrchestratorPromptField {
     OrchestratorPromptField.workerFraming ||
     OrchestratorPromptField.verifyFraming ||
     OrchestratorPromptField.mergeFraming ||
-    OrchestratorPromptField.discoverySystem => true,
+    OrchestratorPromptField.discoverySystem ||
+    OrchestratorPromptField.taskGenSystem => true,
     _ => false,
   };
 
@@ -126,6 +135,18 @@ BUILD A REAL TREE (this is your responsibility — the user should NEVER have to
 DO NOT BE EAGER
 - You CANNOT and MUST NOT create tasks — there are no task tools here on purpose.
 - When the tree is solid, well-nested, and covers the idea, tell the user it looks ready and that they can press "Generate tasks from stories" when happy — the tasks are built from these stories.''',
+  OrchestratorPromptField.taskGenSystem: '''
+You are a tech lead breaking ONE user story into the concrete engineering tasks needed to build it. You are given the story (title, narrative, acceptance criteria, notes) and the project's tech profile (platforms, languages, frameworks, databases).
+
+Produce the tasks that, together, fully implement THIS story — and ONLY this story. A story usually touches multiple parts of the system, so it normally yields MULTIPLE tasks (e.g. a "find nearest stand" story → a client map/UI task, a server geo-query API task, and a database/schema task). A trivial story may be a single task.
+
+Rules:
+- Each task must be small enough for one focused work session.
+- Each task gets a clear, imperative title and a short description (what to build + the relevant acceptance criteria).
+- Use the project's actual stack (don't invent technologies not in the profile).
+- Cover every acceptance criterion across the tasks; don't add work the story doesn't imply.
+
+Return ONLY a JSON array (no prose, no code fences). Each item: {"title": string, "description": string, "layer": one of "client"|"server"|"db"|"other"}.''',
 };
 
 /// Values to substitute into a template's placeholders for a given task.

@@ -17,6 +17,7 @@ import '../../../core/providers/database_provider.dart';
 import '../../../infrastructure/database/nexus_database.dart';
 import 'story_pdf_export.dart';
 import 'story_providers.dart';
+import 'task_generator.dart';
 
 const double kStoryNodeWidth = 224;
 const double kStoryNodeHeight = 92;
@@ -126,6 +127,7 @@ class _StoryTreeCanvasState extends ConsumerState<StoryTreeCanvas> {
     final scheme = Theme.of(context).colorScheme;
     final async = ref.watch(projectStoriesProvider(widget.projectId));
     final selected = ref.watch(selectedStoryProvider(widget.projectId));
+    final genProgress = ref.watch(taskGeneratorProvider(widget.projectId)).progress;
 
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -174,6 +176,7 @@ class _StoryTreeCanvasState extends ConsumerState<StoryTreeCanvas> {
                           child: _StoryNodeCard(
                             story: s,
                             selected: s.story_pk == selected,
+                            gen: genProgress.byStory[s.story_pk],
                             onTap: () => ref
                                 .read(
                                   selectedStoryProvider(
@@ -269,6 +272,7 @@ class _StoryNodeCard extends StatelessWidget {
     required this.onPanStart,
     required this.onPanUpdate,
     required this.onPanEnd,
+    this.gen,
   });
 
   final UserStory story;
@@ -277,6 +281,9 @@ class _StoryNodeCard extends StatelessWidget {
   final VoidCallback onPanStart;
   final ValueChanged<Offset> onPanUpdate;
   final VoidCallback onPanEnd;
+
+  /// Task-generation progress for this story (null = not generating).
+  final StoryGen? gen;
 
   @override
   Widget build(BuildContext context) {
@@ -289,10 +296,13 @@ class _StoryNodeCard extends StatelessWidget {
       onPanStart: (_) => onPanStart(),
       onPanUpdate: (d) => onPanUpdate(d.delta),
       onPanEnd: (_) => onPanEnd(),
-      child: SizedBox(
-        width: kStoryNodeWidth,
-        height: kStoryNodeHeight,
-        child: Material(
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          SizedBox(
+            width: kStoryNodeWidth,
+            height: kStoryNodeHeight,
+            child: Material(
           elevation: selected ? 6 : 2,
           borderRadius: BorderRadius.circular(10),
           color: scheme.surface,
@@ -365,9 +375,59 @@ class _StoryNodeCard extends StatelessWidget {
             ),
           ),
         ),
+          ),
+          if (gen != null)
+            Positioned(
+              right: 4,
+              bottom: 2,
+              child: _genBadge(context, gen!),
+            ),
+        ],
       ),
     );
   }
+}
+
+/// Small per-story task-generation progress badge on a node.
+Widget _genBadge(BuildContext context, StoryGen gen) {
+  final scheme = Theme.of(context).colorScheme;
+  Widget chip(Color bg, Widget child) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+    decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(10)),
+    child: child,
+  );
+  return switch (gen.status) {
+    StoryGenStatus.pending => chip(
+      scheme.surfaceContainerHighest,
+      Text('queued', style: TextStyle(fontSize: 9, color: scheme.onSurfaceVariant)),
+    ),
+    StoryGenStatus.generating => chip(
+      scheme.primaryContainer,
+      Row(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          SizedBox(
+            width: 10,
+            height: 10,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: 5),
+          Text('building…', style: TextStyle(fontSize: 9)),
+        ],
+      ),
+    ),
+    StoryGenStatus.done => chip(
+      const Color(0xFF2E9E5B),
+      Text(
+        '✓ ${gen.tasks} task${gen.tasks == 1 ? '' : 's'}',
+        style: const TextStyle(fontSize: 9, color: Colors.white),
+      ),
+    ),
+    StoryGenStatus.error => chip(
+      scheme.errorContainer,
+      Text('failed', style: TextStyle(fontSize: 9, color: scheme.onErrorContainer)),
+    ),
+  };
 }
 
 class _StoryInspector extends ConsumerStatefulWidget {
