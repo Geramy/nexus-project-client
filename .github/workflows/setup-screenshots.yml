@@ -46,6 +46,20 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # git2dart_binaries' linux/CMakeLists.txt hard-codes a versioned filename
+      # (libgit2-1.6.2.so) the package no longer ships, and omits libssh2.so —
+      # so the native build fails copying a non-existent file. Mirror build.yml.
+      - name: Patch git2dart_binaries native lib names (Linux)
+        run: |
+          set -euo pipefail
+          CM="$(find "${PUB_CACHE:-$HOME/.pub-cache}" -path '*git2dart_binaries*/linux/CMakeLists.txt' 2>/dev/null | head -1)"
+          if [ -z "$CM" ]; then echo "git2dart_binaries linux/CMakeLists.txt not found" >&2; exit 1; fi
+          DIR="$(dirname "$CM")"
+          sed -i 's#libgit2-1\.6\.2\.so#libgit2.so#g' "$CM"
+          if [ -f "$DIR/libssh2.so" ] && ! grep -q 'libssh2\.so' "$CM"; then
+            sed -i 's#\(.*CMAKE_CURRENT_SOURCE_DIR}/libgit2\.so".*\)#\1\n  "${CMAKE_CURRENT_SOURCE_DIR}/libssh2.so"#' "$CM"
+          fi
+
       - name: Generate code (riverpod / drift / freezed / json)
         run: dart run build_runner build --delete-conflicting-outputs
 
