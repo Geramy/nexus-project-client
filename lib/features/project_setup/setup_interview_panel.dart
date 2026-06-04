@@ -3,7 +3,6 @@
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/audio/audio_recorder_service.dart';
@@ -38,12 +37,6 @@ class SetupInterviewPanel extends ConsumerStatefulWidget {
 class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
   final _input = TextEditingController();
   final _sticky = StickyScrollController();
-  // Captures the "m" mute hotkey during a voice call without stealing keys from
-  // the text composer (a focused TextField consumes character keys itself).
-  final _hotkeyFocus = FocusNode(debugLabel: 'setup-interview-hotkeys');
-  // The composer's own focus, watched so the "m" hotkey is DISARMED whenever the
-  // user is typing — otherwise the shortcut swallows every "m" they type.
-  final _inputFocus = FocusNode(debugLabel: 'setup-interview-composer');
 
   ({int projectId, int clientId}) get _key =>
       (projectId: widget.projectId, clientId: widget.clientId);
@@ -52,25 +45,15 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
   void initState() {
     super.initState();
     _sticky.attach();
-    // Rebuild when the composer gains/loses focus so the "m" binding is added
-    // only while it's NOT focused (see build()).
-    _inputFocus.addListener(_onInputFocusChange);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(setupChatControllerProvider(_key)).restoreOnce();
     });
-  }
-
-  void _onInputFocusChange() {
-    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     _input.dispose();
     _sticky.dispose();
-    _hotkeyFocus.dispose();
-    _inputFocus.removeListener(_onInputFocusChange);
-    _inputFocus.dispose();
     super.dispose();
   }
 
@@ -98,16 +81,7 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
       await controller.endVoiceCall();
     } else {
       await controller.startVoiceCall();
-      // Grab focus so the "m" mute hotkey is live during the call (until the
-      // user taps the text field, which then takes the keys for typing).
-      if (mounted) _hotkeyFocus.requestFocus();
     }
-  }
-
-  /// "m" hotkey → toggle mic mute, but only while a voice call is active.
-  void _onMuteHotkey() {
-    final controller = ref.read(setupChatControllerProvider(_key));
-    if (controller.callActive) controller.toggleMicMute();
   }
 
   @override
@@ -119,45 +93,33 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
     // Pin to the bottom as messages stream in — unless the user has scrolled up.
     _sticky.stickToBottom();
 
-    // The "m" → mute hotkey is only meaningful during a call, and must NOT be
-    // bound while the user is typing — otherwise it eats every "m" they enter.
-    // Binding it only when the composer is unfocused leaves plain typing alone.
-    final muteHotkeyArmed = controller.callActive && !_inputFocus.hasFocus;
-
-    return CallbackShortcuts(
-      bindings: <ShortcutActivator, VoidCallback>{
-        if (muteHotkeyArmed)
-          const SingleActivator(LogicalKeyboardKey.keyM, includeRepeats: false):
-              _onMuteHotkey,
-      },
-      child: Focus(
-        focusNode: _hotkeyFocus,
-        child: Container(
-          color: theme.colorScheme.surface,
-          child: Column(
-            children: [
+    return Container(
+      color: theme.colorScheme.surface,
+      child: Column(
+        children: [
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              border:
-                  Border(bottom: BorderSide(color: theme.dividerColor)),
+              border: Border(bottom: BorderSide(color: theme.dividerColor)),
             ),
             child: Row(
               children: [
-                Icon(Icons.forum_outlined,
-                    size: 16, color: theme.colorScheme.primary),
+                Icon(
+                  Icons.forum_outlined,
+                  size: 16,
+                  color: theme.colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
                 const Expanded(
-                  child: Text('Setup interview',
-                      style:
-                          TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  child: Text(
+                    'Setup interview',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
                 ),
                 if (controller.callActive)
                   IconButton(
-                    tooltip: controller.micMuted
-                        ? 'Unmute mic (m)'
-                        : 'Mute mic (m)',
+                    tooltip: controller.micMuted ? 'Unmute mic' : 'Mute mic',
                     visualDensity: VisualDensity.compact,
                     onPressed: controller.toggleMicMute,
                     icon: Icon(
@@ -193,9 +155,10 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
               width: double.infinity,
               color: theme.colorScheme.errorContainer,
               padding: const EdgeInsets.all(10),
-              child: Text(controller.error!,
-                  style:
-                      TextStyle(color: theme.colorScheme.onErrorContainer)),
+              child: Text(
+                controller.error!,
+                style: TextStyle(color: theme.colorScheme.onErrorContainer),
+              ),
             ),
           Expanded(
             child: messages.isEmpty
@@ -226,20 +189,17 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
             final canType = !controller.busy || pending != null;
             return _Composer(
               controller: _input,
-              focusNode: _inputFocus,
               enabled: canType,
               loading: controller.busy && pending == null,
               onSend: _send,
               hintText: pending != null
                   ? 'Type your answer… (or expand the options to pick)'
                   : controller.refining
-                      ? 'Describe your UI, screens, behavior, data…'
-                      : 'Tell the setup host about your project…',
+                  ? 'Describe your UI, screens, behavior, data…'
+                  : 'Tell the setup host about your project…',
             );
           }(),
-            ],
-          ),
-        ),
+        ],
       ),
     );
   }
@@ -261,8 +221,11 @@ class _RefineBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.auto_fix_high,
-              size: 16, color: theme.colorScheme.onTertiaryContainer),
+          Icon(
+            Icons.auto_fix_high,
+            size: 16,
+            color: theme.colorScheme.onTertiaryContainer,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -290,16 +253,20 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.smart_toy_outlined,
-                size: 36, color: theme.colorScheme.outline),
+            Icon(
+              Icons.smart_toy_outlined,
+              size: 36,
+              color: theme.colorScheme.outline,
+            ),
             const SizedBox(height: 10),
             Text(
               'Tell the setup host about your project to start the interview. '
               'It asks short multiple-choice questions and proposes tags on the '
               'board as you go.',
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.outline),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.outline,
+              ),
             ),
           ],
         ),
@@ -387,12 +354,17 @@ class _ThinkingTileState extends State<_ThinkingTile> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(_open ? Icons.expand_more : Icons.chevron_right,
-                    size: 16, color: muted),
+                Icon(
+                  _open ? Icons.expand_more : Icons.chevron_right,
+                  size: 16,
+                  color: muted,
+                ),
                 Icon(Icons.psychology_outlined, size: 14, color: muted),
                 const SizedBox(width: 4),
-                Text('Thinking',
-                    style: theme.textTheme.labelSmall?.copyWith(color: muted)),
+                Text(
+                  'Thinking',
+                  style: theme.textTheme.labelSmall?.copyWith(color: muted),
+                ),
               ],
             ),
           ),
@@ -485,13 +457,20 @@ class _QuestionCardState extends State<_QuestionCard> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.help_outline,
-                  size: 16, color: theme.colorScheme.primary),
+              Icon(
+                Icons.help_outline,
+                size: 16,
+                color: theme.colorScheme.primary,
+              ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(msg.text,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w600, fontSize: 14)),
+                child: Text(
+                  msg.text,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
               ),
             ],
           ),
@@ -501,18 +480,20 @@ class _QuestionCardState extends State<_QuestionCard> {
               msg.freeText != null
                   ? 'Answered in chat ↑'
                   : msg.selected.isEmpty
-                      ? 'Skipped.'
-                      : 'You picked: ${msg.selected.join(', ')}',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.outline),
+                  ? 'Skipped.'
+                  : 'You picked: ${msg.selected.join(', ')}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.outline,
+              ),
             ),
           ] else ...[
             const SizedBox(height: 4),
             Text(
               'Type your answer below'
               '${hasOptions ? ', or pick from the options.' : '.'}',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.outline),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.outline,
+              ),
             ),
             if (hasOptions) ...[
               // The dropdown-arrow disclosure: collapsed by default; expands the
@@ -525,9 +506,7 @@ class _QuestionCardState extends State<_QuestionCard> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        _optionsOpen
-                            ? Icons.expand_less
-                            : Icons.expand_more,
+                        _optionsOpen ? Icons.expand_less : Icons.expand_more,
                         size: 18,
                         color: theme.colorScheme.primary,
                       ),
@@ -536,8 +515,9 @@ class _QuestionCardState extends State<_QuestionCard> {
                         _optionsOpen
                             ? 'Hide options'
                             : 'Pick from ${msg.options.length} options',
-                        style: theme.textTheme.labelMedium
-                            ?.copyWith(color: theme.colorScheme.primary),
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: theme.colorScheme.primary,
+                        ),
                       ),
                     ],
                   ),
@@ -581,9 +561,11 @@ class _QuestionCardState extends State<_QuestionCard> {
                 ChoiceChip(
                   label: Text(option),
                   selected: _selected.contains(option),
-                  onSelected: (_) => setState(() => _selected
-                    ..clear()
-                    ..add(option)),
+                  onSelected: (_) => setState(
+                    () => _selected
+                      ..clear()
+                      ..add(option),
+                  ),
                 ),
             ],
           ),
@@ -643,8 +625,10 @@ class _CallBar extends StatelessWidget {
         children: [
           Icon(Icons.graphic_eq, size: 16, color: color),
           const SizedBox(width: 8),
-          Text(label,
-              style: theme.textTheme.labelMedium?.copyWith(color: color)),
+          Text(
+            label,
+            style: theme.textTheme.labelMedium?.copyWith(color: color),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: LiveMicVisualizer(
@@ -659,7 +643,11 @@ class _CallBar extends StatelessWidget {
             tooltip: 'End call',
             visualDensity: VisualDensity.compact,
             onPressed: onEnd,
-            icon: Icon(Icons.call_end, size: 18, color: theme.colorScheme.error),
+            icon: Icon(
+              Icons.call_end,
+              size: 18,
+              color: theme.colorScheme.error,
+            ),
           ),
         ],
       ),
@@ -674,11 +662,9 @@ class _Composer extends StatelessWidget {
     required this.loading,
     required this.onSend,
     required this.hintText,
-    this.focusNode,
   });
 
   final TextEditingController controller;
-  final FocusNode? focusNode;
 
   /// Whether the user can type/send right now. True whenever the host is idle
   /// OR has an inline question awaiting a reply.
@@ -702,7 +688,6 @@ class _Composer extends StatelessWidget {
               enabled: enabled,
               child: TextField(
                 controller: controller,
-                focusNode: focusNode,
                 enabled: enabled,
                 minLines: 1,
                 maxLines: 3,
@@ -729,10 +714,8 @@ class _Composer extends StatelessWidget {
                   onPressed: onSend,
                   // Explicit contrast: a violet fill needs an onPrimary icon.
                   style: IconButton.styleFrom(
-                    backgroundColor:
-                        Theme.of(context).colorScheme.primary,
-                    foregroundColor:
-                        Theme.of(context).colorScheme.onPrimary,
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
                   ),
                   icon: const Icon(Icons.send, size: 18),
                 ),
