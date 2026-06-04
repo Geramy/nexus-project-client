@@ -29,41 +29,37 @@ extension OrchestratorPromptFieldX on OrchestratorPromptField {
 
   /// Short UI label.
   String get label => switch (this) {
-        OrchestratorPromptField.workerFraming => 'Worker — task framing',
-        OrchestratorPromptField.workerKickoff => 'Worker — first message',
-        OrchestratorPromptField.workerContinue => 'Worker — continue message',
-        OrchestratorPromptField.verifyFraming => 'Verify — task framing',
-        OrchestratorPromptField.verifyKickoff => 'Verify — first message',
-        OrchestratorPromptField.verifyContinue => 'Verify — continue message',
-        OrchestratorPromptField.mergeFraming => 'Merge — task framing',
-        OrchestratorPromptField.mergeKickoff => 'Merge — first message',
-        OrchestratorPromptField.mergeContinue => 'Merge — continue message',
-      };
+    OrchestratorPromptField.workerFraming => 'Worker — task framing',
+    OrchestratorPromptField.workerKickoff => 'Worker — first message',
+    OrchestratorPromptField.workerContinue => 'Worker — continue message',
+    OrchestratorPromptField.verifyFraming => 'Verify — task framing',
+    OrchestratorPromptField.verifyKickoff => 'Verify — first message',
+    OrchestratorPromptField.verifyContinue => 'Verify — continue message',
+    OrchestratorPromptField.mergeFraming => 'Merge — task framing',
+    OrchestratorPromptField.mergeKickoff => 'Merge — first message',
+    OrchestratorPromptField.mergeContinue => 'Merge — continue message',
+  };
 
   /// Which pipeline stage this template belongs to (for UI grouping).
   String get stage => switch (this) {
-        OrchestratorPromptField.workerFraming ||
-        OrchestratorPromptField.workerKickoff ||
-        OrchestratorPromptField.workerContinue =>
-          'Implement',
-        OrchestratorPromptField.verifyFraming ||
-        OrchestratorPromptField.verifyKickoff ||
-        OrchestratorPromptField.verifyContinue =>
-          'Verify',
-        OrchestratorPromptField.mergeFraming ||
-        OrchestratorPromptField.mergeKickoff ||
-        OrchestratorPromptField.mergeContinue =>
-          'Merge',
-      };
+    OrchestratorPromptField.workerFraming ||
+    OrchestratorPromptField.workerKickoff ||
+    OrchestratorPromptField.workerContinue => 'Implement',
+    OrchestratorPromptField.verifyFraming ||
+    OrchestratorPromptField.verifyKickoff ||
+    OrchestratorPromptField.verifyContinue => 'Verify',
+    OrchestratorPromptField.mergeFraming ||
+    OrchestratorPromptField.mergeKickoff ||
+    OrchestratorPromptField.mergeContinue => 'Merge',
+  };
 
   /// True for the multi-line framing templates (rendered with a taller editor).
   bool get isMultiline => switch (this) {
-        OrchestratorPromptField.workerFraming ||
-        OrchestratorPromptField.verifyFraming ||
-        OrchestratorPromptField.mergeFraming =>
-          true,
-        _ => false,
-      };
+    OrchestratorPromptField.workerFraming ||
+    OrchestratorPromptField.verifyFraming ||
+    OrchestratorPromptField.mergeFraming => true,
+    _ => false,
+  };
 
   /// The built-in default for this template.
   String get defaultValue => _defaults[this]!;
@@ -168,10 +164,12 @@ class OrchestratorPrompts {
 
   /// The effective template for [field]: the project override if present and
   /// non-empty, else the built-in default.
-  String raw(OrchestratorPromptField field) => overrides[field] ?? field.defaultValue;
+  String raw(OrchestratorPromptField field) =>
+      overrides[field] ?? field.defaultValue;
 
   /// Render [field] with [vars] substituted.
-  String render(OrchestratorPromptField field, PromptVars vars) => vars.apply(raw(field));
+  String render(OrchestratorPromptField field, PromptVars vars) =>
+      vars.apply(raw(field));
 
   /// Serialize only the overrides (empty/default fields are omitted). Returns
   /// null when there are no overrides, so the column stays NULL.

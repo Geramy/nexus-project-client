@@ -18,6 +18,7 @@ import 'package:nexus_projects_client/infrastructure/inference/inference_client.
     show InferenceBackend;
 import 'package:nexus_projects_client/infrastructure/models/ui/inference_server.dart'
     as ui_server;
+import 'package:nexus_projects_client/infrastructure/workspace/async_lock.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/workspace.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/workspace_provider.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/git/nxtprj_git_engine.dart';
@@ -95,6 +96,8 @@ class ProjectOrchestrator {
   NexusDatabase get _db => ref.read(nexusDatabaseProvider);
 
   void start() {
+    // Clear any leftover per-task working-tree disks from a previous crash.
+    unawaited(pruneTaskDisks(projectId));
     _projectSub = _db.watchProject(projectId).listen((project) {
       if (project?.orchestrationState == 'running') {
         unawaited(_pump());
@@ -109,43 +112,52 @@ class ProjectOrchestrator {
     _ticker?.cancel();
   }
 
-  /// Walk the pipeline one unit of work at a time — implement, then verify, then
-  /// build, then merge — until the project is no longer running, falls outside
-  /// working hours, or there's nothing left to do.
+  /// Fill up to N agent slots (N = the account's max concurrency) with the next
+  /// fair, backlog-weighted pieces of work, launching each on its own isolated
+  /// working tree. Returns immediately after dispatching; each stage frees its
+  /// slot and re-pumps on completion. [_pumping] guards only the dispatch loop,
+  /// not the work, so it never serializes the agents.
   Future<void> _pump() async {
     if (_pumping || _disposed) return;
     _pumping = true;
     try {
-      while (!_disposed) {
-        final project = await _db.getProjectById(projectId);
-        if (project == null || project.orchestrationState != 'running') break;
-        if (!isWithinWorkingHours(project)) break;
+      final project = await _db.getProjectById(projectId);
+      if (project == null || project.orchestrationState != 'running') return;
+      if (!isWithinWorkingHours(project)) return;
 
+      final cap = await _concurrencyCap(project);
+      while (!_disposed && _active.length < cap) {
         final (task, stage) = await _nextPipelineWork();
         if (task == null || stage == null) break;
-
         _active.add(task.task_pk);
-        try {
-          switch (stage) {
-            case _Stage.implement:
-              await _runTaskToSubmission(task);
-            case _Stage.verify:
-              await _runVerifyStage(task);
-            case _Stage.build:
-              await _runBuildStage(task);
-            case _Stage.merge:
-              await _runMergeStage(task);
-          }
-        } catch (e, st) {
-          debugPrint(
-            '[Orchestrator p$projectId] task ${task.task_pk} ${stage.name} errored: $e\n$st',
-          );
-        } finally {
-          _active.remove(task.task_pk);
-        }
+        unawaited(_runStage(task, stage));
       }
     } finally {
       _pumping = false;
+    }
+  }
+
+  /// Run one (task, stage) to completion, then free its slot and re-pump so a
+  /// waiting piece of work fills the freed slot.
+  Future<void> _runStage(Task task, _Stage stage) async {
+    try {
+      switch (stage) {
+        case _Stage.implement:
+          await _runTaskToSubmission(task);
+        case _Stage.verify:
+          await _runVerifyStage(task);
+        case _Stage.build:
+          await _runBuildStage(task);
+        case _Stage.merge:
+          await _runMergeStage(task);
+      }
+    } catch (e, st) {
+      debugPrint(
+        '[Orchestrator p$projectId] task ${task.task_pk} ${stage.name} errored: $e\n$st',
+      );
+    } finally {
+      _active.remove(task.task_pk);
+      if (!_disposed) unawaited(_pump());
     }
   }
 
@@ -267,117 +279,130 @@ class ProjectOrchestrator {
 
     final branch = 'task/${task.task_pk}';
 
-    // Workspace / git / build access for the worker's file & build tools.
-    final handles = await _resolveWorkspaceHandles();
-    final workspace = handles.ws;
-    final git = handles.git;
-    final buildService = handles.build;
+    // This worker runs on its OWN isolated working tree so it can run in
+    // parallel with other agents without clobbering their files. Git objects/
+    // refs are shared; the lane serializes those writes.
+    final th = await _resolveTaskHandles(task.task_pk);
+    if (th == null) return;
 
     // Subtasks branch off their parent's branch so their commits merge back
     // into the parent (not the trunk); top-level tasks branch off main.
     final base = await _integrationTargetBranch(task);
-    // Put the worktree on the task branch (created off [base]) so commits land
-    // on task/<id>.
-    await _checkout(git, branch, task.task_pk, base: base);
+    // Root the task branch on its base and hydrate this task's tree from it,
+    // serialized through the lane (shared object/ref DB is single-isolate).
+    await th.lane.run(() async {
+      await th.git.createBranchAt(branch, base: base);
+      await th.git.materializeInto(branch, th.tree);
+    });
 
-    final prompts = await _loadPrompts();
-    final vars = _varsFor(task, branch, targetBranch: base);
+    try {
+      final prompts = await _loadPrompts();
+      final vars = _varsFor(task, branch, targetBranch: base);
 
-    // One conversation PER AGENT: reuse this worker's dedicated session so all
-    // of its tasks land in a single ongoing thread (the person can follow the
-    // agent there) instead of a brand-new session on every task update.
-    final workerSessionPk = await _db.getOrCreateAgentChatSession(
-      projectId,
-      agentFk,
-      persona.name,
-    );
-    _attempts[task.task_pk] = (_attempts[task.task_pk] ?? 0) + 1;
-    // Picked up & preparing the workspace — the task stays on the Todo board
-    // (exec `queued`). It only flips to "In Progress" once a worker turn truly
-    // begins (below), so the column never shows work nobody is doing.
-    await _db.markTaskQueued(task.task_pk);
+      // One conversation PER AGENT: reuse this worker's dedicated session so all
+      // of its tasks land in a single ongoing thread (the person can follow the
+      // agent there) instead of a brand-new session on every task update.
+      final workerSessionPk = await _db.getOrCreateAgentChatSession(
+        projectId,
+        agentFk,
+        persona.name,
+      );
+      _attempts[task.task_pk] = (_attempts[task.task_pk] ?? 0) + 1;
+      // Picked up & preparing the workspace — the task stays on the Todo board
+      // (exec `queued`). It only flips to "In Progress" once a worker turn truly
+      // begins (below), so the column never shows work nobody is doing.
+      await _db.markTaskQueued(task.task_pk);
 
-    final session = ProjectCoordinatorSession(
-      client: resolved.client,
-      projectId: projectId,
-      projectName: persona.name,
-      db: _db,
-      model: resolved.model,
-      chatSessionPk: workerSessionPk,
-      permissions: AgentToolPermissions.fromConfigJson(persona.configJson),
-      // Autonomous: there's no human to approve `ask` tools, so auto-approve.
-      // The dangerous ops (push/merge) are *denied* for worker roles by the
-      // rule engine, so this can't escalate a worker beyond its branch.
-      confirmAsk: (_, _) async => true,
-      agentName: persona.name,
-      workspace: workspace,
-      git: git,
-      buildService: buildService,
-      // Autonomous coders need file/git/build tools directly — no progressive
-      // disclosure (that's for the interactive PM chat).
-      leanTools: false,
-      systemPromptOverride:
-          '${defaultSystemPrompt(role)}\n${prompts.render(OrchestratorPromptField.workerFraming, vars)}',
-      enableThinking: resolveEnableThinking(
-        agent: personaThinkingMode(
-          persona.configJson,
-          personaName: persona.name,
+      final session = ProjectCoordinatorSession(
+        client: resolved.client,
+        projectId: projectId,
+        projectName: persona.name,
+        db: _db,
+        model: resolved.model,
+        chatSessionPk: workerSessionPk,
+        permissions: AgentToolPermissions.fromConfigJson(persona.configJson),
+        // Autonomous: there's no human to approve `ask` tools, so auto-approve.
+        // The dangerous ops (push/merge) are *denied* for worker roles by the
+        // rule engine, so this can't escalate a worker beyond its branch.
+        confirmAsk: (_, _) async => true,
+        agentName: persona.name,
+        workspace: th.tree,
+        git: th.git,
+        buildService: th.build,
+        // Per-task isolation: the agent edits its own tree and git_commit
+        // snapshots it onto its branch under the lane.
+        workBranch: branch,
+        gitLane: th.lane,
+        // Autonomous coders need file/git/build tools directly — no progressive
+        // disclosure (that's for the interactive PM chat).
+        leanTools: false,
+        systemPromptOverride:
+            '${defaultSystemPrompt(role)}\n${prompts.render(OrchestratorPromptField.workerFraming, vars)}',
+        enableThinking: resolveEnableThinking(
+          agent: personaThinkingMode(
+            persona.configJson,
+            personaName: persona.name,
+          ),
+          task: ThinkingMode.fromString(task.thinkingMode),
         ),
-        task: ThinkingMode.fromString(task.thinkingMode),
-      ),
-    );
+      );
 
-    var kickoff = prompts.render(OrchestratorPromptField.workerKickoff, vars);
-    for (var turn = 0; turn < _maxTurnsPerTask && !_disposed; turn++) {
-      // Stop promptly if the human paused/stopped the project mid-task — return
-      // the task to the board instead of leaving it parked "In Progress".
-      final project = await _db.getProjectById(projectId);
-      if (project == null || project.orchestrationState != 'running') {
-        debugPrint(
-          '[Orchestrator p$projectId] task ${task.task_pk}: project not running, halting worker.',
-        );
-        await _db.markTaskYieldedBack(task.task_pk);
-        return;
-      }
-
-      // The task becomes "In Progress" exactly when its agent starts a turn.
-      if (turn == 0) {
-        await _db.markTaskRunning(
-          task.task_pk,
-          workerSessionPk: workerSessionPk,
-          workBranch: branch,
-        );
-      }
-
-      try {
-        await for (final _ in session.runTurn(kickoff)) {
-          // Drain the stream; tool effects are applied inside runTurn.
+      var kickoff = prompts.render(OrchestratorPromptField.workerKickoff, vars);
+      for (var turn = 0; turn < _maxTurnsPerTask && !_disposed; turn++) {
+        // Stop promptly if the human paused/stopped the project mid-task — return
+        // the task to the board instead of leaving it parked "In Progress".
+        final project = await _db.getProjectById(projectId);
+        if (project == null || project.orchestrationState != 'running') {
+          debugPrint(
+            '[Orchestrator p$projectId] task ${task.task_pk}: project not running, halting worker.',
+          );
+          await _db.markTaskYieldedBack(task.task_pk);
+          return;
         }
-      } catch (e) {
-        debugPrint(
-          '[Orchestrator p$projectId] task ${task.task_pk}: turn $turn failed: $e',
-        );
-        await _db.markTaskYieldedBack(task.task_pk);
-        return;
-      }
 
-      final fresh = await _db.getTaskById(task.task_pk);
-      if (fresh == null) return;
-      if (fresh.executionStatus == TaskExecStatus.submitted) {
-        debugPrint(
-          '[Orchestrator p$projectId] task ${task.task_pk}: submitted for review.',
-        );
-        return;
-      }
+        // The task becomes "In Progress" exactly when its agent starts a turn.
+        if (turn == 0) {
+          await _db.markTaskRunning(
+            task.task_pk,
+            workerSessionPk: workerSessionPk,
+            workBranch: branch,
+          );
+        }
 
-      kickoff = prompts.render(OrchestratorPromptField.workerContinue, vars);
+        try {
+          await for (final _ in session.runTurn(kickoff)) {
+            // Drain the stream; tool effects are applied inside runTurn.
+          }
+        } catch (e) {
+          debugPrint(
+            '[Orchestrator p$projectId] task ${task.task_pk}: turn $turn failed: $e',
+          );
+          await _db.markTaskYieldedBack(task.task_pk);
+          return;
+        }
+
+        final fresh = await _db.getTaskById(task.task_pk);
+        if (fresh == null) return;
+        if (fresh.executionStatus == TaskExecStatus.submitted) {
+          debugPrint(
+            '[Orchestrator p$projectId] task ${task.task_pk}: submitted for review.',
+          );
+          return;
+        }
+
+        kickoff = prompts.render(OrchestratorPromptField.workerContinue, vars);
+      }
+      // Ran out of turns without submitting — back to the board (a fresh attempt
+      // will re-pick it, up to the retry cap) rather than stuck "In Progress".
+      debugPrint(
+        '[Orchestrator p$projectId] task ${task.task_pk}: hit turn cap without submission.',
+      );
+      await _db.markTaskYieldedBack(task.task_pk);
+    } finally {
+      // Free this task's isolated working tree (the committed work lives on the
+      // task branch in the shared object DB; the scratch tree is disposable).
+      await _releaseTaskTree(task.task_pk);
     }
-    // Ran out of turns without submitting — back to the board (a fresh attempt
-    // will re-pick it, up to the retry cap) rather than stuck "In Progress".
-    debugPrint(
-      '[Orchestrator p$projectId] task ${task.task_pk}: hit turn cap without submission.',
-    );
-    await _db.markTaskYieldedBack(task.task_pk);
   }
 
   /// Load this project's effective orchestrator prompt templates (per-project
@@ -436,71 +461,76 @@ class ProjectOrchestrator {
       );
       return;
     }
-    final handles = await _resolveWorkspaceHandles();
     final branch = task.workBranch ?? 'task/${task.task_pk}';
-    await _checkout(handles.git, branch, task.task_pk);
+    final th = await _resolveTaskHandles(task.task_pk);
+    if (th == null) return;
+    // Hydrate an isolated tree with the submitted task branch so the verifier
+    // reads the work without touching any other agent's tree.
+    await th.lane.run(() => th.git.materializeInto(branch, th.tree));
 
-    final prompts = await _loadPrompts();
-    final vars = _varsFor(task, branch);
-    // Reuse the Verification Agent's single per-agent session (see worker stage).
-    final sessionPk = await _db.getOrCreateAgentChatSession(
-      projectId,
-      persona.agent_pk,
-      persona.name,
-    );
+    try {
+      final prompts = await _loadPrompts();
+      final vars = _varsFor(task, branch);
+      // Reuse the Verification Agent's single per-agent session (see worker).
+      final sessionPk = await _db.getOrCreateAgentChatSession(
+        projectId,
+        persona.agent_pk,
+        persona.name,
+      );
 
-    final session = ProjectCoordinatorSession(
-      client: resolved.client,
-      projectId: projectId,
-      projectName: persona.name,
-      db: _db,
-      model: resolved.model,
-      chatSessionPk: sessionPk,
-      permissions: AgentToolPermissions.fromConfigJson(persona.configJson),
-      confirmAsk: (_, _) async => true,
-      agentName: persona.name,
-      workspace: handles.ws,
-      git: handles.git,
-      buildService: handles.build,
-      // Autonomous coders need file/git/build tools directly — no progressive
-      // disclosure (that's for the interactive PM chat).
-      leanTools: false,
-      systemPromptOverride:
-          '${defaultSystemPrompt(AgentRole.verificationAgent)}\n${prompts.render(OrchestratorPromptField.verifyFraming, vars)}',
-      enableThinking: resolveEnableThinking(
-        agent: personaThinkingMode(
-          persona.configJson,
-          personaName: persona.name,
+      final session = ProjectCoordinatorSession(
+        client: resolved.client,
+        projectId: projectId,
+        projectName: persona.name,
+        db: _db,
+        model: resolved.model,
+        chatSessionPk: sessionPk,
+        permissions: AgentToolPermissions.fromConfigJson(persona.configJson),
+        confirmAsk: (_, _) async => true,
+        agentName: persona.name,
+        workspace: th.tree,
+        git: th.git,
+        buildService: th.build,
+        leanTools: false,
+        systemPromptOverride:
+            '${defaultSystemPrompt(AgentRole.verificationAgent)}\n${prompts.render(OrchestratorPromptField.verifyFraming, vars)}',
+        enableThinking: resolveEnableThinking(
+          agent: personaThinkingMode(
+            persona.configJson,
+            personaName: persona.name,
+          ),
+          task: ThinkingMode.fromString(task.thinkingMode),
         ),
-        task: ThinkingMode.fromString(task.thinkingMode),
-      ),
-    );
+      );
 
-    var kickoff = prompts.render(OrchestratorPromptField.verifyKickoff, vars);
-    for (var turn = 0; turn < _maxTurnsPerStage && !_disposed; turn++) {
-      if (!await _stillRunning()) return;
-      try {
-        await for (final _ in session.runTurn(kickoff)) {}
-      } catch (e) {
-        debugPrint(
-          '[Orchestrator p$projectId] task ${task.task_pk}: verify turn $turn failed: $e',
-        );
-        return;
+      var kickoff = prompts.render(OrchestratorPromptField.verifyKickoff, vars);
+      for (var turn = 0; turn < _maxTurnsPerStage && !_disposed; turn++) {
+        if (!await _stillRunning()) return;
+        try {
+          await for (final _ in session.runTurn(kickoff)) {}
+        } catch (e) {
+          debugPrint(
+            '[Orchestrator p$projectId] task ${task.task_pk}: verify turn $turn failed: $e',
+          );
+          return;
+        }
+        final fresh = await _db.getTaskById(task.task_pk);
+        if (fresh == null) return;
+        if (fresh.executionStatus != TaskExecStatus.submitted &&
+            fresh.executionStatus != TaskExecStatus.verifying) {
+          debugPrint(
+            '[Orchestrator p$projectId] task ${task.task_pk}: verdict recorded (${fresh.executionStatus}).',
+          );
+          return;
+        }
+        kickoff = prompts.render(OrchestratorPromptField.verifyContinue, vars);
       }
-      final fresh = await _db.getTaskById(task.task_pk);
-      if (fresh == null) return;
-      if (fresh.executionStatus != TaskExecStatus.submitted &&
-          fresh.executionStatus != TaskExecStatus.verifying) {
-        debugPrint(
-          '[Orchestrator p$projectId] task ${task.task_pk}: verdict recorded (${fresh.executionStatus}).',
-        );
-        return;
-      }
-      kickoff = prompts.render(OrchestratorPromptField.verifyContinue, vars);
+      debugPrint(
+        '[Orchestrator p$projectId] task ${task.task_pk}: verify hit turn cap without a verdict.',
+      );
+    } finally {
+      await _releaseTaskTree(task.task_pk);
     }
-    debugPrint(
-      '[Orchestrator p$projectId] task ${task.task_pk}: verify hit turn cap without a verdict.',
-    );
   }
 
   // ── Build stage ───────────────────────────────────────────────────────
@@ -601,6 +631,7 @@ class ProjectOrchestrator {
   Future<void> _runMergeStage(Task task) async {
     final handles = await _resolveWorkspaceHandles();
     final git = handles.git;
+    final lane = ref.read(gitLaneProvider(projectId));
     // A subtask integrates into its parent's branch; a top-level task into main.
     final targetBranch = await _integrationTargetBranch(task);
     final branch = task.workBranch ?? 'task/${task.task_pk}';
@@ -611,14 +642,17 @@ class ProjectOrchestrator {
     // engine is conservative (it only reports a conflict when the SAME files
     // changed on both sides, and commits nothing in that case), so a non-conflict
     // outcome is safe to auto-approve. An agent is only pulled in for a real
-    // conflict, exactly as the user expects.
+    // conflict, exactly as the user expects. Serialized through the lane since it
+    // mutates the shared tree/refs while other agents may be committing.
     if (git != null) {
       try {
-        await _checkout(git, targetBranch, task.task_pk);
-        final result = await git.merge(
-          branch,
-          message: 'Merge task #${task.task_pk}: ${task.title}',
-        );
+        final result = await lane.run(() async {
+          await _checkout(git, targetBranch, task.task_pk);
+          return git.merge(
+            branch,
+            message: 'Merge task #${task.task_pk}: ${task.title}',
+          );
+        });
         if (result.outcome != MergeOutcome.conflicts) {
           await _db.approveTask(task.task_pk);
           debugPrint(
@@ -750,6 +784,60 @@ class ProjectOrchestrator {
       debugPrint('[Orchestrator p$projectId] workspace unavailable: $e');
     }
     return (ws: ws, git: git, build: build);
+  }
+
+  /// Isolated handles for a CONCURRENT task stage: the task's own working tree,
+  /// the shared git engine (objects/refs), and the per-project lane that
+  /// serializes shared-DB writes. Null if the workspace can't be opened.
+  Future<
+    ({
+      Workspace tree,
+      NxtprjGitEngine git,
+      AsyncLock lane,
+      BuildService? build,
+    })?
+  >
+  _resolveTaskHandles(int taskPk) async {
+    try {
+      final tree = await ref.read(
+        taskWorkspaceProvider((projectId: projectId, taskPk: taskPk)).future,
+      );
+      final git = await ref.read(gitEngineProvider(projectId).future);
+      final lane = ref.read(gitLaneProvider(projectId));
+      final build = ref.read(buildServiceProvider);
+      return (tree: tree, git: git, lane: lane, build: build);
+    } catch (e) {
+      debugPrint(
+        '[Orchestrator p$projectId] task $taskPk: task workspace unavailable: $e',
+      );
+      return null;
+    }
+  }
+
+  /// Dispose + delete a finished task's isolated working tree. The committed
+  /// work lives on the task branch in the shared object DB, so the scratch tree
+  /// is disposable.
+  Future<void> _releaseTaskTree(int taskPk) async {
+    ref.invalidate(
+      taskWorkspaceProvider((projectId: projectId, taskPk: taskPk)),
+    );
+    await deleteTaskDisk(projectId, taskPk);
+  }
+
+  /// How many agents may run at once: the routed (subscription) server's
+  /// `maxConcurrency` (synced from the account), clamped to a safe range. Falls
+  /// back to 1 when no server is configured.
+  Future<int> _concurrencyCap(Project project) async {
+    try {
+      final servers = await _db.getInferenceServersForClient(project.client_fk);
+      if (servers.isEmpty) return 1;
+      final routed = servers.where((s) => isRoutedProviderType(s.providerType));
+      final n =
+          (routed.isNotEmpty ? routed.first : servers.first).maxConcurrency;
+      return n.clamp(1, 12);
+    } catch (_) {
+      return 1;
+    }
   }
 
   /// Put the worktree on [branch], creating it if needed. When the branch must

@@ -12,8 +12,7 @@ import 'project.dart';
 /// contract; the builder edits it whole and exporters/runtime read it whole.
 class CallSystems extends Table {
   IntColumn get call_system_pk => integer().autoIncrement()();
-  IntColumn get project_fk =>
-      integer().references(Projects, #project_pk)();
+  IntColumn get project_fk => integer().references(Projects, #project_pk)();
 
   /// Serialized CallSystemProject.toJson().
   TextColumn get json => text().withDefault(const Constant('{}'))();
@@ -23,6 +22,6 @@ class CallSystems extends Table {
   /// One call-system document per project.
   @override
   List<Set<Column>> get uniqueKeys => [
-        {project_fk}
-      ];
+    {project_fk},
+  ];
 }

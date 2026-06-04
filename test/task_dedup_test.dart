@@ -14,17 +14,32 @@ void main() {
   setUp(() => db = NexusDatabase.forTesting(NativeDatabase.memory()));
   tearDown(() async => db.close());
 
-  test('createTaskInProject reuses an existing same-title task in a project',
-      () async {
-    final a = await db.createTaskInProject(projectPk: 1, title: 'Build login');
-    final b = await db.createTaskInProject(projectPk: 1, title: 'Build login');
-    expect(b, a, reason: 'duplicate title in same project returns existing id');
+  test(
+    'createTaskInProject reuses an existing same-title task in a project',
+    () async {
+      final a = await db.createTaskInProject(
+        projectPk: 1,
+        title: 'Build login',
+      );
+      final b = await db.createTaskInProject(
+        projectPk: 1,
+        title: 'Build login',
+      );
+      expect(
+        b,
+        a,
+        reason: 'duplicate title in same project returns existing id',
+      );
 
-    // Different project with the same title is allowed (scoped per project).
-    final c = await db.createTaskInProject(projectPk: 2, title: 'Build login');
-    expect(c, isNot(a));
+      // Different project with the same title is allowed (scoped per project).
+      final c = await db.createTaskInProject(
+        projectPk: 2,
+        title: 'Build login',
+      );
+      expect(c, isNot(a));
 
-    final p1 = await db.getTasksForProject(1);
-    expect(p1.where((t) => t.title == 'Build login'), hasLength(1));
-  });
+      final p1 = await db.getTasksForProject(1);
+      expect(p1.where((t) => t.title == 'Build login'), hasLength(1));
+    },
+  );
 }

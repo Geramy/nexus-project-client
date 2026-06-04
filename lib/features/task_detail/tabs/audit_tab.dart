@@ -94,7 +94,8 @@ class AuditTab extends ConsumerWidget {
                     events.addAll(gitSnapshot.data!);
                   }
 
-                  final loading = tasksAsync.isLoading ||
+                  final loading =
+                      tasksAsync.isLoading ||
                       ciSnapshot.connectionState == ConnectionState.waiting ||
                       gitSnapshot.connectionState == ConnectionState.waiting;
 
@@ -107,10 +108,15 @@ class AuditTab extends ConsumerWidget {
                     }
                     if (tasksAsync.hasError) {
                       return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: AppSpacing.lg,
+                        ),
                         child: Text(
                           'Failed to load audit trail: ${tasksAsync.error}',
-                          style: TextStyle(fontSize: 12, color: context.nx.danger),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.nx.danger,
+                          ),
                         ),
                       );
                     }
@@ -162,12 +168,14 @@ class AuditTab extends ConsumerWidget {
     ];
 
     if (task.submissionJson != null) {
-      events.add(_AuditEvent(
-        time: task.updatedAt,
-        type: 'approval',
-        title: 'Worker submitted for review',
-        actor: 'Worker',
-      ));
+      events.add(
+        _AuditEvent(
+          time: task.updatedAt,
+          type: 'approval',
+          title: 'Worker submitted for review',
+          actor: 'Worker',
+        ),
+      );
     }
 
     return events;
@@ -185,21 +193,25 @@ class AuditTab extends ConsumerWidget {
     ];
 
     if (run.startedAt != null) {
-      events.add(_AuditEvent(
-        time: run.startedAt!,
-        type: 'build',
-        title: 'Build started: ${run.name}',
-        actor: actor,
-      ));
+      events.add(
+        _AuditEvent(
+          time: run.startedAt!,
+          type: 'build',
+          title: 'Build started: ${run.name}',
+          actor: actor,
+        ),
+      );
     }
 
     if (run.completedAt != null) {
-      events.add(_AuditEvent(
-        time: run.completedAt!,
-        type: 'build',
-        title: 'Build ${run.status}: ${run.name}',
-        actor: actor,
-      ));
+      events.add(
+        _AuditEvent(
+          time: run.completedAt!,
+          type: 'build',
+          title: 'Build ${run.status}: ${run.name}',
+          actor: actor,
+        ),
+      );
     }
 
     return events;
@@ -209,12 +221,12 @@ class AuditTab extends ConsumerWidget {
   /// there is no repo or the log throws.
   Future<List<_AuditEvent>> _loadGitEvents(WidgetRef ref) async {
     try {
-      final NxtprjGitEngine engine =
-          await ref.read(gitEngineProvider(projectId).future);
+      final NxtprjGitEngine engine = await ref.read(
+        gitEngineProvider(projectId).future,
+      );
       final commits = await engine.log(limit: 20);
       return commits.map((c) {
-        final shortOid =
-            c.oid.length > 7 ? c.oid.substring(0, 7) : c.oid;
+        final shortOid = c.oid.length > 7 ? c.oid.substring(0, 7) : c.oid;
         return _AuditEvent(
           time: c.when,
           type: 'git',
@@ -251,8 +263,7 @@ class _AuditEventTile extends StatelessWidget {
   String _formatTime(DateTime dt) {
     final l = dt.toLocal();
     String two(int n) => n.toString().padLeft(2, '0');
-    final date =
-        '${l.year}-${two(l.month)}-${two(l.day)}';
+    final date = '${l.year}-${two(l.month)}-${two(l.day)}';
     final time = '${two(l.hour)}:${two(l.minute)}:${two(l.second)}';
     return '$date $time';
   }
@@ -326,10 +337,7 @@ class _AuditEventTile extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    event.title,
-                    style: const TextStyle(fontSize: 13),
-                  ),
+                  Text(event.title, style: const TextStyle(fontSize: 13)),
                   const SizedBox(height: 2),
                   Text(
                     event.actor,

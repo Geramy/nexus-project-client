@@ -36,11 +36,16 @@ class NxtprjGitRefdb {
   // Iterator native callables + the live iterator state, keyed by struct addr.
   final Map<int, _RefIterState> _iters = {};
   NativeCallable<
-      Int Function(Pointer<Pointer<git_reference>>,
-          Pointer<git_reference_iterator>)>? _iterNextCb;
+    Int Function(
+      Pointer<Pointer<git_reference>>,
+      Pointer<git_reference_iterator>,
+    )
+  >?
+  _iterNextCb;
   NativeCallable<
-      Int Function(Pointer<Pointer<Char>>,
-          Pointer<git_reference_iterator>)>? _iterNextNameCb;
+    Int Function(Pointer<Pointer<Char>>, Pointer<git_reference_iterator>)
+  >?
+  _iterNextNameCb;
   NativeCallable<Void Function(Pointer<git_reference_iterator>)>? _iterFreeCb;
 
   NxtprjGitRefdb(this.db);
@@ -51,102 +56,145 @@ class NxtprjGitRefdb {
   /// [repo] is required because `git_refdb_new` takes the owning repository.
   Pointer<git_refdb> createRefdb(Pointer<git_repository> repo) {
     final be = calloc<git_refdb_backend>();
-    final initRc = libgit2.git_refdb_init_backend(be, GIT_REFDB_BACKEND_VERSION);
+    final initRc = libgit2.git_refdb_init_backend(
+      be,
+      GIT_REFDB_BACKEND_VERSION,
+    );
     if (initRc != 0) {
       calloc.free(be);
       throw StateError('git_refdb_init_backend failed ($initRc)');
     }
 
-    final existsCb = NativeCallable<
-        Int Function(Pointer<Int>, Pointer<git_refdb_backend>,
-            Pointer<Char>)>.isolateLocal(_exists, exceptionalReturn: -1);
-    final lookupCb = NativeCallable<
-            Int Function(Pointer<Pointer<git_reference>>,
-                Pointer<git_refdb_backend>, Pointer<Char>)>.isolateLocal(_lookup,
-        exceptionalReturn: -1);
-    final iteratorCb = NativeCallable<
-            Int Function(Pointer<Pointer<git_reference_iterator>>,
-                Pointer<git_refdb_backend>, Pointer<Char>)>.isolateLocal(
-        _iterator,
-        exceptionalReturn: -1);
-    final writeCb = NativeCallable<
-        Int Function(
+    final existsCb =
+        NativeCallable<
+          Int Function(Pointer<Int>, Pointer<git_refdb_backend>, Pointer<Char>)
+        >.isolateLocal(_exists, exceptionalReturn: -1);
+    final lookupCb =
+        NativeCallable<
+          Int Function(
+            Pointer<Pointer<git_reference>>,
+            Pointer<git_refdb_backend>,
+            Pointer<Char>,
+          )
+        >.isolateLocal(_lookup, exceptionalReturn: -1);
+    final iteratorCb =
+        NativeCallable<
+          Int Function(
+            Pointer<Pointer<git_reference_iterator>>,
+            Pointer<git_refdb_backend>,
+            Pointer<Char>,
+          )
+        >.isolateLocal(_iterator, exceptionalReturn: -1);
+    final writeCb =
+        NativeCallable<
+          Int Function(
             Pointer<git_refdb_backend>,
             Pointer<git_reference>,
             Int,
             Pointer<git_signature>,
             Pointer<Char>,
             Pointer<git_oid>,
-            Pointer<Char>)>.isolateLocal(_write, exceptionalReturn: -1);
-    final delCb = NativeCallable<
-        Int Function(Pointer<git_refdb_backend>, Pointer<Char>,
-            Pointer<git_oid>, Pointer<Char>)>.isolateLocal(_del,
-        exceptionalReturn: -1);
-    final hasLogCb = NativeCallable<
-        Int Function(Pointer<git_refdb_backend>,
-            Pointer<Char>)>.isolateLocal(_hasLog, exceptionalReturn: 0);
-    final ensureLogCb = NativeCallable<
-        Int Function(Pointer<git_refdb_backend>,
-            Pointer<Char>)>.isolateLocal(_ensureLog, exceptionalReturn: 0);
+            Pointer<Char>,
+          )
+        >.isolateLocal(_write, exceptionalReturn: -1);
+    final delCb =
+        NativeCallable<
+          Int Function(
+            Pointer<git_refdb_backend>,
+            Pointer<Char>,
+            Pointer<git_oid>,
+            Pointer<Char>,
+          )
+        >.isolateLocal(_del, exceptionalReturn: -1);
+    final hasLogCb =
+        NativeCallable<
+          Int Function(Pointer<git_refdb_backend>, Pointer<Char>)
+        >.isolateLocal(_hasLog, exceptionalReturn: 0);
+    final ensureLogCb =
+        NativeCallable<
+          Int Function(Pointer<git_refdb_backend>, Pointer<Char>)
+        >.isolateLocal(_ensureLog, exceptionalReturn: 0);
     final freeCb =
         NativeCallable<Void Function(Pointer<git_refdb_backend>)>.isolateLocal(
-            _free);
+          _free,
+        );
     // libgit2 1.9's git_refdb_set_backend validates rename/lock/unlock are
     // non-null (returns GIT_EINVALID otherwise). Our basic commit/status flow
     // never calls rename, and single-isolate use needs no real locking — so
     // these are minimal no-op stubs that satisfy validation cleanly.
-    final renameCb = NativeCallable<
-        Int Function(
+    final renameCb =
+        NativeCallable<
+          Int Function(
             Pointer<Pointer<git_reference>>,
             Pointer<git_refdb_backend>,
             Pointer<Char>,
             Pointer<Char>,
             Int,
             Pointer<git_signature>,
-            Pointer<Char>)>.isolateLocal(_rename, exceptionalReturn: -1);
-    final lockCb = NativeCallable<
-        Int Function(
+            Pointer<Char>,
+          )
+        >.isolateLocal(_rename, exceptionalReturn: -1);
+    final lockCb =
+        NativeCallable<
+          Int Function(
             Pointer<Pointer<Void>>,
             Pointer<git_refdb_backend>,
-            Pointer<Char>)>.isolateLocal(_lock, exceptionalReturn: 0);
-    final unlockCb = NativeCallable<
-        Int Function(
+            Pointer<Char>,
+          )
+        >.isolateLocal(_lock, exceptionalReturn: 0);
+    final unlockCb =
+        NativeCallable<
+          Int Function(
             Pointer<git_refdb_backend>,
             Pointer<Void>,
             Int,
             Int,
             Pointer<git_reference>,
             Pointer<git_signature>,
-            Pointer<Char>)>.isolateLocal(_unlock, exceptionalReturn: 0);
+            Pointer<Char>,
+          )
+        >.isolateLocal(_unlock, exceptionalReturn: 0);
     // libgit2's git_refdb_set_backend also validates that ALL four reflog_*
     // callbacks are non-null (they are documented as "must provide"). We don't
     // maintain a reflog, so these are no-op stubs that pair with has_log
     // returning 0 above.
-    final reflogReadCb = NativeCallable<
-        Int Function(Pointer<Pointer<git_reflog>>,
-            Pointer<git_refdb_backend>, Pointer<Char>)>.isolateLocal(_reflogRead, exceptionalReturn: -3);
-    final reflogWriteCb = NativeCallable<
-        Int Function(Pointer<git_refdb_backend>,
-            Pointer<git_reflog>)>.isolateLocal(_reflogWrite, exceptionalReturn: 0);
-    final reflogRenameCb = NativeCallable<
-        Int Function(Pointer<git_refdb_backend>, Pointer<Char>,
-            Pointer<Char>)>.isolateLocal(_reflogRename, exceptionalReturn: 0);
-    final reflogDeleteCb = NativeCallable<
-        Int Function(Pointer<git_refdb_backend>,
-            Pointer<Char>)>.isolateLocal(_reflogDelete, exceptionalReturn: 0);
+    final reflogReadCb =
+        NativeCallable<
+          Int Function(
+            Pointer<Pointer<git_reflog>>,
+            Pointer<git_refdb_backend>,
+            Pointer<Char>,
+          )
+        >.isolateLocal(_reflogRead, exceptionalReturn: -3);
+    final reflogWriteCb =
+        NativeCallable<
+          Int Function(Pointer<git_refdb_backend>, Pointer<git_reflog>)
+        >.isolateLocal(_reflogWrite, exceptionalReturn: 0);
+    final reflogRenameCb =
+        NativeCallable<
+          Int Function(Pointer<git_refdb_backend>, Pointer<Char>, Pointer<Char>)
+        >.isolateLocal(_reflogRename, exceptionalReturn: 0);
+    final reflogDeleteCb =
+        NativeCallable<
+          Int Function(Pointer<git_refdb_backend>, Pointer<Char>)
+        >.isolateLocal(_reflogDelete, exceptionalReturn: 0);
 
     // Iterator sub-callbacks (shared across all iterators, dispatched by addr).
-    _iterNextCb = NativeCallable<
-        Int Function(Pointer<Pointer<git_reference>>,
-            Pointer<git_reference_iterator>)>.isolateLocal(_iterNext,
-        exceptionalReturn: -1);
-    _iterNextNameCb = NativeCallable<
-        Int Function(Pointer<Pointer<Char>>,
-            Pointer<git_reference_iterator>)>.isolateLocal(_iterNextName,
-        exceptionalReturn: -1);
+    _iterNextCb =
+        NativeCallable<
+          Int Function(
+            Pointer<Pointer<git_reference>>,
+            Pointer<git_reference_iterator>,
+          )
+        >.isolateLocal(_iterNext, exceptionalReturn: -1);
+    _iterNextNameCb =
+        NativeCallable<
+          Int Function(Pointer<Pointer<Char>>, Pointer<git_reference_iterator>)
+        >.isolateLocal(_iterNextName, exceptionalReturn: -1);
     _iterFreeCb =
-        NativeCallable<Void Function(Pointer<git_reference_iterator>)>
-            .isolateLocal(_iterFree);
+        NativeCallable<
+          Void Function(Pointer<git_reference_iterator>)
+        >.isolateLocal(_iterFree);
 
     _callables.addAll([
       existsCb,
@@ -242,14 +290,20 @@ class NxtprjGitRefdb {
 
   /// Allocates a `git_reference` for the stored row. Returns `nullptr` on
   /// failure. libgit2 copies the name + oid, so the temporaries are freed here.
-  Pointer<git_reference> _allocRef(String name, String? target, String? symbolic) {
+  Pointer<git_reference> _allocRef(
+    String name,
+    String? target,
+    String? symbolic,
+  ) {
     final namePtr = name.toNativeUtf8();
     try {
       if (symbolic != null && symbolic.isNotEmpty) {
         final symPtr = symbolic.toNativeUtf8();
         try {
           return libgit2.git_reference__alloc_symbolic(
-              namePtr.cast(), symPtr.cast());
+            namePtr.cast(),
+            symPtr.cast(),
+          );
         } finally {
           calloc.free(symPtr);
         }
@@ -280,8 +334,9 @@ class NxtprjGitRefdb {
     if (glob.endsWith('*')) {
       final prefix = glob.substring(0, glob.length - 1);
       return db
-          .select('SELECT name FROM git_refs WHERE name LIKE ? ORDER BY name',
-              ['${_escapeLike(prefix)}%'])
+          .select('SELECT name FROM git_refs WHERE name LIKE ? ORDER BY name', [
+            '${_escapeLike(prefix)}%',
+          ])
           .map((r) => r['name'] as String)
           .toList();
     }
@@ -296,26 +351,38 @@ class NxtprjGitRefdb {
 
   // ── refdb callbacks (run synchronously from libgit2) ─────────────────
 
-  int _exists(Pointer<Int> existsOut, Pointer<git_refdb_backend> be,
-      Pointer<Char> refName) {
+  int _exists(
+    Pointer<Int> existsOut,
+    Pointer<git_refdb_backend> be,
+    Pointer<Char> refName,
+  ) {
     final name = refName.cast<Utf8>().toDartString();
-    final found =
-        db.select('SELECT 1 FROM git_refs WHERE name = ?', [name]).isNotEmpty;
+    final found = db.select('SELECT 1 FROM git_refs WHERE name = ?', [
+      name,
+    ]).isNotEmpty;
     existsOut.value = found ? 1 : 0;
     return 0;
   }
 
-  int _lookup(Pointer<Pointer<git_reference>> out,
-      Pointer<git_refdb_backend> be, Pointer<Char> refName) {
+  int _lookup(
+    Pointer<Pointer<git_reference>> out,
+    Pointer<git_refdb_backend> be,
+    Pointer<Char> refName,
+  ) {
     final name = refName.cast<Utf8>().toDartString();
-    final rows =
-        db.select('SELECT target, symbolic FROM git_refs WHERE name = ?', [name]);
+    final rows = db.select(
+      'SELECT target, symbolic FROM git_refs WHERE name = ?',
+      [name],
+    );
     if (rows.isEmpty) {
       out.value = nullptr;
       return -3; // GIT_ENOTFOUND
     }
     final ref = _allocRef(
-        name, rows.first['target'] as String?, rows.first['symbolic'] as String?);
+      name,
+      rows.first['target'] as String?,
+      rows.first['symbolic'] as String?,
+    );
     if (ref == nullptr) {
       out.value = nullptr;
       return -1;
@@ -324,8 +391,11 @@ class NxtprjGitRefdb {
     return 0;
   }
 
-  int _iterator(Pointer<Pointer<git_reference_iterator>> iterOut,
-      Pointer<git_refdb_backend> be, Pointer<Char> glob) {
+  int _iterator(
+    Pointer<Pointer<git_reference_iterator>> iterOut,
+    Pointer<git_refdb_backend> be,
+    Pointer<Char> glob,
+  ) {
     final globStr = glob == nullptr ? null : glob.cast<Utf8>().toDartString();
     final names = _matchingNames(globStr);
 
@@ -339,7 +409,9 @@ class NxtprjGitRefdb {
   }
 
   int _iterNext(
-      Pointer<Pointer<git_reference>> out, Pointer<git_reference_iterator> iter) {
+    Pointer<Pointer<git_reference>> out,
+    Pointer<git_reference_iterator> iter,
+  ) {
     final st = _iters[iter.address];
     if (st == null) {
       out.value = nullptr;
@@ -347,11 +419,16 @@ class NxtprjGitRefdb {
     }
     while (st.pos < st.names.length) {
       final name = st.names[st.pos++];
-      final rows = db
-          .select('SELECT target, symbolic FROM git_refs WHERE name = ?', [name]);
+      final rows = db.select(
+        'SELECT target, symbolic FROM git_refs WHERE name = ?',
+        [name],
+      );
       if (rows.isEmpty) continue; // Row vanished mid-iteration; skip it.
-      final ref = _allocRef(name, rows.first['target'] as String?,
-          rows.first['symbolic'] as String?);
+      final ref = _allocRef(
+        name,
+        rows.first['target'] as String?,
+        rows.first['symbolic'] as String?,
+      );
       if (ref == nullptr) {
         out.value = nullptr;
         return -1;
@@ -364,7 +441,9 @@ class NxtprjGitRefdb {
   }
 
   int _iterNextName(
-      Pointer<Pointer<Char>> out, Pointer<git_reference_iterator> iter) {
+    Pointer<Pointer<Char>> out,
+    Pointer<git_reference_iterator> iter,
+  ) {
     final st = _iters[iter.address];
     if (st == null || st.pos >= st.names.length) {
       out.value = nullptr;
@@ -390,13 +469,14 @@ class NxtprjGitRefdb {
   }
 
   int _write(
-      Pointer<git_refdb_backend> be,
-      Pointer<git_reference> ref,
-      int force,
-      Pointer<git_signature> who,
-      Pointer<Char> message,
-      Pointer<git_oid> old,
-      Pointer<Char> oldTarget) {
+    Pointer<git_refdb_backend> be,
+    Pointer<git_reference> ref,
+    int force,
+    Pointer<git_signature> who,
+    Pointer<Char> message,
+    Pointer<git_oid> old,
+    Pointer<Char> oldTarget,
+  ) {
     final namePtr = libgit2.git_reference_name(ref);
     if (namePtr == nullptr) return -1;
     final name = namePtr.cast<Utf8>().toDartString();
@@ -407,20 +487,26 @@ class NxtprjGitRefdb {
       final symPtr = libgit2.git_reference_symbolic_target(ref);
       final sym = symPtr == nullptr ? null : symPtr.cast<Utf8>().toDartString();
       db.execute(
-          'INSERT OR REPLACE INTO git_refs(name, target, symbolic) VALUES(?, NULL, ?)',
-          [name, sym]);
+        'INSERT OR REPLACE INTO git_refs(name, target, symbolic) VALUES(?, NULL, ?)',
+        [name, sym],
+      );
     } else {
       final oidPtr = libgit2.git_reference_target(ref);
       if (oidPtr == nullptr) return -1;
       db.execute(
-          'INSERT OR REPLACE INTO git_refs(name, target, symbolic) VALUES(?, ?, NULL)',
-          [name, _hex(oidPtr)]);
+        'INSERT OR REPLACE INTO git_refs(name, target, symbolic) VALUES(?, ?, NULL)',
+        [name, _hex(oidPtr)],
+      );
     }
     return 0;
   }
 
-  int _del(Pointer<git_refdb_backend> be, Pointer<Char> refName,
-      Pointer<git_oid> oldId, Pointer<Char> oldTarget) {
+  int _del(
+    Pointer<git_refdb_backend> be,
+    Pointer<Char> refName,
+    Pointer<git_oid> oldId,
+    Pointer<Char> oldTarget,
+  ) {
     final name = refName.cast<Utf8>().toDartString();
     db.execute('DELETE FROM git_refs WHERE name = ?', [name]);
     return 0;
@@ -447,50 +533,62 @@ class NxtprjGitRefdb {
   /// report GIT_ENOTFOUND so any unexpected caller fails loudly rather than
   /// silently believing the rename succeeded. Out is cleared.
   int _rename(
-      Pointer<Pointer<git_reference>> outRef,
-      Pointer<git_refdb_backend> be,
-      Pointer<Char> oldName,
-      Pointer<Char> newName,
-      int force,
-      Pointer<git_signature> who,
-      Pointer<Char> message) {
+    Pointer<Pointer<git_reference>> outRef,
+    Pointer<git_refdb_backend> be,
+    Pointer<Char> oldName,
+    Pointer<Char> newName,
+    int force,
+    Pointer<git_signature> who,
+    Pointer<Char> message,
+  ) {
     outRef.value = nullptr;
     return -3; // GIT_ENOTFOUND
   }
 
   /// Lock callback. Single-isolate, single SQLite connection: no real locking
   /// needed. Returns 0 with a null payload (passed back to [_unlock]).
-  int _lock(Pointer<Pointer<Void>> payloadOut,
-      Pointer<git_refdb_backend> be, Pointer<Char> refName) {
+  int _lock(
+    Pointer<Pointer<Void>> payloadOut,
+    Pointer<git_refdb_backend> be,
+    Pointer<Char> refName,
+  ) {
     payloadOut.value = nullptr;
     return 0;
   }
 
   /// Unlock callback. No-op (see [_lock]).
   int _unlock(
-      Pointer<git_refdb_backend> be,
-      Pointer<Void> payload,
-      int success,
-      int updateReflog,
-      Pointer<git_reference> ref,
-      Pointer<git_signature> sig,
-      Pointer<Char> message) {
+    Pointer<git_refdb_backend> be,
+    Pointer<Void> payload,
+    int success,
+    int updateReflog,
+    Pointer<git_reference> ref,
+    Pointer<git_signature> sig,
+    Pointer<Char> message,
+  ) {
     return 0;
   }
 
   /// Reflog read. We don't maintain a reflog → not found.
-  int _reflogRead(Pointer<Pointer<git_reflog>> out,
-      Pointer<git_refdb_backend> be, Pointer<Char> name) {
+  int _reflogRead(
+    Pointer<Pointer<git_reflog>> out,
+    Pointer<git_refdb_backend> be,
+    Pointer<Char> name,
+  ) {
     out.value = nullptr;
     return -3; // GIT_ENOTFOUND
   }
 
   /// Reflog write. No-op success — pairs with has_log returning 0.
-  int _reflogWrite(Pointer<git_refdb_backend> be, Pointer<git_reflog> reflog) => 0;
+  int _reflogWrite(Pointer<git_refdb_backend> be, Pointer<git_reflog> reflog) =>
+      0;
 
   /// Reflog rename. No-op success.
-  int _reflogRename(Pointer<git_refdb_backend> be,
-      Pointer<Char> oldName, Pointer<Char> newName) => 0;
+  int _reflogRename(
+    Pointer<git_refdb_backend> be,
+    Pointer<Char> oldName,
+    Pointer<Char> newName,
+  ) => 0;
 
   /// Reflog delete. No-op success.
   int _reflogDelete(Pointer<git_refdb_backend> be, Pointer<Char> name) => 0;

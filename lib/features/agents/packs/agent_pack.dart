@@ -31,12 +31,12 @@ class PackAgent {
   /// default skills + tool permissions so these agents are fully orchestration-
   /// backed (spawn → submit → verify → merge).
   factory PackAgent.fromRole(AgentRole role) => PackAgent(
-        name: role.displayTitle,
-        title: role.key,
-        description: role.description,
-        skills: defaultSkillNames(role),
-        configJson: defaultConfigJson(role),
-      );
+    name: role.displayTitle,
+    title: role.key,
+    description: role.description,
+    skills: defaultSkillNames(role),
+    configJson: defaultConfigJson(role),
+  );
 
   /// Build a pack agent for a non-role domain from an explicit skill list. The
   /// tool-permission map is derived from [skills] via the same default-deny
@@ -46,12 +46,11 @@ class PackAgent {
     required String title,
     required String description,
     required List<String> skills,
-  }) =>
-      PackAgent(
-        name: name,
-        title: title,
-        description: description,
-        skills: skills,
-        configJson: configJsonForSkills(skills),
-      );
+  }) => PackAgent(
+    name: name,
+    title: title,
+    description: description,
+    skills: skills,
+    configJson: configJsonForSkills(skills),
+  );
 }

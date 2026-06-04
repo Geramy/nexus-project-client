@@ -89,8 +89,10 @@ class _AdminModelsTabState extends ConsumerState<AdminModelsTab> {
   }
 
   Future<void> _delete(String modelName) async {
-    final ok = await _confirm('Delete $modelName?',
-        'This removes the model from local storage on the server. Cannot be undone.');
+    final ok = await _confirm(
+      'Delete $modelName?',
+      'This removes the model from local storage on the server. Cannot be undone.',
+    );
     if (!ok) return;
     final client = ref.read(adminConsoleClientProvider);
     if (client == null) return;
@@ -144,7 +146,8 @@ class _AdminModelsTabState extends ConsumerState<AdminModelsTab> {
         switch (ev) {
           case PullProgress():
             if (ev.percent != null) progress.value = ev.percent! / 100.0;
-            status.value = '${ev.file ?? "Downloading"} (${ev.percent?.toStringAsFixed(0) ?? "?"}%)';
+            status.value =
+                '${ev.file ?? "Downloading"} (${ev.percent?.toStringAsFixed(0) ?? "?"}%)';
           case PullComplete():
             status.value = 'Complete';
           case PullError():
@@ -178,8 +181,14 @@ class _AdminModelsTabState extends ConsumerState<AdminModelsTab> {
         title: Text(title),
         content: Text(body),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Yes')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Yes'),
+          ),
         ],
       ),
     );
@@ -222,7 +231,10 @@ class _AdminModelsTabState extends ConsumerState<AdminModelsTab> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () {
               if (modelName.text.trim().isEmpty) return;
@@ -230,8 +242,12 @@ class _AdminModelsTabState extends ConsumerState<AdminModelsTab> {
                 ctx,
                 _PullSpec(
                   modelName: modelName.text.trim(),
-                  checkpoint: checkpoint.text.trim().isEmpty ? null : checkpoint.text.trim(),
-                  recipe: checkpoint.text.trim().isEmpty ? null : recipe.text.trim(),
+                  checkpoint: checkpoint.text.trim().isEmpty
+                      ? null
+                      : checkpoint.text.trim(),
+                  recipe: checkpoint.text.trim().isEmpty
+                      ? null
+                      : recipe.text.trim(),
                 ),
               );
             },
@@ -256,20 +272,20 @@ class _AdminModelsTabState extends ConsumerState<AdminModelsTab> {
         child: _loading && _models.isEmpty
             ? const Center(child: CircularProgressIndicator())
             : _error != null
-                ? Center(child: Text('Error: $_error'))
-                : ListView(
-                    padding: const EdgeInsets.only(bottom: 88),
-                    children: [
-                      for (final m in _models)
-                        _ModelTile(
-                          model: m,
-                          loaded: _loaded.contains(m.id),
-                          onLoad: () => _load(m.id),
-                          onUnload: () => _unload(m.id),
-                          onDelete: () => _delete(m.id),
-                        ),
-                    ],
-                  ),
+            ? Center(child: Text('Error: $_error'))
+            : ListView(
+                padding: const EdgeInsets.only(bottom: 88),
+                children: [
+                  for (final m in _models)
+                    _ModelTile(
+                      model: m,
+                      loaded: _loaded.contains(m.id),
+                      onLoad: () => _load(m.id),
+                      onUnload: () => _unload(m.id),
+                      onDelete: () => _delete(m.id),
+                    ),
+                ],
+              ),
       ),
     );
   }
@@ -331,7 +347,8 @@ class _ModelTile extends StatelessWidget {
   Widget _buildTrailing({required bool installed}) {
     if (!installed) {
       return TextButton.icon(
-        onPressed: () {}, // Inline pull not wired (no modelDownloadsProvider in this project)
+        onPressed:
+            () {}, // Inline pull not wired (no modelDownloadsProvider in this project)
         icon: const Icon(Icons.download, size: 18),
         label: const Text('Download'),
       );
@@ -353,8 +370,10 @@ class _ModelTile extends StatelessWidget {
             }
           },
           itemBuilder: (_) => [
-            if (!loaded) const PopupMenuItem(value: 'load', child: Text('Load')),
-            if (loaded) const PopupMenuItem(value: 'unload', child: Text('Unload')),
+            if (!loaded)
+              const PopupMenuItem(value: 'load', child: Text('Load')),
+            if (loaded)
+              const PopupMenuItem(value: 'unload', child: Text('Unload')),
             const PopupMenuItem(value: 'delete', child: Text('Delete')),
           ],
         ),
@@ -377,7 +396,11 @@ class _InstalledPill extends StatelessWidget {
       ),
       child: const Text(
         'Installed',
-        style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.w600),
+        style: TextStyle(
+          color: Colors.green,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

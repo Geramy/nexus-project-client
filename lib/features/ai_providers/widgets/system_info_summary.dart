@@ -35,10 +35,6 @@ class SystemInfoSummary extends StatelessWidget {
 
     if (entries.isEmpty) return const SizedBox.shrink();
 
-    return Wrap(
-      spacing: 12,
-      runSpacing: 8,
-      children: entries,
-    );
+    return Wrap(spacing: 12, runSpacing: 8, children: entries);
   }
 }

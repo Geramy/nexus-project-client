@@ -7,7 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:nexus_projects_client/core/providers/app_shell_provider.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
-import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart' show ChatSessionsCompanion;
+import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart'
+    show ChatSessionsCompanion;
 
 /// Right sidebar listing the persisted Coordinator chat sessions for the
 /// current project (Client → Project → Session). Selecting one sets the active
@@ -34,7 +35,10 @@ class ChatSessionsSidebar extends ConsumerWidget {
               children: [
                 const Icon(Icons.chat_bubble_outline, size: 18),
                 const SizedBox(width: 8),
-                Text('Chat Sessions', style: Theme.of(context).textTheme.titleSmall),
+                Text(
+                  'Chat Sessions',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
                 const Spacer(),
                 IconButton(
                   icon: const Icon(Icons.add, size: 18),
@@ -68,23 +72,41 @@ class ChatSessionsSidebar extends ConsumerWidget {
                       leading: Icon(
                         selected ? Icons.chat : Icons.chat_outlined,
                         size: 18,
-                        color: selected ? Theme.of(context).colorScheme.primary : null,
+                        color: selected
+                            ? Theme.of(context).colorScheme.primary
+                            : null,
                       ),
-                      title: Text(s.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                      subtitle: _SessionSubtitle(sessionId: s.session_pk, updatedAt: s.updatedAt),
-                      onTap: () =>
-                          ref.read(currentChatSessionProvider(projectId).notifier).select(s.session_pk),
+                      title: Text(
+                        s.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: _SessionSubtitle(
+                        sessionId: s.session_pk,
+                        updatedAt: s.updatedAt,
+                      ),
+                      onTap: () => ref
+                          .read(currentChatSessionProvider(projectId).notifier)
+                          .select(s.session_pk),
                       trailing: IconButton(
                         icon: const Icon(Icons.delete_outline, size: 16),
                         tooltip: 'Delete session',
-                        onPressed: () => _deleteSession(ref, projectId, s.session_pk, activeId),
+                        onPressed: () => _deleteSession(
+                          ref,
+                          projectId,
+                          s.session_pk,
+                          activeId,
+                        ),
                       ),
                     );
                   },
                 );
               },
               loading: () => const Center(
-                child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator(strokeWidth: 2)),
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
               ),
               error: (e, _) => Padding(
                 padding: const EdgeInsets.all(16),
@@ -99,13 +121,18 @@ class ChatSessionsSidebar extends ConsumerWidget {
 
   Future<void> _newSession(WidgetRef ref, int projectId) async {
     final db = ref.read(nexusDatabaseProvider);
-    final id = await db.createChatSession(ChatSessionsCompanion.insert(
-      project_fk: projectId,
-    ));
+    final id = await db.createChatSession(
+      ChatSessionsCompanion.insert(project_fk: projectId),
+    );
     ref.read(currentChatSessionProvider(projectId).notifier).select(id);
   }
 
-  Future<void> _deleteSession(WidgetRef ref, int projectId, int sessionId, int? activeId) async {
+  Future<void> _deleteSession(
+    WidgetRef ref,
+    int projectId,
+    int sessionId,
+    int? activeId,
+  ) async {
     final db = ref.read(nexusDatabaseProvider);
     await db.deleteChatSession(sessionId);
     if (activeId == sessionId) {
@@ -124,8 +151,13 @@ class _SessionSubtitle extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final msgs = ref.watch(chatMessagesForSessionProvider(sessionId));
     final count = msgs.maybeWhen(data: (m) => m.length, orElse: () => null);
-    final countStr = count != null ? '$count msg${count == 1 ? '' : 's'} • ' : '';
-    return Text('$countStr${_relativeTime(updatedAt)}', style: const TextStyle(fontSize: 11));
+    final countStr = count != null
+        ? '$count msg${count == 1 ? '' : 's'} • '
+        : '';
+    return Text(
+      '$countStr${_relativeTime(updatedAt)}',
+      style: const TextStyle(fontSize: 11),
+    );
   }
 
   String _relativeTime(DateTime t) {

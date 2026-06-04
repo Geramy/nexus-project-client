@@ -12,13 +12,16 @@ import 'package:just_audio/just_audio.dart';
 import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart'
     show ChatMessagesCompanion, ChatMessage, AgentPersona;
 // Backward-compat types (InferenceClient = InferenceBackend).
-import 'package:nexus_projects_client/infrastructure/inference/inference_backend_factory.dart' show backendForServer;
-import 'package:nexus_projects_client/infrastructure/inference/routed_server.dart' show isRoutedProviderType;
+import 'package:nexus_projects_client/infrastructure/inference/inference_backend_factory.dart'
+    show backendForServer;
+import 'package:nexus_projects_client/infrastructure/inference/routed_server.dart'
+    show isRoutedProviderType;
 import 'package:nexus_projects_client/infrastructure/inference/inference_client.dart';
 import 'package:nexus_projects_client/infrastructure/lemonade/api/types/model_info.dart';
 import 'package:nexus_projects_client/infrastructure/lemonade/services/persona_model_resolver.dart';
 import 'package:nexus_projects_client/features/ai_providers/providers/ai_servers_cache_provider.dart';
-import 'package:nexus_projects_client/infrastructure/models/ui/inference_server.dart' as ui_server;
+import 'package:nexus_projects_client/infrastructure/models/ui/inference_server.dart'
+    as ui_server;
 import 'package:nexus_projects_client/features/projects/coordinator_session.dart';
 import 'package:nexus_projects_client/features/project_plans/plan_store.dart';
 import 'package:nexus_projects_client/features/agents/agent_tool_permissions.dart';
@@ -48,6 +51,7 @@ import '../../core/providers/lean_context_provider.dart';
 class ProjectCoordinatorChatScreen extends ConsumerStatefulWidget {
   final int projectId;
   final String projectName;
+
   /// When set, the coordinator is focused on this plan (can view/update it) and
   /// tasks it creates are linked to the plan. This is the plan's workspace path,
   /// e.g. `/PLANS/Roadmap.md`.
@@ -61,18 +65,22 @@ class ProjectCoordinatorChatScreen extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<ProjectCoordinatorChatScreen> createState() => _ProjectCoordinatorChatScreenState();
+  ConsumerState<ProjectCoordinatorChatScreen> createState() =>
+      _ProjectCoordinatorChatScreenState();
 }
 
-class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinatorChatScreen> {
+class _ProjectCoordinatorChatScreenState
+    extends ConsumerState<ProjectCoordinatorChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final StickyScrollController _sticky = StickyScrollController();
   final List<_ChatMessage> _messages = [];
   // Dedicated player for replaying a reply's audio from the transcript (separate
   // from the live TTS player so replay can't clash with an active call turn).
   final AudioPlayer _replayPlayer = AudioPlayer();
-  bool _isVoiceCallActive = false;   // Whether we are in voice conversation mode with the Coordinator
-  bool _isMicMuted = false;          // Whether the mic is currently muted while in voice mode
+  bool _isVoiceCallActive =
+      false; // Whether we are in voice conversation mode with the Coordinator
+  bool _isMicMuted =
+      false; // Whether the mic is currently muted while in voice mode
   bool _isSending = false;
   // True while an assistant turn is in flight but no streamed content has
   // arrived yet (drives the "Coordinator is thinking…" indicator).
@@ -83,9 +91,12 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
   /// Concrete backend for the selected server (LemonadeBackend via factory).
   InferenceClient? _inferenceClient;
   ProjectCoordinatorSession? _session;
-  CoordinatorDuplexVoiceSession? _duplexVoiceSession; // The one and only voice path for the Coordinator call (duplex VAD-driven, lemonade_mobile style)
-  AudioRecorderService? _voiceRecorder;     // shared so LiveMicVisualizer sees real levels during the call
+  CoordinatorDuplexVoiceSession?
+  _duplexVoiceSession; // The one and only voice path for the Coordinator call (duplex VAD-driven, lemonade_mobile style)
+  AudioRecorderService?
+  _voiceRecorder; // shared so LiveMicVisualizer sees real levels during the call
   bool _clientReady = false;
+
   /// Active persisted chat session for this project.
   int? _sessionId;
   bool _sessionTitled = false;
@@ -101,11 +112,14 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
   Future<void> _initializeCoordinator() async {
     try {
       final clientId = ref.read(currentClientIdProvider);
-      final servers = await ref.read(inferenceServersForClientProvider(clientId).future);
+      final servers = await ref.read(
+        inferenceServersForClientProvider(clientId).future,
+      );
 
       if (servers.isEmpty) {
         setState(() {
-          _clientError = 'No inference servers configured for this client. Go to Agents Hub and add a Lemonade (or OpenAI-compatible) server first.';
+          _clientError =
+              'No inference servers configured for this client. Go to Agents Hub and add a Lemonade (or OpenAI-compatible) server first.';
           _clientReady = false;
         });
         return;
@@ -122,8 +136,11 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
         // Falls back to (and persists) the Project Manager persona when the
         // project has no agent assigned yet, so the coordinator chat always
         // opens with a sensible default agent selected.
-        final personaId = await db.getOrAssignCoordinatorPersonaId(widget.projectId);
-        if (personaId != null) persona = await db.resolveAgentPersona(personaId);
+        final personaId = await db.getOrAssignCoordinatorPersonaId(
+          widget.projectId,
+        );
+        if (personaId != null)
+          persona = await db.resolveAgentPersona(personaId);
       } catch (e) {
         debugPrint('Coordinator: could not load project agent (non-fatal): $e');
       }
@@ -143,7 +160,9 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
           }
         }
       }
-      debugPrint('[Voice] Agent="${persona?.name ?? "(none)"}" → server "${chosen.name}" @ ${chosen.baseUrl}');
+      debugPrint(
+        '[Voice] Agent="${persona?.name ?? "(none)"}" → server "${chosen.name}" @ ${chosen.baseUrl}',
+      );
 
       final models = chosen.availableModelsJson != null
           ? (jsonDecode(chosen.availableModelsJson!) as List).cast<String>()
@@ -194,15 +213,19 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
       ttsModel ??= firstTtsModelId(serverModels);
 
       // Chat model: agent's resolved LLM → server's selected → first live → first cached.
-      final chatCandidate = resolvedChatModel ??
-          ((chosen.selectedModel != null && chosen.selectedModel!.trim().isNotEmpty)
+      final chatCandidate =
+          resolvedChatModel ??
+          ((chosen.selectedModel != null &&
+                  chosen.selectedModel!.trim().isNotEmpty)
               ? chosen.selectedModel!.trim()
               : (liveTextModel ?? (models.isNotEmpty ? models.first : null)));
       // Never address a collection/omni id at chat — decompose to its LLM
       // component (the server 500s on bare collection ids).
       final effectiveChatModel =
           resolveChatModelId(chatCandidate, serverModels) ?? chatCandidate;
-      debugPrint('[Voice] Coordinator models → chat=$effectiveChatModel stt=$sttModel tts=$ttsModel voice=${ttsVoice ?? "(default)"}');
+      debugPrint(
+        '[Voice] Coordinator models → chat=$effectiveChatModel stt=$sttModel tts=$ttsModel voice=${ttsVoice ?? "(default)"}',
+      );
 
       final uiServer = ui_server.InferenceServer(
         id: chosen.server_pk.toString(),
@@ -230,11 +253,17 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
         planStore = await ref.read(planStoreProvider(widget.projectId).future);
       } catch (_) {}
       if (widget.openPlanPath != null) {
-        sessionId = await db.getOrCreateChatSession(widget.projectId, planPath: widget.openPlanPath);
+        sessionId = await db.getOrCreateChatSession(
+          widget.projectId,
+          planPath: widget.openPlanPath,
+        );
       } else {
-        sessionId = ref.read(currentChatSessionProvider(widget.projectId)) ??
+        sessionId =
+            ref.read(currentChatSessionProvider(widget.projectId)) ??
             await db.getOrCreateChatSession(widget.projectId);
-        ref.read(currentChatSessionProvider(widget.projectId).notifier).select(sessionId);
+        ref
+            .read(currentChatSessionProvider(widget.projectId).notifier)
+            .select(sessionId);
       }
       _sessionId = sessionId;
 
@@ -245,7 +274,9 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
       NxtprjGitEngine? gitEngine;
       BuildService? buildService;
       try {
-        workspace = await ref.read(workspaceFsProvider(widget.projectId).future);
+        workspace = await ref.read(
+          workspaceFsProvider(widget.projectId).future,
+        );
         gitEngine = await ref.read(gitEngineProvider(widget.projectId).future);
         buildService = ref.read(buildServiceProvider);
       } catch (_) {}
@@ -269,7 +300,10 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
         // Agent-level thinking mode (Project Manager defaults Off, others Unset).
         // Pass-2 will let a task override when the agent is Unset.
         enableThinking: resolveEnableThinking(
-          agent: personaThinkingMode(persona?.configJson, personaName: persona?.name),
+          agent: personaThinkingMode(
+            persona?.configJson,
+            personaName: persona?.name,
+          ),
         ),
         leanTools: ref.read(leanContextNotifierProvider),
       );
@@ -278,7 +312,11 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
       final restored = await _loadSessionMessages(sessionId);
 
       _voiceRecorder = AudioRecorderService();
-      final ttsSvc = TtsService(inferenceClient: _inferenceClient, ttsModel: ttsModel, defaultVoice: ttsVoice);
+      final ttsSvc = TtsService(
+        inferenceClient: _inferenceClient,
+        ttsModel: ttsModel,
+        defaultVoice: ttsVoice,
+      );
 
       // Duplex (VAD-driven continuous conversation) is now the ONLY voice path for the Coordinator call.
       // This gives the automatic speak → pause (VAD) → AI processes (with tools) → speaks back → auto resume listening behavior.
@@ -290,15 +328,26 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
         // Surface each voice turn in the chat transcript so the conversation is
         // visible even if TTS audio fails.
         onUserTranscript: (t) {
-          if (mounted) setState(() => _messages.add(_ChatMessage(text: t, isUser: true)));
+          if (mounted)
+            setState(() => _messages.add(_ChatMessage(text: t, isUser: true)));
           unawaited(_persist('user', t));
         },
         onAssistantReply: (t, audioPath) {
-          if (mounted) setState(() => _messages.add(_ChatMessage(text: t, isUser: false, audioPath: audioPath)));
+          if (mounted)
+            setState(
+              () => _messages.add(
+                _ChatMessage(text: t, isUser: false, audioPath: audioPath),
+              ),
+            );
           unawaited(_persist('assistant', t, audioPath: audioPath));
         },
         onSystemNote: (t) {
-          if (mounted) setState(() => _messages.add(_ChatMessage(text: t, isUser: false, isSystem: true)));
+          if (mounted)
+            setState(
+              () => _messages.add(
+                _ChatMessage(text: t, isUser: false, isSystem: true),
+              ),
+            );
           unawaited(_persist('system', t));
         },
       );
@@ -319,10 +368,13 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
             ..addAll(restored);
           if (_messages.isEmpty) {
             // Ephemeral greeting (not persisted) shown only for an empty session.
-            _messages.add(_ChatMessage(
-              text: 'Coordinator ready for project "${widget.projectName}".\n$ctx\n\nYou can type or use the call button for voice. The AI can create/update tasks live via tools.',
-              isUser: false,
-            ));
+            _messages.add(
+              _ChatMessage(
+                text:
+                    'Coordinator ready for project "${widget.projectName}".\n$ctx\n\nYou can type or use the call button for voice. The AI can create/update tasks live via tools.',
+                isUser: false,
+              ),
+            );
           }
         });
       }
@@ -356,12 +408,14 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
     for (final ChatMessage m in rows) {
       final isUser = m.role == 'user';
       final isSystem = m.role == 'system';
-      restored.add(_ChatMessage(
-        text: m.content,
-        isUser: isUser,
-        isSystem: isSystem ? true : null,
-        audioPath: m.audioPath,
-      ));
+      restored.add(
+        _ChatMessage(
+          text: m.content,
+          isUser: isUser,
+          isSystem: isSystem ? true : null,
+          audioPath: m.audioPath,
+        ),
+      );
       if (m.role == 'user' || m.role == 'assistant') {
         llmTurns.add((role: m.role, content: m.content));
       }
@@ -398,16 +452,27 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('The coordinator wants to run a tool that requires your approval:'),
+            Text(
+              'The coordinator wants to run a tool that requires your approval:',
+            ),
             const SizedBox(height: 10),
             Text(summary, style: const TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 4),
-            Text('Tool: $tool', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            Text(
+              'Tool: $tool',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Deny')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Approve')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Deny'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Approve'),
+          ),
         ],
       ),
     );
@@ -420,13 +485,15 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
     if (sid == null) return null;
     final db = ref.read(nexusDatabaseProvider);
     final now = DateTime.now();
-    final pk = await db.addChatMessage(ChatMessagesCompanion.insert(
-      session_fk: sid,
-      role: role,
-      content: Value(text),
-      audioPath: Value(audioPath),
-      seq: Value(now.millisecondsSinceEpoch),
-    ));
+    final pk = await db.addChatMessage(
+      ChatMessagesCompanion.insert(
+        session_fk: sid,
+        role: role,
+        content: Value(text),
+        audioPath: Value(audioPath),
+        seq: Value(now.millisecondsSinceEpoch),
+      ),
+    );
     if (role == 'user' && !_sessionTitled) {
       _sessionTitled = true;
       await db.touchChatSession(sid, title: _titleFromText(text));
@@ -448,13 +515,12 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
       await _replayPlayer.play();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not play audio: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not play audio: $e')));
       }
     }
   }
-
 
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
@@ -470,7 +536,8 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
 
     try {
       final assistantBuffer = StringBuffer();
-      var needNewBubble = true; // start a fresh assistant bubble after tool notes
+      var needNewBubble =
+          true; // start a fresh assistant bubble after tool notes
 
       // runTurn drives the tool loop and produces the final answer. Tool results
       // arrive via onToolResult (shown as system notes between answer segments).
@@ -479,8 +546,11 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
         onToolResult: (r) {
           if (!mounted) return;
           setState(() {
-            _messages.add(_ChatMessage(text: '✓ $r', isUser: false, isSystem: true));
-            _isThinking = true; // back to "thinking" until the next content arrives
+            _messages.add(
+              _ChatMessage(text: '✓ $r', isUser: false, isSystem: true),
+            );
+            _isThinking =
+                true; // back to "thinking" until the next content arrives
           });
           unawaited(_persist('system', '✓ $r'));
           needNewBubble = true;
@@ -497,13 +567,20 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
               ..clear()
               ..write(event.text);
             setState(() {
-              _messages.add(_ChatMessage(text: assistantBuffer.toString(), isUser: false));
+              _messages.add(
+                _ChatMessage(text: assistantBuffer.toString(), isUser: false),
+              );
               _isThinking = false; // content is streaming now
             });
             needNewBubble = false;
           } else {
             assistantBuffer.write(event.text);
-            setState(() => _messages.last = _ChatMessage(text: assistantBuffer.toString(), isUser: false));
+            setState(
+              () => _messages.last = _ChatMessage(
+                text: assistantBuffer.toString(),
+                isUser: false,
+              ),
+            );
           }
         } else if (event is ChatStreamFinish) {
           final assistantText = assistantBuffer.toString().trim();
@@ -520,11 +597,18 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
       // The turn failed — drop the just-saved user message so it can't reload
       // as orphaned, role-breaking history on the next launch.
       if (userMsgPk != null) {
-        try { await ref.read(nexusDatabaseProvider).deleteChatMessage(userMsgPk); } catch (_) {}
+        try {
+          await ref.read(nexusDatabaseProvider).deleteChatMessage(userMsgPk);
+        } catch (_) {}
       }
       if (mounted) {
         setState(() {
-          _messages.add(_ChatMessage(text: "Error talking to coordinator: $e", isUser: false));
+          _messages.add(
+            _ChatMessage(
+              text: "Error talking to coordinator: $e",
+              isUser: false,
+            ),
+          );
           _isSending = false;
           _isThinking = false;
         });
@@ -535,7 +619,11 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
   void _toggleVoiceCall() async {
     if (!_clientReady) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Coordinator not ready — configure an inference server first.')),
+        const SnackBar(
+          content: Text(
+            'Coordinator not ready — configure an inference server first.',
+          ),
+        ),
       );
       return;
     }
@@ -580,7 +668,11 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
   Future<void> _attachAndAnalyzeImage() async {
     // Vision can be added by sending an image message through the InferenceClient chat with image_url parts.
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Vision (image understanding) supported via multi-modal models — attach flow coming in next iteration.')),
+      const SnackBar(
+        content: Text(
+          'Vision (image understanding) supported via multi-modal models — attach flow coming in next iteration.',
+        ),
+      ),
     );
   }
 
@@ -589,23 +681,26 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
 
     try {
       final response = await _session!.client.generateImage(
-        prompt: 'Professional project plan diagram for ${widget.projectName}. Clean, modern infographic style showing key phases and deliverables.',
+        prompt:
+            'Professional project plan diagram for ${widget.projectName}. Clean, modern infographic style showing key phases and deliverables.',
         size: '1024x1024',
       );
 
       if (response.data.isNotEmpty) {
         final imageUrl = response.data.first.url;
         setState(() {
-          _messages.add(_ChatMessage(
-            text: 'Generated diagram for the plan:\n$imageUrl',
-            isUser: false,
-          ));
+          _messages.add(
+            _ChatMessage(
+              text: 'Generated diagram for the plan:\n$imageUrl',
+              isUser: false,
+            ),
+          );
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Image generation failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Image generation failed: $e')));
     }
   }
 
@@ -620,7 +715,10 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
 
     // If the active session changes (e.g. picked in the sidebar) while we're
     // open, switch to it. ref.listen runs outside build, so setState is safe.
-    ref.listen<int?>(currentChatSessionProvider(widget.projectId), (prev, next) {
+    ref.listen<int?>(currentChatSessionProvider(widget.projectId), (
+      prev,
+      next,
+    ) {
       if (_clientReady && next != null && next != _sessionId) {
         _loadSession(next);
       }
@@ -634,7 +732,9 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
           IconButton(
             icon: Icon(voiceActive ? Icons.call_end : Icons.call),
             onPressed: ready ? _toggleVoiceCall : null,
-            tooltip: voiceActive ? 'End Voice Conversation' : 'Start Voice Conversation with Coordinator',
+            tooltip: voiceActive
+                ? 'End Voice Conversation'
+                : 'Start Voice Conversation with Coordinator',
             color: voiceActive ? context.nx.danger : null,
           ),
           IconButton(
@@ -676,7 +776,10 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
               width: double.infinity,
               color: context.nx.tintOf(context.nx.warning),
               padding: const EdgeInsets.all(AppSpacing.md),
-              child: Text(_clientError!, style: TextStyle(color: context.nx.warning)),
+              child: Text(
+                _clientError!,
+                style: TextStyle(color: context.nx.warning),
+              ),
             ),
 
           Expanded(
@@ -691,7 +794,9 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
                   return Align(
                     alignment: Alignment.centerLeft,
                     child: Container(
-                      margin: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                      margin: const EdgeInsets.symmetric(
+                        vertical: AppSpacing.xs,
+                      ),
                       padding: const EdgeInsets.all(AppSpacing.md),
                       decoration: BoxDecoration(
                         color: context.nx.glass,
@@ -702,7 +807,8 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           const SizedBox(
-                            width: 14, height: 14,
+                            width: 14,
+                            height: 14,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           ),
                           const SizedBox(width: AppSpacing.sm),
@@ -724,7 +830,9 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
                 final nx = context.nx;
 
                 return Align(
-                  alignment: msg.isUser ? Alignment.centerRight : Alignment.centerLeft,
+                  alignment: msg.isUser
+                      ? Alignment.centerRight
+                      : Alignment.centerLeft,
                   child: Container(
                     margin: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
                     padding: const EdgeInsets.all(AppSpacing.md),
@@ -732,8 +840,8 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
                       color: msg.isUser
                           ? Theme.of(context).colorScheme.primaryContainer
                           : isSystem
-                              ? nx.tintOf(nx.info)
-                              : nx.glass,
+                          ? nx.tintOf(nx.info)
+                          : nx.glass,
                       borderRadius: AppRadius.lgAll,
                       border: msg.isUser
                           ? null
@@ -751,7 +859,9 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
                           SelectableText(
                             msg.text,
                             style: TextStyle(
-                              fontStyle: isSystem ? FontStyle.italic : FontStyle.normal,
+                              fontStyle: isSystem
+                                  ? FontStyle.italic
+                                  : FontStyle.normal,
                               fontSize: isSystem ? 13 : 14,
                             ),
                           ),
@@ -765,7 +875,13 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
                                 children: [
                                   Icon(Icons.play_circle_outline, size: 18),
                                   SizedBox(width: AppSpacing.xs),
-                                  Text('Play reply', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
+                                  Text(
+                                    'Play reply',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
@@ -791,52 +907,56 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Builder(builder: (context) {
-                                // Status reflects the live voice state (not just
-                                // mute), so it never says "Listening" while the
-                                // assistant is thinking or speaking back.
-                                final primary = Theme.of(context).colorScheme.primary;
-                                IconData icon;
-                                String label;
-                                Color color;
-                                if (_isMicMuted) {
-                                  icon = Icons.mic_off;
-                                  label = 'Microphone muted';
-                                  color = context.nx.danger;
-                                } else {
-                                  switch (_voiceState) {
-                                    case VoiceState.processing:
-                                      icon = Icons.hourglass_top;
-                                      label = 'Thinking…';
-                                      color = primary;
-                                    case VoiceState.speaking:
-                                      icon = Icons.volume_up_rounded;
-                                      label = 'Speaking…';
-                                      color = primary;
-                                    case VoiceState.listening:
-                                      icon = Icons.mic;
-                                      label = 'Listening… speak now';
-                                      color = primary;
-                                    default:
-                                      icon = Icons.mic_none;
-                                      label = 'Connecting…';
-                                      color = context.nx.textMuted;
+                              Builder(
+                                builder: (context) {
+                                  // Status reflects the live voice state (not just
+                                  // mute), so it never says "Listening" while the
+                                  // assistant is thinking or speaking back.
+                                  final primary = Theme.of(
+                                    context,
+                                  ).colorScheme.primary;
+                                  IconData icon;
+                                  String label;
+                                  Color color;
+                                  if (_isMicMuted) {
+                                    icon = Icons.mic_off;
+                                    label = 'Microphone muted';
+                                    color = context.nx.danger;
+                                  } else {
+                                    switch (_voiceState) {
+                                      case VoiceState.processing:
+                                        icon = Icons.hourglass_top;
+                                        label = 'Thinking…';
+                                        color = primary;
+                                      case VoiceState.speaking:
+                                        icon = Icons.volume_up_rounded;
+                                        label = 'Speaking…';
+                                        color = primary;
+                                      case VoiceState.listening:
+                                        icon = Icons.mic;
+                                        label = 'Listening… speak now';
+                                        color = primary;
+                                      default:
+                                        icon = Icons.mic_none;
+                                        label = 'Connecting…';
+                                        color = context.nx.textMuted;
+                                    }
                                   }
-                                }
-                                return Row(
-                                  children: [
-                                    Icon(icon, size: 16, color: color),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      label,
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
+                                  return Row(
+                                    children: [
+                                      Icon(icon, size: 16, color: color),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        label,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                        ),
                                       ),
-                                    ),
-                                  ],
-                                );
-                              }),
+                                    ],
+                                  );
+                                },
+                              ),
                               const SizedBox(height: 2),
                               LiveMicVisualizer(
                                 recorder: _voiceRecorder,
@@ -849,9 +969,7 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
                           ),
                         ),
                         IconButton(
-                          icon: Icon(
-                            _isMicMuted ? Icons.mic_off : Icons.mic,
-                          ),
+                          icon: Icon(_isMicMuted ? Icons.mic_off : Icons.mic),
                           onPressed: _toggleMicMute,
                           tooltip: _isMicMuted
                               ? 'Unmute microphone'
@@ -892,9 +1010,17 @@ class _ProjectCoordinatorChatScreenState extends ConsumerState<ProjectCoordinato
                         const SizedBox(width: AppSpacing.sm),
                         IconButton(
                           icon: _isSending
-                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
                               : const Icon(Icons.send),
-                          onPressed: (ready && !_isSending) ? _sendMessage : null,
+                          onPressed: (ready && !_isSending)
+                              ? _sendMessage
+                              : null,
                         ),
                         IconButton(
                           icon: const Icon(Icons.mic),
@@ -915,8 +1041,14 @@ class _ChatMessage {
   final String text;
   final bool isUser;
   final bool? isSystem;
+
   /// Path to the synthesized reply audio (assistant voice turns only).
   final String? audioPath;
 
-  _ChatMessage({required this.text, required this.isUser, this.isSystem, this.audioPath});
+  _ChatMessage({
+    required this.text,
+    required this.isUser,
+    this.isSystem,
+    this.audioPath,
+  });
 }

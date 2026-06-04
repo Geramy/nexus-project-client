@@ -38,7 +38,13 @@ class ToolSpec {
   final String label;
   final ToolPerm defaultPerm;
   final bool destructive;
-  const ToolSpec(this.name, this.category, this.label, this.defaultPerm, {this.destructive = false});
+  const ToolSpec(
+    this.name,
+    this.category,
+    this.label,
+    this.defaultPerm, {
+    this.destructive = false,
+  });
 }
 
 /// Single source of truth for the coordinator's tools (keep in sync with
@@ -52,12 +58,28 @@ const List<ToolSpec> kCoordinatorToolSpecs = [
   ToolSpec('update_task', 'Tasks', 'Edit task', ToolPerm.grant),
   ToolSpec('update_task_status', 'Tasks', 'Change task status', ToolPerm.grant),
   ToolSpec('set_task_dates', 'Tasks', 'Set task dates', ToolPerm.grant),
-  ToolSpec('set_task_build_config', 'Tasks', 'Configure task build gate', ToolPerm.grant),
+  ToolSpec(
+    'set_task_build_config',
+    'Tasks',
+    'Configure task build gate',
+    ToolPerm.grant,
+  ),
   ToolSpec('link_task_to_plan', 'Tasks', 'Link task to plan', ToolPerm.grant),
-  ToolSpec('delete_task', 'Tasks', 'Delete task', ToolPerm.ask, destructive: true),
+  ToolSpec(
+    'delete_task',
+    'Tasks',
+    'Delete task',
+    ToolPerm.ask,
+    destructive: true,
+  ),
   // Agents
   ToolSpec('list_agents', 'Agents', 'List agents', ToolPerm.grant),
-  ToolSpec('assign_agent_to_task', 'Agents', 'Assign agent to task', ToolPerm.grant),
+  ToolSpec(
+    'assign_agent_to_task',
+    'Agents',
+    'Assign agent to task',
+    ToolPerm.grant,
+  ),
   // Plans
   ToolSpec('list_plans', 'Plans', 'List plans', ToolPerm.grant),
   ToolSpec('view_current_plan', 'Plans', 'View current plan', ToolPerm.grant),
@@ -67,50 +89,195 @@ const List<ToolSpec> kCoordinatorToolSpecs = [
   ToolSpec('update_plan', 'Plans', 'Update open plan', ToolPerm.grant),
   ToolSpec('write_plan', 'Plans', 'Write plan', ToolPerm.grant),
   ToolSpec('rename_plan', 'Plans', 'Rename plan', ToolPerm.grant),
-  ToolSpec('delete_plan', 'Plans', 'Delete plan / folder', ToolPerm.ask, destructive: true),
-  ToolSpec('propose_plan_adjustment', 'Plans', 'Propose plan adjustment', ToolPerm.grant),
-  ToolSpec('sync_plans_to_tasks', 'Plans', 'Sync plans → tasks', ToolPerm.grant),
+  ToolSpec(
+    'delete_plan',
+    'Plans',
+    'Delete plan / folder',
+    ToolPerm.ask,
+    destructive: true,
+  ),
+  ToolSpec(
+    'propose_plan_adjustment',
+    'Plans',
+    'Propose plan adjustment',
+    ToolPerm.grant,
+  ),
+  ToolSpec(
+    'sync_plans_to_tasks',
+    'Plans',
+    'Sync plans → tasks',
+    ToolPerm.grant,
+  ),
   // Files
   ToolSpec('list_files', 'Files', 'List workspace files', ToolPerm.grant),
   ToolSpec('read_file', 'Files', 'Read file', ToolPerm.grant),
-  ToolSpec('write_file', 'Files', 'Create / overwrite file', ToolPerm.ask, destructive: true),
+  ToolSpec(
+    'write_file',
+    'Files',
+    'Create / overwrite file',
+    ToolPerm.ask,
+    destructive: true,
+  ),
   ToolSpec('create_directory', 'Files', 'Create directory', ToolPerm.grant),
-  ToolSpec('move_path', 'Files', 'Move / rename file', ToolPerm.ask, destructive: true),
-  ToolSpec('delete_path', 'Files', 'Delete file / folder', ToolPerm.ask, destructive: true),
-  ToolSpec('delete_file', 'Files', 'Delete file', ToolPerm.ask, destructive: true),
-  ToolSpec('delete_folder', 'Files', 'Delete folder', ToolPerm.ask, destructive: true),
+  ToolSpec(
+    'move_path',
+    'Files',
+    'Move / rename file',
+    ToolPerm.ask,
+    destructive: true,
+  ),
+  ToolSpec(
+    'delete_path',
+    'Files',
+    'Delete file / folder',
+    ToolPerm.ask,
+    destructive: true,
+  ),
+  ToolSpec(
+    'delete_file',
+    'Files',
+    'Delete file',
+    ToolPerm.ask,
+    destructive: true,
+  ),
+  ToolSpec(
+    'delete_folder',
+    'Files',
+    'Delete folder',
+    ToolPerm.ask,
+    destructive: true,
+  ),
   ToolSpec('list_directory', 'Files', 'List directory', ToolPerm.grant),
-  ToolSpec('search_directory', 'Files', 'Search directory contents', ToolPerm.grant),
-  ToolSpec('search_file_content', 'Files', 'Search within a file', ToolPerm.grant),
+  ToolSpec(
+    'search_directory',
+    'Files',
+    'Search directory contents',
+    ToolPerm.grant,
+  ),
+  ToolSpec(
+    'search_file_content',
+    'Files',
+    'Search within a file',
+    ToolPerm.grant,
+  ),
   ToolSpec('read_file_chunk', 'Files', 'Read file line range', ToolPerm.grant),
-  ToolSpec('create_file', 'Files', 'Create new file', ToolPerm.ask, destructive: true),
-  ToolSpec('edit_file', 'Files', 'Edit file (replace text)', ToolPerm.ask, destructive: true),
+  ToolSpec(
+    'create_file',
+    'Files',
+    'Create new file',
+    ToolPerm.ask,
+    destructive: true,
+  ),
+  ToolSpec(
+    'edit_file',
+    'Files',
+    'Edit file (replace text)',
+    ToolPerm.ask,
+    destructive: true,
+  ),
   // Git
   ToolSpec('git_status', 'Git', 'Git status', ToolPerm.grant),
   ToolSpec('git_log', 'Git', 'Git log', ToolPerm.grant),
-  ToolSpec('git_commit', 'Git', 'Commit changes', ToolPerm.ask, destructive: true),
+  ToolSpec(
+    'git_commit',
+    'Git',
+    'Commit changes',
+    ToolPerm.ask,
+    destructive: true,
+  ),
   ToolSpec('git_branches', 'Git', 'List branches', ToolPerm.grant),
   ToolSpec('git_create_branch', 'Git', 'Create branch', ToolPerm.grant),
-  ToolSpec('git_checkout_branch', 'Git', 'Switch branch', ToolPerm.ask, destructive: true),
-  ToolSpec('git_push', 'Git', 'Push to remote', ToolPerm.ask, destructive: true),
-  ToolSpec('git_pull', 'Git', 'Pull from remote', ToolPerm.ask, destructive: true),
+  ToolSpec(
+    'git_checkout_branch',
+    'Git',
+    'Switch branch',
+    ToolPerm.ask,
+    destructive: true,
+  ),
+  ToolSpec(
+    'git_push',
+    'Git',
+    'Push to remote',
+    ToolPerm.ask,
+    destructive: true,
+  ),
+  ToolSpec(
+    'git_pull',
+    'Git',
+    'Pull from remote',
+    ToolPerm.ask,
+    destructive: true,
+  ),
   ToolSpec('git_merge', 'Git', 'Merge branch', ToolPerm.ask, destructive: true),
   // Build / CI
-  ToolSpec('build_docker_image', 'Build', 'Build Docker image', ToolPerm.ask, destructive: true),
-  ToolSpec('run_workflow', 'Build', 'Run CI workflow', ToolPerm.ask, destructive: true),
-  ToolSpec('scaffold_ci_workflow', 'Build', 'Scaffold default CI workflow', ToolPerm.grant),
+  ToolSpec(
+    'build_docker_image',
+    'Build',
+    'Build Docker image',
+    ToolPerm.ask,
+    destructive: true,
+  ),
+  ToolSpec(
+    'run_workflow',
+    'Build',
+    'Run CI workflow',
+    ToolPerm.ask,
+    destructive: true,
+  ),
+  ToolSpec(
+    'scaffold_ci_workflow',
+    'Build',
+    'Scaffold default CI workflow',
+    ToolPerm.grant,
+  ),
   ToolSpec('list_ci_runs', 'Build', 'List build / CI runs', ToolPerm.grant),
   ToolSpec('get_ci_run', 'Build', 'Read build / CI run', ToolPerm.grant),
   // Orchestration (spawn → submit → verify → review loop). Names mirror the
   // consts in agent_role_policy.dart (kept as literals to avoid an import cycle).
-  ToolSpec('submit_for_completion', 'Orchestration', 'Submit task for completion', ToolPerm.grant),
-  ToolSpec('run_verification', 'Orchestration', 'Run task verification', ToolPerm.grant),
-  ToolSpec('submit_verdict', 'Orchestration', 'Emit pass/fail verdict', ToolPerm.grant),
-  ToolSpec('review_submission', 'Orchestration', 'Review a submission', ToolPerm.grant),
-  ToolSpec('approve_task', 'Orchestration', 'Approve & integrate task', ToolPerm.ask, destructive: true),
-  ToolSpec('reject_task', 'Orchestration', 'Send task back to board', ToolPerm.grant),
+  ToolSpec(
+    'submit_for_completion',
+    'Orchestration',
+    'Submit task for completion',
+    ToolPerm.grant,
+  ),
+  ToolSpec(
+    'run_verification',
+    'Orchestration',
+    'Run task verification',
+    ToolPerm.grant,
+  ),
+  ToolSpec(
+    'submit_verdict',
+    'Orchestration',
+    'Emit pass/fail verdict',
+    ToolPerm.grant,
+  ),
+  ToolSpec(
+    'review_submission',
+    'Orchestration',
+    'Review a submission',
+    ToolPerm.grant,
+  ),
+  ToolSpec(
+    'approve_task',
+    'Orchestration',
+    'Approve & integrate task',
+    ToolPerm.ask,
+    destructive: true,
+  ),
+  ToolSpec(
+    'reject_task',
+    'Orchestration',
+    'Send task back to board',
+    ToolPerm.grant,
+  ),
   // Other
-  ToolSpec('generate_diagram', 'Other', 'Generate diagram (image)', ToolPerm.grant),
+  ToolSpec(
+    'generate_diagram',
+    'Other',
+    'Generate diagram (image)',
+    ToolPerm.grant,
+  ),
 ];
 
 ToolSpec? toolSpecFor(String name) {
@@ -161,7 +328,10 @@ class AgentToolPermissions {
 
   /// Merge these tool permissions into an existing configJson, preserving other
   /// keys. Returns the new JSON string.
-  static String writeIntoConfigJson(String? configJson, Map<String, ToolPerm> perms) {
+  static String writeIntoConfigJson(
+    String? configJson,
+    Map<String, ToolPerm> perms,
+  ) {
     Map<String, dynamic> cfg = {};
     if (configJson != null && configJson.trim().isNotEmpty) {
       try {
@@ -169,7 +339,9 @@ class AgentToolPermissions {
         if (parsed is Map) cfg = Map<String, dynamic>.from(parsed);
       } catch (_) {}
     }
-    cfg['toolPermissions'] = {for (final e in perms.entries) e.key: toolPermToString(e.value)};
+    cfg['toolPermissions'] = {
+      for (final e in perms.entries) e.key: toolPermToString(e.value),
+    };
     return jsonEncode(cfg);
   }
 }

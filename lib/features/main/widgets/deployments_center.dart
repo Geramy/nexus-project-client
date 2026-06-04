@@ -6,7 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nexus_projects_client/core/providers/app_shell_provider.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
-import 'package:nexus_projects_client/features/builds/ci_run_tree.dart' show StatusChip;
+import 'package:nexus_projects_client/features/builds/ci_run_tree.dart'
+    show StatusChip;
 
 /// Deployments center: a client-scoped, live feed of deployments and preview
 /// environments with status, target environment and timing.
@@ -16,7 +17,9 @@ class DeploymentsCenter extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currentClientId = ref.watch(currentClientIdProvider);
-    final deploysAsync = ref.watch(deploymentsForClientProvider(currentClientId));
+    final deploysAsync = ref.watch(
+      deploymentsForClientProvider(currentClientId),
+    );
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -31,9 +34,16 @@ class DeploymentsCenter extends ConsumerWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.rocket_launch, size: 48, color: Colors.grey.shade400),
+                        Icon(
+                          Icons.rocket_launch,
+                          size: 48,
+                          color: Colors.grey.shade400,
+                        ),
                         const SizedBox(height: 12),
-                        Text('No deployments yet.', style: TextStyle(color: Colors.grey.shade600)),
+                        Text(
+                          'No deployments yet.',
+                          style: TextStyle(color: Colors.grey.shade600),
+                        ),
                       ],
                     ),
                   );
@@ -44,16 +54,25 @@ class DeploymentsCenter extends ConsumerWidget {
                     final d = deploys[i];
                     final parts = <String>[
                       d.environment,
-                      if (d.triggeredBy != null && d.triggeredBy!.isNotEmpty) 'by ${d.triggeredBy}',
+                      if (d.triggeredBy != null && d.triggeredBy!.isNotEmpty)
+                        'by ${d.triggeredBy}',
                       _relativeTime(d.createdAt),
                     ];
                     return Card(
                       margin: const EdgeInsets.only(bottom: 8),
                       child: ListTile(
                         leading: const Icon(Icons.rocket_launch_outlined),
-                        title: Text(d.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                        subtitle: Text(parts.join(' • '),
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                        title: Text(
+                          d.name,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text(
+                          parts.join(' • '),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
                         trailing: StatusChip(status: d.status),
                       ),
                     );

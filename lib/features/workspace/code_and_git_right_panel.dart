@@ -19,7 +19,8 @@ class CodeAndGitRightPanel extends StatefulWidget {
   State<CodeAndGitRightPanel> createState() => _CodeAndGitRightPanelState();
 }
 
-class _CodeAndGitRightPanelState extends State<CodeAndGitRightPanel> with SingleTickerProviderStateMixin {
+class _CodeAndGitRightPanelState extends State<CodeAndGitRightPanel>
+    with SingleTickerProviderStateMixin {
   late final TabController _tab = TabController(length: 3, vsync: this);
 
   @override
@@ -34,11 +35,26 @@ class _CodeAndGitRightPanelState extends State<CodeAndGitRightPanel> with Single
       children: [
         TabBar(
           controller: _tab,
-          labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          labelStyle: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
           tabs: const [
-            Tab(icon: Icon(Icons.description_outlined, size: 16), height: 40, text: 'Editor'),
-            Tab(icon: Icon(Icons.source_outlined, size: 16), height: 40, text: 'Source Control'),
-            Tab(icon: Icon(Icons.history, size: 16), height: 40, text: 'History'),
+            Tab(
+              icon: Icon(Icons.description_outlined, size: 16),
+              height: 40,
+              text: 'Editor',
+            ),
+            Tab(
+              icon: Icon(Icons.source_outlined, size: 16),
+              height: 40,
+              text: 'Source Control',
+            ),
+            Tab(
+              icon: Icon(Icons.history, size: 16),
+              height: 40,
+              text: 'History',
+            ),
           ],
         ),
         const Divider(height: 1),

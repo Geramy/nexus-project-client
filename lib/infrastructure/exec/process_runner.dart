@@ -21,7 +21,11 @@ class ProcResult {
   final int exitCode;
   final bool timedOut;
   final bool cancelled;
-  const ProcResult({required this.exitCode, this.timedOut = false, this.cancelled = false});
+  const ProcResult({
+    required this.exitCode,
+    this.timedOut = false,
+    this.cancelled = false,
+  });
 
   bool get ok => exitCode == 0 && !timedOut && !cancelled;
 }
@@ -120,7 +124,11 @@ class ProcessRunner {
     timer?.cancel();
     await cancelSub?.cancel();
 
-    return ProcResult(exitCode: exitCode, timedOut: timedOut, cancelled: cancelled);
+    return ProcResult(
+      exitCode: exitCode,
+      timedOut: timedOut,
+      cancelled: cancelled,
+    );
   }
 
   /// Run a process to completion and capture all stdout (trimmed). Convenience

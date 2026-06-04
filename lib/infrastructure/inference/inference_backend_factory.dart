@@ -18,7 +18,10 @@ import '../lemonade/lemonade_backend.dart' show LemonadeBackend;
 /// [agentName] is forwarded as the `X-Nexus-Agent` header so the Router can
 /// attribute per-agent cost; pass it when the call is made on behalf of a
 /// specific agent persona.
-InferenceBackend backendForServer(ui_model.InferenceServer server, {String? agentName}) {
+InferenceBackend backendForServer(
+  ui_model.InferenceServer server, {
+  String? agentName,
+}) {
   final type = server.providerType.toLowerCase();
 
   switch (type) {

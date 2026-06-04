@@ -17,9 +17,10 @@ import 'docker_models.dart';
 /// Override with any `http://host:port` if the daemon is exposed over TCP.
 /// Editable from the Docker view; persistence can be layered on later.
 final dockerEndpointProvider = StateProvider<String>(
-    (ref) => Platform.isWindows
-        ? 'npipe:////./pipe/docker_engine'
-        : 'unix:///var/run/docker.sock');
+  (ref) => Platform.isWindows
+      ? 'npipe:////./pipe/docker_engine'
+      : 'unix:///var/run/docker.sock',
+);
 
 /// The shared [DockerEngineClient], rebuilt whenever the endpoint changes.
 final dockerEngineClientProvider = Provider<DockerEngineClient>((ref) {
@@ -35,10 +36,13 @@ final dockerVersionProvider = FutureProvider.autoDispose<DockerVersion>((ref) {
   return ref.watch(dockerEngineClientProvider).version();
 });
 
-final dockerImagesProvider = FutureProvider.autoDispose<List<DockerImage>>((ref) {
+final dockerImagesProvider = FutureProvider.autoDispose<List<DockerImage>>((
+  ref,
+) {
   return ref.watch(dockerEngineClientProvider).listImages();
 });
 
-final dockerContainersProvider = FutureProvider.autoDispose<List<DockerContainer>>((ref) {
-  return ref.watch(dockerEngineClientProvider).listContainers(all: true);
-});
+final dockerContainersProvider =
+    FutureProvider.autoDispose<List<DockerContainer>>((ref) {
+      return ref.watch(dockerEngineClientProvider).listContainers(all: true);
+    });

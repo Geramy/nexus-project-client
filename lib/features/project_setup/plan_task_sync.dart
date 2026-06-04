@@ -33,8 +33,7 @@ class PlanTaskSync {
   final int? chatSessionPk;
 
   static final RegExp _marker = RegExp(r'<!--\s*task:(\d+)\s*-->');
-  static final RegExp _uncheckedItem =
-      RegExp(r'^(\s*)-\s+\[ \]\s+(.+?)\s*$');
+  static final RegExp _uncheckedItem = RegExp(r'^(\s*)-\s+\[ \]\s+(.+?)\s*$');
 
   /// Returns a human-readable summary of what was created.
   Future<PlanSyncResult> sync() async {
@@ -172,11 +171,12 @@ class PlanSyncResult {
           ? 'No plan items found to turn into tasks yet.'
           : 'All $skipped plan item(s) already have tasks — nothing new to create.';
     }
-    final base = 'Created $created task(s) across $plansTouched plan(s)'
+    final base =
+        'Created $created task(s) across $plansTouched plan(s)'
         '${skipped > 0 ? ' ($skipped already had tasks)' : ''}.';
     return noAgent
         ? '$base No agent persona exists yet, so they are unassigned — '
-            'create a worker agent in the Agents hub.'
+              'create a worker agent in the Agents hub.'
         : base;
   }
 }

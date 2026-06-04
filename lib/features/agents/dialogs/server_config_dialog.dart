@@ -4,14 +4,16 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:nexus_projects_client/infrastructure/models/ui/inference_server.dart' as ui_model;
+import 'package:nexus_projects_client/infrastructure/models/ui/inference_server.dart'
+    as ui_model;
 
 // Server management (EndpointsTab / AI Providers page) now uses the rich ported
 // LemonadeApiClient + ModelsEndpoint for model refresh / probing.
 // The old InferenceClient has been fully removed from server management surfaces.
 import 'package:nexus_projects_client/infrastructure/lemonade/api/lemonade_client.dart';
 import 'package:nexus_projects_client/infrastructure/lemonade/models/server_config.dart';
-import 'package:nexus_projects_client/infrastructure/lemonade/api/types/model_info.dart' as lemonade_model;
+import 'package:nexus_projects_client/infrastructure/lemonade/api/types/model_info.dart'
+    as lemonade_model;
 
 /// Server configuration dialog (model selection, refresh, limits).
 /// Extracted from the monolithic center_agents_view during organization refactor.
@@ -69,7 +71,9 @@ class _ServerConfigDialogState extends ConsumerState<ServerConfigDialog> {
 
       // Exact match to lemonade_mobile auth + normalization:
       final rawKey = currentApiKey;
-      final effectiveKey = rawKey.trim().isNotEmpty ? rawKey.trim() : 'lemonade';
+      final effectiveKey = rawKey.trim().isNotEmpty
+          ? rawKey.trim()
+          : 'lemonade';
 
       // Use a temporary server object just for the client (with live values)
       final serverForClient = _server.copyWith(
@@ -91,7 +95,9 @@ class _ServerConfigDialogState extends ConsumerState<ServerConfigDialog> {
 
       // Probe capabilities (lightweight equivalent of old probeServerCapabilities).
       // Detects /models support + Lemonade-specific fields (downloaded/labels/recipe/components).
-      Map<String, dynamic> caps = Map<String, dynamic>.from(_server.capabilities);
+      Map<String, dynamic> caps = Map<String, dynamic>.from(
+        _server.capabilities,
+      );
       if (caps['models'] != true) {
         try {
           final probeList = await apiClient.models.all();
@@ -121,7 +127,8 @@ class _ServerConfigDialogState extends ConsumerState<ServerConfigDialog> {
 
       // Only force the default "lemonade" into the field if it is still completely empty
       // at the end of the probe. If the user has started typing anything, leave their input alone.
-      if (currentApiKey.trim().isEmpty && _apiKeyController.text.trim().isEmpty) {
+      if (currentApiKey.trim().isEmpty &&
+          _apiKeyController.text.trim().isEmpty) {
         _apiKeyController.text = effectiveKey;
       }
 
@@ -134,21 +141,27 @@ class _ServerConfigDialogState extends ConsumerState<ServerConfigDialog> {
           // Persist the discovered API capabilities on the server record
           capabilities: caps,
           // Auto-select a sensible default if none chosen yet
-          selectedModel: _server.selectedModel ?? (modelIds.isNotEmpty ? modelIds.first : null),
+          selectedModel:
+              _server.selectedModel ??
+              (modelIds.isNotEmpty ? modelIds.first : null),
         );
         if (!silent) _error = null;
       });
 
       if (!silent) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Loaded ${modelIds.length} models from server')),
+          SnackBar(
+            content: Text('Loaded ${modelIds.length} models from server'),
+          ),
         );
       }
     } catch (e) {
       String errorMsg = e.toString();
       // Make connection errors much friendlier for the user
-      if (errorMsg.contains('Connection failed') || errorMsg.contains('SocketException')) {
-        errorMsg = 'Could not connect to the server. Check the Base URL and make sure the inference server is running.';
+      if (errorMsg.contains('Connection failed') ||
+          errorMsg.contains('SocketException')) {
+        errorMsg =
+            'Could not connect to the server. Check the Base URL and make sure the inference server is running.';
       }
       setState(() {
         if (!silent) _error = errorMsg;
@@ -180,127 +193,150 @@ class _ServerConfigDialogState extends ConsumerState<ServerConfigDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-            // Connection Section
-            _SectionHeader(title: 'Connection'),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TextFormField(
-                      controller: _baseUrlController,
-                      decoration: const InputDecoration(
-                        labelText: 'Base URL',
-                        border: OutlineInputBorder(),
-                        isDense: true,
+              // Connection Section
+              _SectionHeader(title: 'Connection'),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextFormField(
+                        controller: _baseUrlController,
+                        decoration: const InputDecoration(
+                          labelText: 'Base URL',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 13,
+                        ),
+                        // No onChanged/setState here — the controller is the source of truth.
+                        // We read .text directly when we need the value (Refresh or Save).
+                        // This prevents a full dialog rebuild on every keystroke, which was
+                        // making the fields feel unresponsive or hard to edit.
                       ),
-                      style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-                      // No onChanged/setState here — the controller is the source of truth.
-                      // We read .text directly when we need the value (Refresh or Save).
-                      // This prevents a full dialog rebuild on every keystroke, which was
-                      // making the fields feel unresponsive or hard to edit.
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _apiKeyController,
-                      decoration: const InputDecoration(
-                        labelText: 'API Key (optional for local servers)',
-                        border: OutlineInputBorder(),
-                        isDense: true,
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _apiKeyController,
+                        decoration: const InputDecoration(
+                          labelText: 'API Key (optional for local servers)',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        obscureText: true,
+                        style: const TextStyle(fontSize: 13),
+                        // Same as above — read from controller on demand.
                       ),
-                      obscureText: true,
-                      style: const TextStyle(fontSize: 13),
-                      // Same as above — read from controller on demand.
-                    ),
-                    const SizedBox(height: 8),
-                    Text('Provider: ${_server.providerType}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                  ],
+                      const SizedBox(height: 8),
+                      Text(
+                        'Provider: ${_server.providerType}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
 
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
 
-            // Model Selection Section
-            _SectionHeader(
-              title: 'Model Selection',
-              trailing: TextButton.icon(
-                onPressed: _isLoadingModels ? null : _refreshModels,
-                icon: _isLoadingModels
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.refresh, size: 18),
-                label: const Text('Refresh'),
+              // Model Selection Section
+              _SectionHeader(
+                title: 'Model Selection',
+                trailing: TextButton.icon(
+                  onPressed: _isLoadingModels ? null : _refreshModels,
+                  icon: _isLoadingModels
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh, size: 18),
+                  label: const Text('Refresh'),
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
+              const SizedBox(height: 8),
 
-            if (_server.availableModels.isEmpty && _server.selectedModel == null)
-              const Text(
-                'No models loaded yet. Click "Refresh" to fetch available models from the server.',
-                style: TextStyle(color: Colors.grey),
-              )
-            else
-              Builder(builder: (_) {
-                // Dedupe models and make sure the selected one is always a
-                // valid option, otherwise DropdownButton asserts (zero or 2+
-                // items matching the value).
-                final models = <String>{
-                  ..._server.availableModels,
-                  if (_server.selectedModel != null) _server.selectedModel!,
-                }.toList();
-                final value = models.contains(_server.selectedModel) ? _server.selectedModel : null;
-                return DropdownButtonFormField<String>(
-                  value: value,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'Active Model',
-                  ),
-                  items: models
-                      .map((m) => DropdownMenuItem(value: m, child: Text(m)))
-                      .toList(),
-                  onChanged: (newModel) {
-                    if (newModel != null) {
-                      setState(() {
-                        _server = _server.copyWith(selectedModel: newModel);
-                      });
-                    }
+              if (_server.availableModels.isEmpty &&
+                  _server.selectedModel == null)
+                const Text(
+                  'No models loaded yet. Click "Refresh" to fetch available models from the server.',
+                  style: TextStyle(color: Colors.grey),
+                )
+              else
+                Builder(
+                  builder: (_) {
+                    // Dedupe models and make sure the selected one is always a
+                    // valid option, otherwise DropdownButton asserts (zero or 2+
+                    // items matching the value).
+                    final models = <String>{
+                      ..._server.availableModels,
+                      if (_server.selectedModel != null) _server.selectedModel!,
+                    }.toList();
+                    final value = models.contains(_server.selectedModel)
+                        ? _server.selectedModel
+                        : null;
+                    return DropdownButtonFormField<String>(
+                      value: value,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        labelText: 'Active Model',
+                      ),
+                      items: models
+                          .map(
+                            (m) => DropdownMenuItem(value: m, child: Text(m)),
+                          )
+                          .toList(),
+                      onChanged: (newModel) {
+                        if (newModel != null) {
+                          setState(() {
+                            _server = _server.copyWith(selectedModel: newModel);
+                          });
+                        }
+                      },
+                    );
                   },
-                );
-              }),
-
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(_error!, style: const TextStyle(color: Colors.red)),
-            ],
-
-            const SizedBox(height: 20),
-
-            // Limits Section
-            _SectionHeader(title: 'Resource Limits'),
-            Row(
-              children: [
-                Expanded(
-                  child: _LimitCard(
-                    label: 'Max Concurrency',
-                    value: _server.maxConcurrency.toString(),
-                  ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _LimitCard(
-                    label: 'Max Agents',
-                    value: _server.maxAgents.toString(),
-                  ),
-                ),
+
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(_error!, style: const TextStyle(color: Colors.red)),
               ],
-            ),
-          ],
-        ), // end Column
-      ), // end SingleChildScrollView
-    ), // end SizedBox
+
+              const SizedBox(height: 20),
+
+              // Limits Section
+              _SectionHeader(title: 'Resource Limits'),
+              Row(
+                children: [
+                  Expanded(
+                    child: _LimitCard(
+                      label: 'Max Concurrency',
+                      value: _server.maxConcurrency.toString(),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _LimitCard(
+                      label: 'Max Agents',
+                      value: _server.maxAgents.toString(),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ), // end Column
+        ), // end SingleChildScrollView
+      ), // end SizedBox
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
         FilledButton(
           onPressed: () {
             // Read the final live values from the controllers (the true source for
@@ -357,9 +393,15 @@ class _LimitCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
         child: Column(
           children: [
-            Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
             const SizedBox(height: 4),
-            Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            Text(
+              value,
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            ),
           ],
         ),
       ),

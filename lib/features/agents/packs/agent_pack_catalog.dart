@@ -56,9 +56,12 @@ final AgentPack projectCoordinationPack = AgentPack(
       'A general-purpose planning team for any project — plan, delegate, verify.',
   icon: Icons.hub_outlined,
   fullyWired: true,
-  agents: const [AgentRole.projectManager, AgentRole.coordinator, AgentRole.sdeGeneralist, AgentRole.verificationAgent]
-      .map(PackAgent.fromRole)
-      .toList(growable: false),
+  agents: const [
+    AgentRole.projectManager,
+    AgentRole.coordinator,
+    AgentRole.sdeGeneralist,
+    AgentRole.verificationAgent,
+  ].map(PackAgent.fromRole).toList(growable: false),
 );
 
 /// Every pack we ship, in display order.
@@ -72,8 +75,10 @@ final List<AgentPack> kAgentPacks = [
 const String kDefaultAgentPackKey = 'application-development';
 
 /// Look up a pack by key, falling back to the default pack for unknown keys.
-AgentPack agentPackByKey(String key) =>
-    kAgentPacks.firstWhere((p) => p.key == key, orElse: () => applicationDevelopmentPack);
+AgentPack agentPackByKey(String key) => kAgentPacks.firstWhere(
+  (p) => p.key == key,
+  orElse: () => applicationDevelopmentPack,
+);
 
 /// The de-duplicated union of agents across the given pack keys. Agents are
 /// keyed by [PackAgent.title], so selecting overlapping packs (e.g. both ship a

@@ -3,11 +3,11 @@
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
 /// Centralized cache for AI provider servers + their live model lists.
-/// 
+///
 /// Fetches models from each configured server's API and caches the results
 /// so every consumer (persona editor, admin console, agents hub) shares
 /// the same data without redundant network calls.
-/// 
+///
 /// Invalidate [aiServersCacheProvider] to force a full refresh.
 
 import 'package:flutter/foundation.dart';
@@ -37,10 +37,12 @@ class ServerModelsEntry {
   });
 
   /// Omni / collection models from this server.
-  List<ApiModelInfo> get omniModels => models.where((m) => m.isCollection).toList();
+  List<ApiModelInfo> get omniModels =>
+      models.where((m) => m.isCollection).toList();
 
   /// Non-collection individual models.
-  List<ApiModelInfo> get individualModels => models.where((m) => !m.isCollection).toList();
+  List<ApiModelInfo> get individualModels =>
+      models.where((m) => !m.isCollection).toList();
 }
 
 /// Cache state: map of server pk -> cached entry.
@@ -78,7 +80,8 @@ class AiServersCacheNotifier extends StateNotifier<AiServersCache> {
     for (final server in servers) {
       // Skip if we have a fresh cache entry
       final existing = updated[server.server_pk];
-      if (existing != null && DateTime.now().difference(existing.fetchedAt) < _cacheTtl) {
+      if (existing != null &&
+          DateTime.now().difference(existing.fetchedAt) < _cacheTtl) {
         continue;
       }
 
@@ -93,7 +96,9 @@ class AiServersCacheNotifier extends StateNotifier<AiServersCache> {
         );
         client.close();
       } catch (e) {
-        debugPrint('AiServersCache: failed to fetch models for ${server.name}: $e');
+        debugPrint(
+          'AiServersCache: failed to fetch models for ${server.name}: $e',
+        );
         // Keep existing cache if available, otherwise store error
         if (existing == null) {
           updated[server.server_pk] = ServerModelsEntry(
@@ -114,7 +119,10 @@ class AiServersCacheNotifier extends StateNotifier<AiServersCache> {
     final currentClientId = ref.read(currentClientIdProvider);
     final db = ref.read(nexusDatabaseProvider);
     final servers = await db.getInferenceServersForClient(currentClientId);
-    final server = servers.firstWhere((s) => s.server_pk == serverId, orElse: () => throw StateError('Server $serverId not found'));
+    final server = servers.firstWhere(
+      (s) => s.server_pk == serverId,
+      orElse: () => throw StateError('Server $serverId not found'),
+    );
 
     try {
       final config = await _toServerConfig(server);
@@ -130,7 +138,9 @@ class AiServersCacheNotifier extends StateNotifier<AiServersCache> {
       };
       client.close();
     } catch (e) {
-      debugPrint('AiServersCache: failed to fetch models for ${server.name}: $e');
+      debugPrint(
+        'AiServersCache: failed to fetch models for ${server.name}: $e',
+      );
       if (state[serverId] == null) {
         state = {
           ...state,
@@ -168,21 +178,21 @@ class AiServersCacheNotifier extends StateNotifier<AiServersCache> {
 /// Main cached provider — consumers should watch this for the full cache.
 final aiServersCacheProvider =
     StateNotifierProvider<AiServersCacheNotifier, AiServersCache>((ref) {
-  final notifier = AiServersCacheNotifier(ref);
-  // Refresh whenever the configured server list changes for the current client.
-  // This is what fetches models for a server added *after* startup — most
-  // importantly the built-in Nexus Router (subscription) server, which is
-  // materialized only once the account signs in. Without this, a freshly-added
-  // server would have no cache entry until the 5-min TTL and would appear to
-  // have no models. `refresh()` is per-server TTL-guarded, so this is cheap.
-  final clientId = ref.watch(currentClientIdProvider);
-  ref.listen<AsyncValue<List<InferenceServer>>>(
-    inferenceServersForClientProvider(clientId),
-    (_, next) => next.whenData((_) => notifier.refresh()),
-    fireImmediately: true,
-  );
-  return notifier;
-});
+      final notifier = AiServersCacheNotifier(ref);
+      // Refresh whenever the configured server list changes for the current client.
+      // This is what fetches models for a server added *after* startup — most
+      // importantly the built-in Nexus Router (subscription) server, which is
+      // materialized only once the account signs in. Without this, a freshly-added
+      // server would have no cache entry until the 5-min TTL and would appear to
+      // have no models. `refresh()` is per-server TTL-guarded, so this is cheap.
+      final clientId = ref.watch(currentClientIdProvider);
+      ref.listen<AsyncValue<List<InferenceServer>>>(
+        inferenceServersForClientProvider(clientId),
+        (_, next) => next.whenData((_) => notifier.refresh()),
+        fireImmediately: true,
+      );
+      return notifier;
+    });
 
 /// Convenience: all models across every configured server (deduplicated).
 final allAiModelsProvider = Provider<List<ApiModelInfo>>((ref) {

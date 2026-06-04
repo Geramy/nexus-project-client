@@ -46,15 +46,18 @@ class ResolvedInference {
 /// client's first server), plus the best chat model. Yields null when no
 /// inference servers are configured for the client. Exposed as a provider so
 /// both [WidgetRef] (Setup tab) and [Ref] (SummaryService) can read it.
-final projectInferenceProvider = FutureProvider.family<ResolvedInference?,
-    ({int projectId, int clientId})>((ref, args) async {
+final projectInferenceProvider = FutureProvider.family<ResolvedInference?, ({int projectId, int clientId})>((
+  ref,
+  args,
+) async {
   // WATCH (not read) the server stream so this re-resolves whenever the configs
   // change — critically when router_server_sync rewrites the routed server's
   // apiKey after a re-login. Reading once cached a backend with a baked,
   // never-refreshed token, which is why the Setup interview kept 401-ing on STT
   // while the Coordinator (which rebuilds its client on every open) worked.
-  final servers = await ref
-      .watch(inferenceServersForClientProvider(args.clientId).future);
+  final servers = await ref.watch(
+    inferenceServersForClientProvider(args.clientId).future,
+  );
   if (servers.isEmpty) return null;
 
   final db = ref.read(nexusDatabaseProvider);
@@ -128,7 +131,8 @@ final projectInferenceProvider = FutureProvider.family<ResolvedInference?,
   ttsModel ??= firstTtsModelId(serverModels);
 
   final selected = chosen.selectedModel;
-  final candidate = resolvedChatModel ??
+  final candidate =
+      resolvedChatModel ??
       ((selected != null && selected.trim().isNotEmpty)
           ? selected.trim()
           : (liveTextModel ?? (models.isNotEmpty ? models.first : '')));

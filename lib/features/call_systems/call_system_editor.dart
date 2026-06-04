@@ -13,15 +13,18 @@ import 'model/call_node.dart';
 import 'model/call_system_project.dart';
 
 /// Id of the node selected on the canvas (drives the inspector). Per project.
-final selectedCallNodeProvider =
-    StateProvider.family<String?, int>((ref, projectId) => null);
+final selectedCallNodeProvider = StateProvider.family<String?, int>(
+  (ref, projectId) => null,
+);
 
 /// Read-modify-write editor for a project's [CallSystemProject]. The DB is the
 /// single source of truth: every mutation reads the current decoded document,
 /// transforms it, and upserts the JSON — the reactive [callSystemProjectProvider]
 /// then rebuilds the canvas. Operates on the first ("Main") flow for now.
-final callSystemEditorProvider =
-    Provider.family<CallSystemEditor, int>((ref, projectId) {
+final callSystemEditorProvider = Provider.family<CallSystemEditor, int>((
+  ref,
+  projectId,
+) {
   return CallSystemEditor(ref, projectId);
 });
 
@@ -89,7 +92,8 @@ class CallSystemEditor {
   Future<String> addNode(CallNodeType type, double x, double y) async {
     final flow = _flow;
     if (flow == null) return '';
-    final id = 'node_${type.key}_${flow.nodes.length + 1}_${x.toInt()}${y.toInt()}';
+    final id =
+        'node_${type.key}_${flow.nodes.length + 1}_${x.toInt()}${y.toInt()}';
     final node = CallNode(
       id: id,
       type: type,
@@ -121,7 +125,8 @@ class CallSystemEditor {
     final node = flow?.nodeById(nodeId);
     if (flow == null || node == null || !node.isProposed) return;
     await _replaceFlow(
-        flow.upsertNode(node.copyWith(status: NodeStatus.approved)));
+      flow.upsertNode(node.copyWith(status: NodeStatus.approved)),
+    );
   }
 
   /// Approve every proposed node in the active flow.
@@ -138,16 +143,18 @@ class CallSystemEditor {
   /// Reject (delete) a proposed node.
   Future<void> rejectNode(String nodeId) => removeNode(nodeId);
 
-  int get pendingCount =>
-      _flow?.nodes.where((n) => n.isProposed).length ?? 0;
+  int get pendingCount => _flow?.nodes.where((n) => n.isProposed).length ?? 0;
 
   /// Wire [fromNodeId]'s [port] to [targetId] (null disconnects).
   Future<void> connect(String fromNodeId, String port, String? targetId) async {
     final flow = _flow;
     final node = flow?.nodeById(fromNodeId);
     if (flow == null || node == null) return;
-    await _replaceFlow(flow.upsertNode(
-        node.copyWith(outputs: {...node.outputs, port: targetId})));
+    await _replaceFlow(
+      flow.upsertNode(
+        node.copyWith(outputs: {...node.outputs, port: targetId}),
+      ),
+    );
   }
 
   // ── Prompt ops ──────────────────────────────────────────────────────
@@ -164,46 +171,48 @@ class CallSystemEditor {
     await _commit(_copyWithPrompts(p, prompts));
   }
 
-  CallSystemProject _copyWithPrompts(CallSystemProject p, List<Prompt> prompts) =>
-      CallSystemProject(
-        name: p.name,
-        subCategory: p.subCategory,
-        experienceMode: p.experienceMode,
-        dids: p.dids,
-        extensions: p.extensions,
-        ringGroups: p.ringGroups,
-        pickupGroups: p.pickupGroups,
-        parkGroups: p.parkGroups,
-        queues: p.queues,
-        voicemailBoxes: p.voicemailBoxes,
-        timeConditions: p.timeConditions,
-        flows: p.flows,
-        prompts: prompts,
-        variables: p.variables,
-      );
+  CallSystemProject _copyWithPrompts(
+    CallSystemProject p,
+    List<Prompt> prompts,
+  ) => CallSystemProject(
+    name: p.name,
+    subCategory: p.subCategory,
+    experienceMode: p.experienceMode,
+    dids: p.dids,
+    extensions: p.extensions,
+    ringGroups: p.ringGroups,
+    pickupGroups: p.pickupGroups,
+    parkGroups: p.parkGroups,
+    queues: p.queues,
+    voicemailBoxes: p.voicemailBoxes,
+    timeConditions: p.timeConditions,
+    flows: p.flows,
+    prompts: prompts,
+    variables: p.variables,
+  );
 
   /// Replace the whole document (used by AI-assist / import).
   Future<void> replaceProject(CallSystemProject project) => _commit(project);
 
   static String _defaultLabel(CallNodeType type) => switch (type) {
-        CallNodeType.entry => 'Call starts',
-        CallNodeType.playPrompt => 'Play message',
-        CallNodeType.menu => 'Menu',
-        CallNodeType.gatherDigits => 'Get digits',
-        CallNodeType.gatherSpeech => 'Get speech',
-        CallNodeType.aiVoicebot => 'AI voicebot',
-        CallNodeType.dial => 'Dial number',
-        CallNodeType.transferToExtension => 'Transfer',
-        CallNodeType.ringGroup => 'Ring group',
-        CallNodeType.queue => 'Queue',
-        CallNodeType.voicemail => 'Voicemail',
-        CallNodeType.schedule => 'Business hours',
-        CallNodeType.condition => 'Condition',
-        CallNodeType.setVariable => 'Set variable',
-        CallNodeType.httpRequest => 'API request',
-        CallNodeType.record => 'Record',
-        CallNodeType.playDirectory => 'Dial by name',
-        CallNodeType.hangup => 'End call',
-        CallNodeType.subFlow => 'Sub-flow',
-      };
+    CallNodeType.entry => 'Call starts',
+    CallNodeType.playPrompt => 'Play message',
+    CallNodeType.menu => 'Menu',
+    CallNodeType.gatherDigits => 'Get digits',
+    CallNodeType.gatherSpeech => 'Get speech',
+    CallNodeType.aiVoicebot => 'AI voicebot',
+    CallNodeType.dial => 'Dial number',
+    CallNodeType.transferToExtension => 'Transfer',
+    CallNodeType.ringGroup => 'Ring group',
+    CallNodeType.queue => 'Queue',
+    CallNodeType.voicemail => 'Voicemail',
+    CallNodeType.schedule => 'Business hours',
+    CallNodeType.condition => 'Condition',
+    CallNodeType.setVariable => 'Set variable',
+    CallNodeType.httpRequest => 'API request',
+    CallNodeType.record => 'Record',
+    CallNodeType.playDirectory => 'Dial by name',
+    CallNodeType.hangup => 'End call',
+    CallNodeType.subFlow => 'Sub-flow',
+  };
 }

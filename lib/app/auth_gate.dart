@@ -60,17 +60,15 @@ class _LoginScreen extends ConsumerWidget {
                 const SizedBox(height: AppSpacing.md),
                 Text(
                   'Nexus Projects',
-                  style: Theme.of(context)
-                      .textTheme
-                      .headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.bold),
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 Text(
                   'Sign in to your workspace',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyMedium
-                      ?.copyWith(color: context.nx.textMuted),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: context.nx.textMuted),
                 ),
                 AccountAuthForms(
                   onSkip: () =>

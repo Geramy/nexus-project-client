@@ -16,8 +16,10 @@ import 'package:nexus_projects_client/infrastructure/lemonade/services/tts_voice
 // TODO(migrate): InferenceClient? → InferenceBackend
 class TtsService {
   final InferenceClient? inferenceClient;
+
   /// Optional TTS model id. When null the server/default is used.
   final String? ttsModel;
+
   /// Configured default voice (Kokoro id, e.g. 'af_heart'). Per-call [voice]
   /// overrides this; both fall back to [kDefaultTtsVoice].
   final String? defaultVoice;
@@ -48,13 +50,16 @@ class TtsService {
       final base = await getApplicationSupportDirectory();
       final dir = Directory('${base.path}/coordinator_audio');
       if (!await dir.exists()) await dir.create(recursive: true);
-      final filePath = '${dir.path}/tts_${DateTime.now().millisecondsSinceEpoch}.mp3';
+      final filePath =
+          '${dir.path}/tts_${DateTime.now().millisecondsSinceEpoch}.mp3';
       await File(filePath).writeAsBytes(result.audioBytes, flush: true);
       return filePath;
     } catch (e) {
       // Don't crash the voice loop, but make the failure visible — a silently
       // swallowed TTS 404 looks like "the AI isn't talking back".
-      debugPrint('[Voice] TTS synth failed (model=${ttsModel ?? "(default)"}): $e');
+      debugPrint(
+        '[Voice] TTS synth failed (model=${ttsModel ?? "(default)"}): $e',
+      );
       return null;
     }
   }
@@ -65,8 +70,13 @@ class TtsService {
       await _player.setAudioSource(AudioSource.file(path));
       await _player.play();
       await _player.processingStateStream
-          .firstWhere((s) => s == ProcessingState.completed || s == ProcessingState.idle)
-          .timeout(const Duration(seconds: 60), onTimeout: () => ProcessingState.idle);
+          .firstWhere(
+            (s) => s == ProcessingState.completed || s == ProcessingState.idle,
+          )
+          .timeout(
+            const Duration(seconds: 60),
+            onTimeout: () => ProcessingState.idle,
+          );
     } catch (e) {
       debugPrint('[Voice] TTS playback failed: $e');
     }
@@ -98,7 +108,9 @@ class TtsService {
     s = s.replaceAll('`', '');
     // Images / links: ![alt](url) / [label](url) → alt / label.
     s = s.replaceAllMapped(
-        RegExp(r'!?\[([^\]]*)\]\([^)]*\)'), (m) => m.group(1) ?? '');
+      RegExp(r'!?\[([^\]]*)\]\([^)]*\)'),
+      (m) => m.group(1) ?? '',
+    );
     // Bold / italic / strikethrough emphasis markers.
     s = s.replaceAll(RegExp(r'(\*\*\*|\*\*|\*|___|__|_|~~)'), '');
     // Leading heading hashes and blockquote / list markers per line.

@@ -21,8 +21,9 @@ import 'package:nexus_projects_client/features/project_setup/summary_tab.dart';
 /// the plans file explorer, Setup → the interview chat.
 enum WorkspaceRightPanel { chatHistory, planExplorer, setupInterview }
 
-final workspaceRightPanelProvider =
-    StateProvider<WorkspaceRightPanel>((ref) => WorkspaceRightPanel.chatHistory);
+final workspaceRightPanelProvider = StateProvider<WorkspaceRightPanel>(
+  (ref) => WorkspaceRightPanel.chatHistory,
+);
 
 /// Center pane for a project: a tabbed workspace.
 ///   • Chat — the project Coordinator (first tab, the human's main surface).
@@ -34,7 +35,8 @@ class ProjectWorkspaceView extends ConsumerStatefulWidget {
   const ProjectWorkspaceView({super.key});
 
   @override
-  ConsumerState<ProjectWorkspaceView> createState() => _ProjectWorkspaceViewState();
+  ConsumerState<ProjectWorkspaceView> createState() =>
+      _ProjectWorkspaceViewState();
 }
 
 class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
@@ -122,8 +124,10 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
 
     // Setup is now a resumable full-screen WIZARD (not a tab). On a fresh
     // project we auto-open it once; it's also reachable from the Summary tab.
-    final setupStatus =
-        ref.watch(projectRowProvider(projectId)).valueOrNull?.setupStatus;
+    final setupStatus = ref
+        .watch(projectRowProvider(projectId))
+        .valueOrNull
+        ?.setupStatus;
 
     // External nudges (e.g. the setup "Done" flow) can ask us to surface the
     // Overview tab, where the orchestration Start button lives.
@@ -140,12 +144,19 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
       });
     }
 
-    const chatTab = Tab(icon: Icon(Icons.forum_outlined, size: 18), text: 'Chat');
-    const summaryTab =
-        Tab(icon: Icon(Icons.summarize_outlined, size: 18), text: 'Summary');
+    const chatTab = Tab(
+      icon: Icon(Icons.forum_outlined, size: 18),
+      text: 'Chat',
+    );
+    const summaryTab = Tab(
+      icon: Icon(Icons.summarize_outlined, size: 18),
+      text: 'Summary',
+    );
     const overviewTab = Tab(icon: Icon(Icons.tune, size: 18), text: 'Overview');
-    const planTab =
-        Tab(icon: Icon(Icons.description_outlined, size: 18), text: 'Plan');
+    const planTab = Tab(
+      icon: Icon(Icons.description_outlined, size: 18),
+      text: 'Plan',
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -206,8 +217,11 @@ class _FinishSetupBanner extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(
           children: [
-            Icon(Icons.info_outline,
-                size: 16, color: theme.colorScheme.onTertiaryContainer),
+            Icon(
+              Icons.info_outline,
+              size: 16,
+              color: theme.colorScheme.onTertiaryContainer,
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -235,7 +249,10 @@ class _ProjectOverviewTab extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        const Text('Orchestration', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+        const Text(
+          'Orchestration',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+        ),
         const SizedBox(height: 4),
         Text(
           'Start the autonomous loop to spawn worker agents for assigned tasks. '
@@ -250,7 +267,10 @@ class _ProjectOverviewTab extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 24),
-        const Text('Working hours', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+        const Text(
+          'Working hours',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+        ),
         const SizedBox(height: 12),
         Card(
           child: Padding(
@@ -259,7 +279,10 @@ class _ProjectOverviewTab extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 24),
-        const Text('Coordinator agent', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+        const Text(
+          'Coordinator agent',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+        ),
         const SizedBox(height: 12),
         Card(
           child: Padding(
@@ -286,14 +309,20 @@ class _AgentDropdown extends ConsumerWidget {
     return personasAsync.when(
       data: (personas) {
         if (personas.isEmpty) {
-          return const Text('No personas yet — create one in Agents.',
-              style: TextStyle(fontSize: 12, color: Colors.grey));
+          return const Text(
+            'No personas yet — create one in Agents.',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          );
         }
         return FutureBuilder<int?>(
           future: db.getOrAssignCoordinatorPersonaId(projectId),
           builder: (context, snap) {
             final raw = snap.data;
-            final current = (raw != null && personas.where((p) => p.agent_pk == raw).length == 1) ? raw : null;
+            final current =
+                (raw != null &&
+                    personas.where((p) => p.agent_pk == raw).length == 1)
+                ? raw
+                : null;
             return DropdownButtonFormField<int?>(
               initialValue: current,
               isExpanded: true,
@@ -303,15 +332,24 @@ class _AgentDropdown extends ConsumerWidget {
                 isDense: true,
               ),
               items: [
-                const DropdownMenuItem(value: null, child: Text('No agent (server default)')),
+                const DropdownMenuItem(
+                  value: null,
+                  child: Text('No agent (server default)'),
+                ),
                 for (final p in personas)
-                  DropdownMenuItem(value: p.agent_pk, child: Text(p.name, overflow: TextOverflow.ellipsis)),
+                  DropdownMenuItem(
+                    value: p.agent_pk,
+                    child: Text(p.name, overflow: TextOverflow.ellipsis),
+                  ),
               ],
               onChanged: (v) async {
                 await db.setProjectAgentPersona(projectId, v);
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Coordinator agent updated.'), duration: Duration(seconds: 2)),
+                    const SnackBar(
+                      content: Text('Coordinator agent updated.'),
+                      duration: Duration(seconds: 2),
+                    ),
                   );
                 }
               },
@@ -319,7 +357,12 @@ class _AgentDropdown extends ConsumerWidget {
           },
         );
       },
-      loading: () => const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator(strokeWidth: 2))),
+      loading: () => const Center(
+        child: Padding(
+          padding: EdgeInsets.all(8),
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ),
       error: (e, _) => Text('Error: $e'),
     );
   }

@@ -66,8 +66,10 @@ class _AccountAuthFormsState extends ConsumerState<AccountAuthForms>
                   children: [
                     const Icon(Icons.account_circle_outlined, size: 28),
                     const SizedBox(width: AppSpacing.sm),
-                    Text('Nexus Account',
-                        style: Theme.of(context).textTheme.titleLarge),
+                    Text(
+                      'Nexus Account',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
                   ],
                 ),
                 Gap.xs,
@@ -78,7 +80,10 @@ class _AccountAuthFormsState extends ConsumerState<AccountAuthForms>
                 Gap.lg,
                 TabBar(
                   controller: _tabs,
-                  tabs: const [Tab(text: 'Sign in'), Tab(text: 'Register')],
+                  tabs: const [
+                    Tab(text: 'Sign in'),
+                    Tab(text: 'Register'),
+                  ],
                 ),
                 Gap.lg,
                 // Size the card to the ACTIVE form (the short Sign-in form no
@@ -135,12 +140,13 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
       _submitting = true;
     });
     try {
-      await ref.read(nexusAuthProvider.notifier).login(
-            email: _email.text.trim(),
-            password: _password.text,
-          );
+      await ref
+          .read(nexusAuthProvider.notifier)
+          .login(email: _email.text.trim(), password: _password.text);
     } on LemonadeApiException catch (e, st) {
-      debugPrint('Nexus login failed (LemonadeApiException): ${e.message}\n$st');
+      debugPrint(
+        'Nexus login failed (LemonadeApiException): ${e.message}\n$st',
+      );
       if (mounted) setState(() => _error = e.message);
     } catch (e, st) {
       debugPrint('Nexus login failed: $e\n$st');
@@ -176,10 +182,7 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
             prefixIcon: Icon(Icons.lock_outline),
           ),
         ),
-        if (_error != null) ...[
-          Gap.md,
-          _ErrorText(_error!),
-        ],
+        if (_error != null) ...[Gap.md, _ErrorText(_error!)],
         const SizedBox(height: AppSpacing.lg),
         GradientButton(
           onPressed: _submitting ? null : _submit,
@@ -253,13 +256,13 @@ class _RegisterFormState extends ConsumerState<_RegisterForm> {
       _submitting = true;
     });
     try {
-      await ref.read(nexusAuthProvider.notifier).register(
-            clientName: company,
-            email: email,
-            password: pwd,
-          );
+      await ref
+          .read(nexusAuthProvider.notifier)
+          .register(clientName: company, email: email, password: pwd);
     } on LemonadeApiException catch (e, st) {
-      debugPrint('Nexus register failed (LemonadeApiException): ${e.message}\n$st');
+      debugPrint(
+        'Nexus register failed (LemonadeApiException): ${e.message}\n$st',
+      );
       if (mounted) setState(() => _error = e.message);
     } catch (e, st) {
       debugPrint('Nexus register failed: $e\n$st');
@@ -307,10 +310,7 @@ class _RegisterFormState extends ConsumerState<_RegisterForm> {
             helperMaxLines: 2,
           ),
         ),
-        if (_error != null) ...[
-          Gap.md,
-          _ErrorText(_error!),
-        ],
+        if (_error != null) ...[Gap.md, _ErrorText(_error!)],
         const SizedBox(height: AppSpacing.lg),
         GradientButton(
           onPressed: _submitting ? null : _submit,
@@ -344,4 +344,3 @@ class _ErrorText extends StatelessWidget {
     );
   }
 }
-

@@ -9,13 +9,25 @@ class TextToSpeechRequest {
   final String model;
   final String input;
   final String voice;
-  final String responseFormat; // 'mp3' | 'wav' | 'opus' | 'aac' | 'flac' | 'pcm'
+  final String
+  responseFormat; // 'mp3' | 'wav' | 'opus' | 'aac' | 'flac' | 'pcm'
   final double? speed;
 
-  TextToSpeechRequest({required this.model, required this.input, this.voice = 'alloy', this.responseFormat = 'mp3', this.speed});
+  TextToSpeechRequest({
+    required this.model,
+    required this.input,
+    this.voice = 'alloy',
+    this.responseFormat = 'mp3',
+    this.speed,
+  });
 
   Map<String, dynamic> toWireJson() {
-    final body = <String, dynamic>{'model': model, 'input': input, 'voice': voice, 'response_format': responseFormat};
+    final body = <String, dynamic>{
+      'model': model,
+      'input': input,
+      'voice': voice,
+      'response_format': responseFormat,
+    };
     if (speed != null) body['speed'] = speed;
     return body;
   }
@@ -30,5 +42,12 @@ class TranscriptionRequest {
   final String? language; // ISO 639-1 like 'en'
   final String responseFormat; // 'json' | 'text' | 'verbose_json'
 
-  TranscriptionRequest({required this.model, required this.audioBytes, required this.audioFilename, this.audioMime = 'audio/wav', this.language, this.responseFormat = 'json'});
+  TranscriptionRequest({
+    required this.model,
+    required this.audioBytes,
+    required this.audioFilename,
+    this.audioMime = 'audio/wav',
+    this.language,
+    this.responseFormat = 'json',
+  });
 }

@@ -13,7 +13,9 @@ import '../model/call_system_project.dart';
 /// Lets the user pick an export target and preview/copy the produced artifact.
 /// "Deploy to Nexus" (managed full-AI runtime) is surfaced as the first option.
 Future<void> showCallExportDialog(
-    BuildContext context, CallSystemProject project) {
+  BuildContext context,
+  CallSystemProject project,
+) {
   return showDialog<void>(
     context: context,
     builder: (_) => _ExportDialog(project: project),
@@ -53,18 +55,24 @@ class _ExportDialogState extends State<_ExportDialog> {
               padding: const EdgeInsets.all(AppSpacing.md),
               child: Row(
                 children: [
-                  Icon(Icons.cloud_done_outlined, color: theme.colorScheme.primary),
+                  Icon(
+                    Icons.cloud_done_outlined,
+                    color: theme.colorScheme.primary,
+                  ),
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Deploy to Nexus (managed)',
-                            style: theme.textTheme.titleSmall),
+                        Text(
+                          'Deploy to Nexus (managed)',
+                          style: theme.textTheme.titleSmall,
+                        ),
                         Text(
                           'Provision a number and run this flow + AI voicebot on our runtime. (Coming with the managed runtime.)',
-                          style: theme.textTheme.bodySmall
-                              ?.copyWith(color: context.nx.textMuted),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: context.nx.textMuted,
+                          ),
                         ),
                       ],
                     ),
@@ -98,7 +106,8 @@ class _ExportDialogState extends State<_ExportDialog> {
                       const Icon(Icons.info_outline, size: 14),
                       const SizedBox(width: 6),
                       Expanded(
-                          child: Text(n, style: theme.textTheme.bodySmall)),
+                        child: Text(n, style: theme.textTheme.bodySmall),
+                      ),
                     ],
                   ),
                 ),
@@ -116,7 +125,10 @@ class _ExportDialogState extends State<_ExportDialog> {
                   child: SelectableText(
                     combined,
                     style: const TextStyle(
-                        fontFamily: 'monospace', fontSize: 11.5, height: 1.4),
+                      fontFamily: 'monospace',
+                      fontSize: 11.5,
+                      height: 1.4,
+                    ),
                   ),
                 ),
               ),
@@ -134,7 +146,9 @@ class _ExportDialogState extends State<_ExportDialog> {
             await Clipboard.setData(ClipboardData(text: combined));
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('${_selected.displayName} artifact copied.')),
+                SnackBar(
+                  content: Text('${_selected.displayName} artifact copied.'),
+                ),
               );
             }
           },

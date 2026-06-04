@@ -10,6 +10,7 @@ import 'package:nexus_projects_client/infrastructure/inference/inference_client.
 import 'package:nexus_projects_client/features/projects/coordinator_tools.dart';
 import 'package:nexus_projects_client/features/agents/agent_tool_permissions.dart';
 import 'package:nexus_projects_client/features/project_plans/plan_store.dart';
+import 'package:nexus_projects_client/infrastructure/workspace/async_lock.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/workspace.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/git/nxtprj_git_engine.dart';
 import 'package:nexus_projects_client/infrastructure/build/build_service.dart';
@@ -65,6 +66,12 @@ class ProjectCoordinatorSession {
   final void Function()? onPlanningComplete;
   final void Function(bool approved, String gaps)? onPlanReview;
 
+  /// Per-task isolation for an orchestrated worker: [workBranch] is the task's
+  /// branch and [gitLane] serializes shared git-DB writes, so `git_commit`
+  /// snapshots the isolated [workspace] tree onto its branch concurrency-safely.
+  final String? workBranch;
+  final AsyncLock? gitLane;
+
   final List<Map<String, dynamic>> _history = [];
 
   /// Detects when the coordinator agent gets stuck repeating the same tool call
@@ -92,6 +99,8 @@ class ProjectCoordinatorSession {
     this.leanTools = true,
     this.onPlanningComplete,
     this.onPlanReview,
+    this.workBranch,
+    this.gitLane,
   });
 
   /// When true (default), only the core task/plan tools are offered each turn;
@@ -427,6 +436,8 @@ class ProjectCoordinatorSession {
             buildService: buildService,
             onPlanningComplete: onPlanningComplete,
             onPlanReview: onPlanReview,
+            workBranch: workBranch,
+            gitLane: gitLane,
           )
         : null;
 

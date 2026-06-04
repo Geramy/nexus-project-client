@@ -46,6 +46,7 @@ class SetupSession {
   /// `propose_tags` categories.
   final SetupFlowDefinition flow;
   final int maxToolRounds;
+
   /// Effective enable_thinking for this session (null omits the param). Resolved
   /// from the project agent's ThinkingMode.
   final bool? enableThinking;
@@ -253,7 +254,7 @@ How to work:
                     'name': t.function.name,
                     'arguments': t.function.arguments,
                   },
-                }
+                },
             ],
         });
 
@@ -383,8 +384,10 @@ How to work:
   /// append-only and unaffected by working-context trimming.
   String toTranscriptJson() {
     final turns = _transcript
-        .where((m) =>
-            (m['content'] is String) && (m['content'] as String).isNotEmpty)
+        .where(
+          (m) =>
+              (m['content'] is String) && (m['content'] as String).isNotEmpty,
+        )
         .map((m) => {'role': m['role'], 'content': m['content']})
         .toList();
     return jsonEncode(turns);

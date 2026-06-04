@@ -44,22 +44,20 @@ class WorkflowRunner {
       // If a prior job failed (fail-fast) or the run was cancelled, mark this
       // job and all its steps as skipped/cancelled without running anything.
       if (runFailed || runCancelled) {
-        final downstreamStatus =
-            runCancelled ? CiStatus.cancelled : CiStatus.skipped;
+        final downstreamStatus = runCancelled
+            ? CiStatus.cancelled
+            : CiStatus.skipped;
         onJobStatus?.call(j, downstreamStatus);
         final steps = <CiStepOutcome>[];
         for (var s = 0; s < job.steps.length; s++) {
           onStepStatus?.call(j, s, downstreamStatus);
-          steps.add(CiStepOutcome(
-            name: job.steps[s].name,
-            status: downstreamStatus,
-          ));
+          steps.add(
+            CiStepOutcome(name: job.steps[s].name, status: downstreamStatus),
+          );
         }
-        jobOutcomes.add(CiJobOutcome(
-          name: job.name,
-          status: downstreamStatus,
-          steps: steps,
-        ));
+        jobOutcomes.add(
+          CiJobOutcome(name: job.name, status: downstreamStatus, steps: steps),
+        );
         continue;
       }
 
@@ -84,8 +82,9 @@ class WorkflowRunner {
         // Cancellation check before starting the step.
         if (cancel?.isCancelled ?? false) {
           onStepStatus?.call(j, s, CiStatus.cancelled);
-          stepOutcomes
-              .add(CiStepOutcome(name: step.name, status: CiStatus.cancelled));
+          stepOutcomes.add(
+            CiStepOutcome(name: step.name, status: CiStatus.cancelled),
+          );
           jobCancelled = true;
           continue;
         }
@@ -95,29 +94,35 @@ class WorkflowRunner {
         // A `uses:` step with no `run:` — external actions are unsupported.
         if ((step.run == null || step.run!.trim().isEmpty) &&
             step.uses != null) {
-          log(CiLogEvent(
-            'Skipping action "${step.uses}" — external actions are not supported in the local runner.',
-            jobIndex: j,
-            stepIndex: s,
-            stream: CiLogStream.system,
-          ));
+          log(
+            CiLogEvent(
+              'Skipping action "${step.uses}" — external actions are not supported in the local runner.',
+              jobIndex: j,
+              stepIndex: s,
+              stream: CiLogStream.system,
+            ),
+          );
           onStepStatus?.call(j, s, CiStatus.skipped);
-          stepOutcomes
-              .add(CiStepOutcome(name: step.name, status: CiStatus.skipped));
+          stepOutcomes.add(
+            CiStepOutcome(name: step.name, status: CiStatus.skipped),
+          );
           continue;
         }
 
         // Nothing to do — neither run nor uses.
         if (step.run == null || step.run!.trim().isEmpty) {
-          log(CiLogEvent(
-            'Step "${step.name}" has no run script — skipping.',
-            jobIndex: j,
-            stepIndex: s,
-            stream: CiLogStream.system,
-          ));
+          log(
+            CiLogEvent(
+              'Step "${step.name}" has no run script — skipping.',
+              jobIndex: j,
+              stepIndex: s,
+              stream: CiLogStream.system,
+            ),
+          );
           onStepStatus?.call(j, s, CiStatus.skipped);
-          stepOutcomes
-              .add(CiStepOutcome(name: step.name, status: CiStatus.skipped));
+          stepOutcomes.add(
+            CiStepOutcome(name: step.name, status: CiStatus.skipped),
+          );
           continue;
         }
 
@@ -148,15 +153,13 @@ class WorkflowRunner {
       final jobStatus = jobCancelled
           ? CiStatus.cancelled
           : jobFailed
-              ? CiStatus.failed
-              : CiStatus.success;
+          ? CiStatus.failed
+          : CiStatus.success;
       onJobStatus?.call(j, jobStatus);
       log(CiLogEvent.system('Job "${job.name}" ${jobStatus.name}.'));
-      jobOutcomes.add(CiJobOutcome(
-        name: job.name,
-        status: jobStatus,
-        steps: stepOutcomes,
-      ));
+      jobOutcomes.add(
+        CiJobOutcome(name: job.name, status: jobStatus, steps: stepOutcomes),
+      );
 
       if (jobCancelled) runCancelled = true;
       if (jobFailed) runFailed = true;
@@ -165,8 +168,8 @@ class WorkflowRunner {
     final runStatus = runCancelled
         ? CiStatus.cancelled
         : runFailed
-            ? CiStatus.failed
-            : CiStatus.success;
+        ? CiStatus.failed
+        : CiStatus.success;
 
     return CiRunOutcome(status: runStatus, jobs: jobOutcomes);
   }
@@ -182,14 +185,18 @@ class WorkflowRunner {
     final script = step.run!;
     final (executable, args) = _shellFor(step.shell, script);
 
-    log(CiLogEvent(
-      '\$ $executable ${args.join(' ')}',
-      jobIndex: jobIndex,
-      stepIndex: stepIndex,
-      stream: CiLogStream.system,
-    ));
+    log(
+      CiLogEvent(
+        '\$ $executable ${args.join(' ')}',
+        jobIndex: jobIndex,
+        stepIndex: stepIndex,
+        stream: CiLogStream.system,
+      ),
+    );
 
-    final environment = step.env.isEmpty ? null : Map<String, String>.from(step.env);
+    final environment = step.env.isEmpty
+        ? null
+        : Map<String, String>.from(step.env);
 
     try {
       final result = await runner.run(
@@ -200,14 +207,16 @@ class WorkflowRunner {
         includeParentEnvironment: true,
         cancel: cancel?.whenCancelled,
         onLine: (l) {
-          log(CiLogEvent(
-            l.text,
-            jobIndex: jobIndex,
-            stepIndex: stepIndex,
-            stream: l.stream == ProcStream.stdout
-                ? CiLogStream.stdout
-                : CiLogStream.stderr,
-          ));
+          log(
+            CiLogEvent(
+              l.text,
+              jobIndex: jobIndex,
+              stepIndex: stepIndex,
+              stream: l.stream == ProcStream.stdout
+                  ? CiLogStream.stdout
+                  : CiLogStream.stderr,
+            ),
+          );
         },
       );
 
@@ -223,12 +232,14 @@ class WorkflowRunner {
       }
 
       if (result.timedOut) {
-        log(CiLogEvent(
-          'Step "${step.name}" timed out.',
-          jobIndex: jobIndex,
-          stepIndex: stepIndex,
-          stream: CiLogStream.system,
-        ));
+        log(
+          CiLogEvent(
+            'Step "${step.name}" timed out.',
+            jobIndex: jobIndex,
+            stepIndex: stepIndex,
+            stream: CiLogStream.system,
+          ),
+        );
       }
 
       return CiStepOutcome(
@@ -237,12 +248,14 @@ class WorkflowRunner {
         exitCode: result.exitCode,
       );
     } on ProcessSpawnException catch (e) {
-      log(CiLogEvent(
-        'Failed to start shell for step "${step.name}": $e',
-        jobIndex: jobIndex,
-        stepIndex: stepIndex,
-        stream: CiLogStream.system,
-      ));
+      log(
+        CiLogEvent(
+          'Failed to start shell for step "${step.name}": $e',
+          jobIndex: jobIndex,
+          stepIndex: stepIndex,
+          stream: CiLogStream.system,
+        ),
+      );
       return CiStepOutcome(name: step.name, status: CiStatus.failed);
     }
   }

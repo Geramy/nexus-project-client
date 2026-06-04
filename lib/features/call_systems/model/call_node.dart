@@ -79,43 +79,42 @@ extension CallNodeTypeX on CallNodeType {
   /// editor draws and the exporters map. Menus add a port per configured digit
   /// at runtime (see [CallNode.outputs]); these are the always-present ports.
   List<String> get basePorts => switch (this) {
-        CallNodeType.entry => const ['next'],
-        CallNodeType.playPrompt => const ['next'],
-        CallNodeType.menu => const ['timeout', 'invalid'],
-        CallNodeType.gatherDigits => const ['next', 'timeout'],
-        CallNodeType.gatherSpeech => const ['next', 'timeout', 'nomatch'],
-        CallNodeType.aiVoicebot => const ['next', 'transfer', 'hangup'],
-        CallNodeType.dial => const ['answered', 'noanswer', 'busy', 'failed'],
-        CallNodeType.transferToExtension =>
-          const ['answered', 'noanswer', 'busy'],
-        CallNodeType.ringGroup => const ['answered', 'noanswer'],
-        CallNodeType.queue => const ['answered', 'timeout', 'empty'],
-        CallNodeType.voicemail => const ['done'],
-        CallNodeType.schedule => const ['open', 'closed', 'holiday'],
-        CallNodeType.condition => const ['true', 'false'],
-        CallNodeType.setVariable => const ['next'],
-        CallNodeType.httpRequest => const ['success', 'failure'],
-        CallNodeType.record => const ['next'],
-        CallNodeType.playDirectory => const ['matched', 'nomatch'],
-        CallNodeType.hangup => const [],
-        CallNodeType.subFlow => const ['returned'],
-      };
+    CallNodeType.entry => const ['next'],
+    CallNodeType.playPrompt => const ['next'],
+    CallNodeType.menu => const ['timeout', 'invalid'],
+    CallNodeType.gatherDigits => const ['next', 'timeout'],
+    CallNodeType.gatherSpeech => const ['next', 'timeout', 'nomatch'],
+    CallNodeType.aiVoicebot => const ['next', 'transfer', 'hangup'],
+    CallNodeType.dial => const ['answered', 'noanswer', 'busy', 'failed'],
+    CallNodeType.transferToExtension => const ['answered', 'noanswer', 'busy'],
+    CallNodeType.ringGroup => const ['answered', 'noanswer'],
+    CallNodeType.queue => const ['answered', 'timeout', 'empty'],
+    CallNodeType.voicemail => const ['done'],
+    CallNodeType.schedule => const ['open', 'closed', 'holiday'],
+    CallNodeType.condition => const ['true', 'false'],
+    CallNodeType.setVariable => const ['next'],
+    CallNodeType.httpRequest => const ['success', 'failure'],
+    CallNodeType.record => const ['next'],
+    CallNodeType.playDirectory => const ['matched', 'nomatch'],
+    CallNodeType.hangup => const [],
+    CallNodeType.subFlow => const ['returned'],
+  };
 
   /// True for node types only meaningful to expert/Advanced users; the Regular
   /// mode hides these behind AI assistance or presets.
   bool get isAdvanced => switch (this) {
-        CallNodeType.condition ||
-        CallNodeType.setVariable ||
-        CallNodeType.httpRequest ||
-        CallNodeType.subFlow =>
-          true,
-        _ => false,
-      };
+    CallNodeType.condition ||
+    CallNodeType.setVariable ||
+    CallNodeType.httpRequest ||
+    CallNodeType.subFlow => true,
+    _ => false,
+  };
 }
 
-CallNodeType callNodeTypeFromKey(String key) =>
-    CallNodeType.values.firstWhere((t) => t.key == key,
-        orElse: () => CallNodeType.playPrompt);
+CallNodeType callNodeTypeFromKey(String key) => CallNodeType.values.firstWhere(
+  (t) => t.key == key,
+  orElse: () => CallNodeType.playPrompt,
+);
 
 /// Approval state of a node. AI-generated nodes start [proposed] (ghosted on the
 /// canvas, awaiting the user's ✓); manually-added nodes are [approved]. Legacy
@@ -165,40 +164,40 @@ class CallNode {
     Map<String, dynamic>? config,
     Map<String, String?>? outputs,
     NodeStatus? status,
-  }) =>
-      CallNode(
-        id: id,
-        type: type,
-        label: label ?? this.label,
-        x: x ?? this.x,
-        y: y ?? this.y,
-        config: config ?? this.config,
-        outputs: outputs ?? this.outputs,
-        status: status ?? this.status,
-      );
+  }) => CallNode(
+    id: id,
+    type: type,
+    label: label ?? this.label,
+    x: x ?? this.x,
+    y: y ?? this.y,
+    config: config ?? this.config,
+    outputs: outputs ?? this.outputs,
+    status: status ?? this.status,
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'type': type.key,
-        'label': label,
-        'x': x,
-        'y': y,
-        'config': config,
-        'outputs': outputs,
-        'status': status.name,
-      };
+    'id': id,
+    'type': type.key,
+    'label': label,
+    'x': x,
+    'y': y,
+    'config': config,
+    'outputs': outputs,
+    'status': status.name,
+  };
 
   factory CallNode.fromJson(Map<String, dynamic> json) => CallNode(
-        id: json['id'] as String,
-        type: callNodeTypeFromKey(json['type'] as String),
-        label: (json['label'] as String?) ?? '',
-        x: (json['x'] as num?)?.toDouble() ?? 0,
-        y: (json['y'] as num?)?.toDouble() ?? 0,
-        config: Map<String, dynamic>.from(json['config'] as Map? ?? const {}),
-        outputs: (json['outputs'] as Map?)?.map(
-              (k, v) => MapEntry(k as String, v as String?),
-            ) ??
-            const {},
-        status: nodeStatusFromKey(json['status'] as String?),
-      );
+    id: json['id'] as String,
+    type: callNodeTypeFromKey(json['type'] as String),
+    label: (json['label'] as String?) ?? '',
+    x: (json['x'] as num?)?.toDouble() ?? 0,
+    y: (json['y'] as num?)?.toDouble() ?? 0,
+    config: Map<String, dynamic>.from(json['config'] as Map? ?? const {}),
+    outputs:
+        (json['outputs'] as Map?)?.map(
+          (k, v) => MapEntry(k as String, v as String?),
+        ) ??
+        const {},
+    status: nodeStatusFromKey(json['status'] as String?),
+  );
 }

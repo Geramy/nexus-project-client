@@ -61,21 +61,21 @@ class AmazonConnectExporter implements CallSystemExporter {
     // in the project so multi-flow projects round-trip as a set of artifacts.
     for (final flow in project.flows) {
       final doc = _buildFlowDocument(project, flow);
-      final fileName = '${_safeFileName(flow.name.isEmpty ? flow.id : flow.name)}'
+      final fileName =
+          '${_safeFileName(flow.name.isEmpty ? flow.id : flow.name)}'
           '.contactflow.json';
-      files[fileName] =
-          const JsonEncoder.withIndent('  ').convert(doc);
+      files[fileName] = const JsonEncoder.withIndent('  ').convert(doc);
     }
 
     // If the project has no flows there is nothing Connect-shaped to emit, but
     // we still produce a stub so the export never yields an empty archive.
     if (files.isEmpty) {
-      files['empty.contactflow.json'] =
-          const JsonEncoder.withIndent('  ').convert(<String, dynamic>{
-        'Version': '2019-10-30',
-        'StartAction': '',
-        'Actions': <dynamic>[],
-      });
+      files['empty.contactflow.json'] = const JsonEncoder.withIndent('  ')
+          .convert(<String, dynamic>{
+            'Version': '2019-10-30',
+            'StartAction': '',
+            'Actions': <dynamic>[],
+          });
     }
 
     return files;
@@ -83,7 +83,9 @@ class AmazonConnectExporter implements CallSystemExporter {
 
   /// Build a single Connect Contact Flow document for [flow].
   Map<String, dynamic> _buildFlowDocument(
-      CallSystemProject project, CallFlow flow) {
+    CallSystemProject project,
+    CallFlow flow,
+  ) {
     final actions = <Map<String, dynamic>>[];
 
     // Walk the graph starting from the entry node, following `outputs`, so we
@@ -159,28 +161,24 @@ class AmazonConnectExporter implements CallSystemExporter {
     switch (node.type) {
       // ---- Play a prompt -> MessageParticipant ---------------------------
       case CallNodeType.playPrompt:
-        return _MappedNode(_action(
-          node,
-          _typeMessage,
-          {'Text': _promptText(project, node)},
-          _linearTransition(node),
-        ));
+        return _MappedNode(
+          _action(node, _typeMessage, {
+            'Text': _promptText(project, node),
+          }, _linearTransition(node)),
+        );
 
       // ---- IVR menu -> GetParticipantInput -------------------------------
       // Connect's input block plays a prompt, collects DTMF, then branches via
       // `Conditions`. We map each digit port to an Equals condition and the
       // `timeout`/`invalid` ports to the block's error/timeout transitions.
       case CallNodeType.menu:
-        return _MappedNode(_action(
-          node,
-          _typeGetInput,
-          {
+        return _MappedNode(
+          _action(node, _typeGetInput, {
             'Text': _promptText(project, node),
             'InputType': 'DTMF',
             'MaxDigits': 1,
-          },
-          _menuTransitions(node),
-        ));
+          }, _menuTransitions(node)),
+        );
 
       // ---- Gather DTMF / speech into a variable --------------------------
       // Both map to GetParticipantInput storing into a contact attribute named
@@ -188,22 +186,26 @@ class AmazonConnectExporter implements CallSystemExporter {
       case CallNodeType.gatherDigits:
       case CallNodeType.gatherSpeech:
         final variable = (node.config['variable'] as String?) ?? 'userInput';
-        return _MappedNode(_action(
-          node,
-          _typeGetInput,
-          {
-            'InputType': node.type == CallNodeType.gatherDigits
-                ? 'DTMF'
-                : 'Speech',
-            'StoreInput': true,
-            'DestinationKey': variable,
-            if (project.promptById(node.config['promptId'] as String? ?? '') !=
-                null)
-              'Text': _promptText(project, node),
-          },
-          // gather's base ports are next/timeout (+nomatch for speech).
-          _gatherTransitions(node),
-        ));
+        return _MappedNode(
+          _action(
+            node,
+            _typeGetInput,
+            {
+              'InputType': node.type == CallNodeType.gatherDigits
+                  ? 'DTMF'
+                  : 'Speech',
+              'StoreInput': true,
+              'DestinationKey': variable,
+              if (project.promptById(
+                    node.config['promptId'] as String? ?? '',
+                  ) !=
+                  null)
+                'Text': _promptText(project, node),
+            },
+            // gather's base ports are next/timeout (+nomatch for speech).
+            _gatherTransitions(node),
+          ),
+        );
 
       // ---- Dial external number -> TransferToFlow ------------------------
       // Connect has no first-class "dial a PSTN number and bridge" block in the
@@ -212,42 +214,46 @@ class AmazonConnectExporter implements CallSystemExporter {
       // and stash the target number as a parameter; notes() flags the caveat.
       case CallNodeType.dial:
         final number = (node.config['number'] as String?) ?? '';
-        return _MappedNode(_action(
-          node,
-          _typeTransferToFlow,
-          {'ContactFlowId': '', 'DialNumber': number},
-          _dialTransitions(node),
-        ));
+        return _MappedNode(
+          _action(node, _typeTransferToFlow, {
+            'ContactFlowId': '',
+            'DialNumber': number,
+          }, _dialTransitions(node)),
+        );
 
       // ---- Transfer to internal extension -> TransferToFlow --------------
       case CallNodeType.transferToExtension:
         final ext = (node.config['extension'] as String?) ?? '';
-        return _MappedNode(_action(
-          node,
-          _typeTransferToFlow,
-          {'ContactFlowId': '', 'Extension': ext},
-          _dialTransitions(node),
-        ));
+        return _MappedNode(
+          _action(node, _typeTransferToFlow, {
+            'ContactFlowId': '',
+            'Extension': ext,
+          }, _dialTransitions(node)),
+        );
 
       // ---- Ring group -> TransferContactToQueue --------------------------
       // Connect routes by queue, not by ad-hoc ring group, so a ring group is
       // expressed as a transfer to a queue named after the group.
       case CallNodeType.ringGroup:
-        return _MappedNode(_action(
-          node,
-          _typeTransferToQueue,
-          {'QueueId': node.id, 'QueueName': node.label},
-          _queueTransitions(node, answered: 'answered', other: 'noanswer'),
-        ));
+        return _MappedNode(
+          _action(
+            node,
+            _typeTransferToQueue,
+            {'QueueId': node.id, 'QueueName': node.label},
+            _queueTransitions(node, answered: 'answered', other: 'noanswer'),
+          ),
+        );
 
       // ---- ACD queue -> TransferContactToQueue ---------------------------
       case CallNodeType.queue:
-        return _MappedNode(_action(
-          node,
-          _typeTransferToQueue,
-          {'QueueId': node.id, 'QueueName': node.label},
-          _queueTransitions(node, answered: 'answered', other: 'timeout'),
-        ));
+        return _MappedNode(
+          _action(
+            node,
+            _typeTransferToQueue,
+            {'QueueId': node.id, 'QueueName': node.label},
+            _queueTransitions(node, answered: 'answered', other: 'timeout'),
+          ),
+        );
 
       // ---- Voicemail -----------------------------------------------------
       // Connect voicemail is an AWS add-on (typically Lambda + Amazon
@@ -255,142 +261,148 @@ class AmazonConnectExporter implements CallSystemExporter {
       // greeting then disconnect via the `done` port; full voicemail capture
       // requires the Connect voicemail solution (noted in notes()).
       case CallNodeType.voicemail:
-        return _MappedNode(_action(
-          node,
-          _typeMessage,
-          {
-            'Text': 'Please leave a message after the tone.',
-            '_nexusVoicemail': true,
-          },
-          {'NextAction': node.outputs['done'] ?? ''},
-        ));
+        return _MappedNode(
+          _action(
+            node,
+            _typeMessage,
+            {
+              'Text': 'Please leave a message after the tone.',
+              '_nexusVoicemail': true,
+            },
+            {'NextAction': node.outputs['done'] ?? ''},
+          ),
+        );
 
       // ---- Schedule / business hours -> CheckHoursOfOperation ------------
       case CallNodeType.schedule:
-        return _MappedNode(_action(
-          node,
-          _typeCheckHoursOfOp,
-          {'HoursOfOperationId': node.id},
-          _scheduleTransitions(node),
-        ));
+        return _MappedNode(
+          _action(node, _typeCheckHoursOfOp, {
+            'HoursOfOperationId': node.id,
+          }, _scheduleTransitions(node)),
+        );
 
       // ---- Condition -> CompareContactAttributes -------------------------
       case CallNodeType.condition:
-        return _MappedNode(_action(
-          node,
-          _typeCompareContactAttributes,
-          {'ComparisonValue': node.config['variable'] ?? ''},
-          _conditionTransitions(node),
-        ));
+        return _MappedNode(
+          _action(node, _typeCompareContactAttributes, {
+            'ComparisonValue': node.config['variable'] ?? '',
+          }, _conditionTransitions(node)),
+        );
 
       // ---- Set variable -> UpdateContactData -----------------------------
       case CallNodeType.setVariable:
-        return _MappedNode(_action(
-          node,
-          _typeUpdateContactData,
-          {
+        return _MappedNode(
+          _action(node, _typeUpdateContactData, {
             'Attribute': node.config['variable'] ?? '',
             'Value': node.config['value'] ?? '',
-          },
-          _linearTransition(node),
-        ));
+          }, _linearTransition(node)),
+        );
 
       // ---- HTTP request -> InvokeLambdaFunction --------------------------
       // Connect cannot call arbitrary HTTP endpoints directly; the idiom is a
       // Lambda proxy. We emit an InvokeLambdaFunction block carrying the URL.
       case CallNodeType.httpRequest:
-        return _MappedNode(_action(
-          node,
-          _typeInvokeLambda,
-          {
+        return _MappedNode(
+          _action(node, _typeInvokeLambda, {
             'FunctionArn': '',
             '_nexusHttpUrl': node.config['url'] ?? '',
-          },
-          _successFailureTransitions(node),
-        ));
+          }, _successFailureTransitions(node)),
+        );
 
       // ---- AI voicebot -> InvokeLambdaFunction ---------------------------
       // The conversational AI turn (Omni) is realized in Connect through a
       // Lambda/Lex bridge. We surface the configured goal so the integrator can
       // wire it to Lex/Bedrock. notes() flags that this is not a 1:1 block.
       case CallNodeType.aiVoicebot:
-        return _MappedNode(_action(
-          node,
-          _typeInvokeLambda,
-          {
-            'FunctionArn': '',
-            '_nexusAiGoal': node.config['goal'] ?? '',
-          },
-          {
-            'NextAction': node.outputs['next'] ?? '',
-            'Conditions': [
-              if (node.outputs['transfer'] != null)
-                {'Operator': 'Equals', 'Operands': ['transfer'],
-                  'NextAction': node.outputs['transfer']},
-              if (node.outputs['hangup'] != null)
-                {'Operator': 'Equals', 'Operands': ['hangup'],
-                  'NextAction': node.outputs['hangup']},
-            ],
-          },
-        ));
+        return _MappedNode(
+          _action(
+            node,
+            _typeInvokeLambda,
+            {'FunctionArn': '', '_nexusAiGoal': node.config['goal'] ?? ''},
+            {
+              'NextAction': node.outputs['next'] ?? '',
+              'Conditions': [
+                if (node.outputs['transfer'] != null)
+                  {
+                    'Operator': 'Equals',
+                    'Operands': ['transfer'],
+                    'NextAction': node.outputs['transfer'],
+                  },
+                if (node.outputs['hangup'] != null)
+                  {
+                    'Operator': 'Equals',
+                    'Operands': ['hangup'],
+                    'NextAction': node.outputs['hangup'],
+                  },
+              ],
+            },
+          ),
+        );
 
       // ---- Record -> approximate with a contact-attribute flag -----------
       // Connect call recording is configured via the "Set recording behavior"
       // block; we approximate with UpdateContactData and note the manual step.
       case CallNodeType.record:
-        return _MappedNode(_action(
-          node,
-          _typeUpdateContactData,
-          {'Attribute': 'recordingBehavior', 'Value': 'Enable'},
-          _linearTransition(node),
-        ));
+        return _MappedNode(
+          _action(node, _typeUpdateContactData, {
+            'Attribute': 'recordingBehavior',
+            'Value': 'Enable',
+          }, _linearTransition(node)),
+        );
 
       // ---- Dial-by-name directory ----------------------------------------
       // No native Connect equivalent; emit a GetParticipantInput placeholder
       // and flag it in notes() for manual buildout.
       case CallNodeType.playDirectory:
-        return _MappedNode(_action(
-          node,
-          _typeGetInput,
-          {
-            'InputType': 'DTMF',
-            '_nexusUnsupported': 'dial-by-name directory',
-          },
-          {
-            'NextAction': node.outputs['matched'] ?? '',
-            'Errors': [
-              {'ErrorType': 'NoMatchingError',
-                'NextAction': node.outputs['nomatch'] ?? ''},
-            ],
-          },
-        ));
+        return _MappedNode(
+          _action(
+            node,
+            _typeGetInput,
+            {
+              'InputType': 'DTMF',
+              '_nexusUnsupported': 'dial-by-name directory',
+            },
+            {
+              'NextAction': node.outputs['matched'] ?? '',
+              'Errors': [
+                {
+                  'ErrorType': 'NoMatchingError',
+                  'NextAction': node.outputs['nomatch'] ?? '',
+                },
+              ],
+            },
+          ),
+        );
 
       // ---- Sub-flow -> TransferToFlow ------------------------------------
       case CallNodeType.subFlow:
-        return _MappedNode(_action(
-          node,
-          _typeTransferToFlow,
-          {'ContactFlowId': node.config['flowId'] ?? ''},
-          {'NextAction': node.outputs['returned'] ?? ''},
-        ));
+        return _MappedNode(
+          _action(
+            node,
+            _typeTransferToFlow,
+            {'ContactFlowId': node.config['flowId'] ?? ''},
+            {'NextAction': node.outputs['returned'] ?? ''},
+          ),
+        );
 
       // ---- Hangup -> DisconnectParticipant -------------------------------
       case CallNodeType.hangup:
-        return _MappedNode(_action(
-          node,
-          _typeDisconnect,
-          const {},
-          const {}, // terminal block: no transitions
-        ));
+        return _MappedNode(
+          _action(
+            node,
+            _typeDisconnect,
+            const {},
+            const {}, // terminal block: no transitions
+          ),
+        );
 
       // ---- Entry is handled in the walker and never reaches here ----------
       case CallNodeType.entry:
-        return _MappedNode(_action(
-          node,
-          _typeMessage,
-          const {'_nexusNote': 'entry marker'},
-          _linearTransition(node),
-        ));
+        return _MappedNode(
+          _action(node, _typeMessage, const {
+            '_nexusNote': 'entry marker',
+          }, _linearTransition(node)),
+        );
     }
   }
 
@@ -402,8 +414,8 @@ class AmazonConnectExporter implements CallSystemExporter {
 
   /// Single linear successor over the `next` port.
   Map<String, dynamic> _linearTransition(CallNode node) => {
-        'NextAction': node.outputs['next'] ?? '',
-      };
+    'NextAction': node.outputs['next'] ?? '',
+  };
 
   /// Menu: each configured digit port becomes an Equals condition; `timeout`
   /// and `invalid` become typed errors.
@@ -423,87 +435,103 @@ class AmazonConnectExporter implements CallSystemExporter {
     return {
       'Conditions': conditions,
       'Errors': [
-        {'ErrorType': 'InputTimeLimitExceeded',
-          'NextAction': node.outputs['timeout'] ?? ''},
-        {'ErrorType': 'NoMatchingCondition',
-          'NextAction': node.outputs['invalid'] ?? ''},
+        {
+          'ErrorType': 'InputTimeLimitExceeded',
+          'NextAction': node.outputs['timeout'] ?? '',
+        },
+        {
+          'ErrorType': 'NoMatchingCondition',
+          'NextAction': node.outputs['invalid'] ?? '',
+        },
       ],
     };
   }
 
   /// gatherDigits / gatherSpeech transitions.
   Map<String, dynamic> _gatherTransitions(CallNode node) => {
-        'NextAction': node.outputs['next'] ?? '',
-        'Errors': [
-          {'ErrorType': 'InputTimeLimitExceeded',
-            'NextAction': node.outputs['timeout'] ?? ''},
-          if (node.outputs.containsKey('nomatch'))
-            {'ErrorType': 'NoMatchingError',
-              'NextAction': node.outputs['nomatch'] ?? ''},
-        ],
-      };
+    'NextAction': node.outputs['next'] ?? '',
+    'Errors': [
+      {
+        'ErrorType': 'InputTimeLimitExceeded',
+        'NextAction': node.outputs['timeout'] ?? '',
+      },
+      if (node.outputs.containsKey('nomatch'))
+        {
+          'ErrorType': 'NoMatchingError',
+          'NextAction': node.outputs['nomatch'] ?? '',
+        },
+    ],
+  };
 
   /// dial / transferToExtension transitions: answered is the happy path; the
   /// noanswer/busy/failed ports map to typed errors.
   Map<String, dynamic> _dialTransitions(CallNode node) => {
-        'NextAction': node.outputs['answered'] ?? '',
-        'Errors': [
-          if (node.outputs['noanswer'] != null)
-            {'ErrorType': 'NoAnswer', 'NextAction': node.outputs['noanswer']},
-          if (node.outputs['busy'] != null)
-            {'ErrorType': 'Busy', 'NextAction': node.outputs['busy']},
-          if (node.outputs['failed'] != null)
-            {'ErrorType': 'CallFailed', 'NextAction': node.outputs['failed']},
-        ],
-      };
+    'NextAction': node.outputs['answered'] ?? '',
+    'Errors': [
+      if (node.outputs['noanswer'] != null)
+        {'ErrorType': 'NoAnswer', 'NextAction': node.outputs['noanswer']},
+      if (node.outputs['busy'] != null)
+        {'ErrorType': 'Busy', 'NextAction': node.outputs['busy']},
+      if (node.outputs['failed'] != null)
+        {'ErrorType': 'CallFailed', 'NextAction': node.outputs['failed']},
+    ],
+  };
 
   /// queue / ringGroup transitions.
-  Map<String, dynamic> _queueTransitions(CallNode node,
-          {required String answered, required String other}) =>
-      {
-        'NextAction': node.outputs[answered] ?? '',
-        'Errors': [
-          if (node.outputs[other] != null)
-            {'ErrorType': 'QueueAtCapacity',
-              'NextAction': node.outputs[other]},
-          if (node.outputs['empty'] != null)
-            {'ErrorType': 'NoAgentsAvailable',
-              'NextAction': node.outputs['empty']},
-        ],
-      };
+  Map<String, dynamic> _queueTransitions(
+    CallNode node, {
+    required String answered,
+    required String other,
+  }) => {
+    'NextAction': node.outputs[answered] ?? '',
+    'Errors': [
+      if (node.outputs[other] != null)
+        {'ErrorType': 'QueueAtCapacity', 'NextAction': node.outputs[other]},
+      if (node.outputs['empty'] != null)
+        {'ErrorType': 'NoAgentsAvailable', 'NextAction': node.outputs['empty']},
+    ],
+  };
 
   /// schedule (CheckHoursOfOperation) branches on open/closed/holiday.
   Map<String, dynamic> _scheduleTransitions(CallNode node) => {
-        'NextAction': node.outputs['open'] ?? '',
-        'Conditions': [
-          if (node.outputs['closed'] != null)
-            {'Operator': 'Equals', 'Operands': ['False'],
-              'NextAction': node.outputs['closed']},
-          if (node.outputs['holiday'] != null)
-            {'Operator': 'Equals', 'Operands': ['Holiday'],
-              'NextAction': node.outputs['holiday']},
-        ],
-      };
+    'NextAction': node.outputs['open'] ?? '',
+    'Conditions': [
+      if (node.outputs['closed'] != null)
+        {
+          'Operator': 'Equals',
+          'Operands': ['False'],
+          'NextAction': node.outputs['closed'],
+        },
+      if (node.outputs['holiday'] != null)
+        {
+          'Operator': 'Equals',
+          'Operands': ['Holiday'],
+          'NextAction': node.outputs['holiday'],
+        },
+    ],
+  };
 
   /// condition (CompareContactAttributes) branches true/false.
   Map<String, dynamic> _conditionTransitions(CallNode node) => {
-        'NextAction': node.outputs['true'] ?? '',
-        'Conditions': [
-          if (node.outputs['false'] != null)
-            {'Operator': 'Equals', 'Operands': ['False'],
-              'NextAction': node.outputs['false']},
-        ],
-      };
+    'NextAction': node.outputs['true'] ?? '',
+    'Conditions': [
+      if (node.outputs['false'] != null)
+        {
+          'Operator': 'Equals',
+          'Operands': ['False'],
+          'NextAction': node.outputs['false'],
+        },
+    ],
+  };
 
   /// httpRequest (InvokeLambdaFunction) success/failure.
   Map<String, dynamic> _successFailureTransitions(CallNode node) => {
-        'NextAction': node.outputs['success'] ?? '',
-        'Errors': [
-          if (node.outputs['failure'] != null)
-            {'ErrorType': 'LambdaError',
-              'NextAction': node.outputs['failure']},
-        ],
-      };
+    'NextAction': node.outputs['success'] ?? '',
+    'Errors': [
+      if (node.outputs['failure'] != null)
+        {'ErrorType': 'LambdaError', 'NextAction': node.outputs['failure']},
+    ],
+  };
 
   // ---------------------------------------------------------------------------
   // Small helpers.
@@ -516,13 +544,12 @@ class AmazonConnectExporter implements CallSystemExporter {
     String type,
     Map<String, dynamic> parameters,
     Map<String, dynamic> transitions,
-  ) =>
-      {
-        'Identifier': node.id,
-        'Type': type,
-        'Parameters': parameters,
-        if (transitions.isNotEmpty) 'Transitions': transitions,
-      };
+  ) => {
+    'Identifier': node.id,
+    'Type': type,
+    'Parameters': parameters,
+    if (transitions.isNotEmpty) 'Transitions': transitions,
+  };
 
   /// Resolve the prompt text for a node via its `promptId` config key, falling
   /// back to the node label so the block is never empty.
@@ -571,32 +598,44 @@ class AmazonConnectExporter implements CallSystemExporter {
     }
 
     if (usedTypes.contains(CallNodeType.voicemail)) {
-      caveats.add('Voicemail nodes are emitted as a greeting message only. '
-          'Native Connect voicemail requires the AWS Connect voicemail '
-          'solution (Lambda + storage); wire it after import.');
+      caveats.add(
+        'Voicemail nodes are emitted as a greeting message only. '
+        'Native Connect voicemail requires the AWS Connect voicemail '
+        'solution (Lambda + storage); wire it after import.',
+      );
     }
     if (usedTypes.contains(CallNodeType.aiVoicebot)) {
-      caveats.add('AI voicebot nodes map to InvokeLambdaFunction carrying the '
-          'configured goal; connect this to Amazon Lex / Bedrock for the '
-          'conversational turn.');
+      caveats.add(
+        'AI voicebot nodes map to InvokeLambdaFunction carrying the '
+        'configured goal; connect this to Amazon Lex / Bedrock for the '
+        'conversational turn.',
+      );
     }
     if (usedTypes.contains(CallNodeType.httpRequest)) {
-      caveats.add('HTTP request nodes map to InvokeLambdaFunction (Connect '
-          'cannot call arbitrary HTTP endpoints directly); supply the Lambda '
-          'ARN of an HTTP-proxy function.');
+      caveats.add(
+        'HTTP request nodes map to InvokeLambdaFunction (Connect '
+        'cannot call arbitrary HTTP endpoints directly); supply the Lambda '
+        'ARN of an HTTP-proxy function.',
+      );
     }
     if (usedTypes.contains(CallNodeType.record)) {
-      caveats.add('Record nodes are approximated with UpdateContactData; use '
-          'the native "Set recording and analytics behavior" block to enable '
-          'call recording in Connect.');
+      caveats.add(
+        'Record nodes are approximated with UpdateContactData; use '
+        'the native "Set recording and analytics behavior" block to enable '
+        'call recording in Connect.',
+      );
     }
     if (usedTypes.contains(CallNodeType.playDirectory)) {
-      caveats.add('Dial-by-name directory has no native Connect block; the '
-          'emitted GetParticipantInput placeholder must be built out manually.');
+      caveats.add(
+        'Dial-by-name directory has no native Connect block; the '
+        'emitted GetParticipantInput placeholder must be built out manually.',
+      );
     }
     if (usedTypes.contains(CallNodeType.ringGroup)) {
-      caveats.add('Ring groups are mapped to TransferContactToQueue (Connect '
-          'routes by queue, not ad-hoc ring groups); create matching queues.');
+      caveats.add(
+        'Ring groups are mapped to TransferContactToQueue (Connect '
+        'routes by queue, not ad-hoc ring groups); create matching queues.',
+      );
     }
 
     return caveats;

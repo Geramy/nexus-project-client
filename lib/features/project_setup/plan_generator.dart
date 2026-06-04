@@ -60,8 +60,10 @@ class PlanGenerator {
     final b = StringBuffer();
     b.writeln('# Project Overview');
     b.writeln();
-    b.writeln('> Generated from Project Setup. Edit freely — this is the '
-        'project-wide context shared by every layer.');
+    b.writeln(
+      '> Generated from Project Setup. Edit freely — this is the '
+      'project-wide context shared by every layer.',
+    );
     b.writeln();
 
     _section(b, 'Industries', _values(tags, TagCategory.industries));
@@ -105,20 +107,27 @@ class PlanGenerator {
           .where((t) => t.knownCategory == TagCategory.frameworks)
           .map((t) => t.value),
       ...tags
-          .where((t) =>
-              t.knownCategory == TagCategory.frameworks && t.layerKey == layer.key)
+          .where(
+            (t) =>
+                t.knownCategory == TagCategory.frameworks &&
+                t.layerKey == layer.key,
+          )
           .map((t) => t.value),
     }.toList();
     final langSet = langs.map((l) => l.toLowerCase()).toSet();
     final libraries = tags
-        .where((t) =>
-            t.knownCategory == TagCategory.libraries &&
-            (t.layerKey == layer.key ||
-                (t.forLanguage != null &&
-                    langSet.contains(t.forLanguage!.toLowerCase())) ||
-                (t.layerKey == null && t.forLanguage == null)))
-        .map((t) =>
-            t.forLanguage == null ? t.value : '${t.value} (${t.forLanguage})')
+        .where(
+          (t) =>
+              t.knownCategory == TagCategory.libraries &&
+              (t.layerKey == layer.key ||
+                  (t.forLanguage != null &&
+                      langSet.contains(t.forLanguage!.toLowerCase())) ||
+                  (t.layerKey == null && t.forLanguage == null)),
+        )
+        .map(
+          (t) =>
+              t.forLanguage == null ? t.value : '${t.value} (${t.forLanguage})',
+        )
         .toSet()
         .toList();
     final objectives = _values(tags, TagCategory.objectives);
@@ -126,8 +135,10 @@ class PlanGenerator {
     final b = StringBuffer();
     b.writeln('# ${layer.label}');
     b.writeln();
-    b.writeln('> Layer plan generated from Project Setup. Workers building this '
-        'layer should read this file first as their system-prompt context.');
+    b.writeln(
+      '> Layer plan generated from Project Setup. Workers building this '
+      'layer should read this file first as their system-prompt context.',
+    );
     b.writeln();
 
     b.writeln('## Stack');
@@ -158,37 +169,37 @@ class PlanGenerator {
   }
 
   List<String> _outlineFor(Layer layer) => switch (layer) {
-        Layer.client => const [
-            'Define navigation + screen map',
-            'Implement state management & data layer',
-            'Wire API client to the Server',
-            'Style + theming pass',
-          ],
-        Layer.server => const [
-            'Define API surface (endpoints / contracts)',
-            'Implement auth & request validation',
-            'Wire persistence to the Database',
-            'Integration tests for the API',
-          ],
-        Layer.db => const [
-            'Design schema + relationships',
-            'Write migrations',
-            'Seed/reference data',
-            'Indexing & query review',
-          ],
-        Layer.worker => const [
-            'Define the compute job contract',
-            'Implement the hot path in native code',
-            'Benchmark & profile',
-            'Bridge to the Server',
-          ],
-        Layer.module => const [
-            'Define the safety-critical boundary',
-            'Implement the hardened module',
-            'Fuzz / property tests',
-            'Expose a safe FFI surface',
-          ],
-      };
+    Layer.client => const [
+      'Define navigation + screen map',
+      'Implement state management & data layer',
+      'Wire API client to the Server',
+      'Style + theming pass',
+    ],
+    Layer.server => const [
+      'Define API surface (endpoints / contracts)',
+      'Implement auth & request validation',
+      'Wire persistence to the Database',
+      'Integration tests for the API',
+    ],
+    Layer.db => const [
+      'Design schema + relationships',
+      'Write migrations',
+      'Seed/reference data',
+      'Indexing & query review',
+    ],
+    Layer.worker => const [
+      'Define the compute job contract',
+      'Implement the hot path in native code',
+      'Benchmark & profile',
+      'Bridge to the Server',
+    ],
+    Layer.module => const [
+      'Define the safety-critical boundary',
+      'Implement the hardened module',
+      'Fuzz / property tests',
+      'Expose a safe FFI surface',
+    ],
+  };
 
   // ==================== Helpers ====================
 

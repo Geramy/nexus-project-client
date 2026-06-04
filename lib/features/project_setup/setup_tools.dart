@@ -17,12 +17,8 @@ import 'providers/tag_providers.dart';
 /// An empty result of either kind is a skip.
 class SetupAnswer {
   const SetupAnswer.picks(this.picks) : freeText = null;
-  const SetupAnswer.text(String text)
-      : picks = const [],
-        freeText = text;
-  const SetupAnswer.skipped()
-      : picks = const [],
-        freeText = null;
+  const SetupAnswer.text(String text) : picks = const [], freeText = text;
+  const SetupAnswer.skipped() : picks = const [], freeText = null;
 
   /// Chip/checkbox selections (when the user expanded and clicked the options).
   final List<String> picks;
@@ -42,7 +38,9 @@ class SetupAnswer {
 class SetupTools {
   /// [categories] are the tag categories the active setup flow proposes into
   /// (the flow's stage keys). Defaults to the software profile's seven sections.
-  static List<Map<String, dynamic>> buildToolSchemas({List<String>? categories}) {
+  static List<Map<String, dynamic>> buildToolSchemas({
+    List<String>? categories,
+  }) {
     final cats = (categories == null || categories.isEmpty)
         ? const [
             'industries',
@@ -63,10 +61,10 @@ class SetupTools {
           'name': 'ask_question',
           'description':
               'OPTIONAL guardrail: ask ONE bounded multiple-choice question when '
-                  'picking from options helps the user decide or confirms a '
-                  'direction. You can also just talk in plain text — use this only '
-                  'when bounded choices are genuinely useful, not every turn. The '
-                  'user answers by picking from the options you provide.',
+              'picking from options helps the user decide or confirms a '
+              'direction. You can also just talk in plain text — use this only '
+              'when bounded choices are genuinely useful, not every turn. The '
+              'user answers by picking from the options you provide.',
           'parameters': {
             'type': 'object',
             'properties': {
@@ -80,12 +78,12 @@ class SetupTools {
                 'type': 'boolean',
                 'description':
                     'Whether the user may pick more than one option. DEFAULTS '
-                        'TO TRUE — most setup questions (platforms, languages, '
-                        'frameworks, libraries, industries, objectives) are '
-                        'additive and the user should be able to choose several. '
-                        'Set this to false ONLY for a strict single-choice '
-                        'question such as a yes/no or an end-of-stage '
-                        '"continue vs. add more" confirmation.',
+                    'TO TRUE — most setup questions (platforms, languages, '
+                    'frameworks, libraries, industries, objectives) are '
+                    'additive and the user should be able to choose several. '
+                    'Set this to false ONLY for a strict single-choice '
+                    'question such as a yes/no or an end-of-stage '
+                    '"continue vs. add more" confirmation.',
               },
             },
             'required': ['question', 'options'],
@@ -98,12 +96,12 @@ class SetupTools {
           'name': 'scope_status',
           'description':
               'Read the adaptive scope for THIS project from the user\'s current '
-                  'selections. Call it right AFTER proposing `industries`, and '
-                  'again after `platforms`. It reports the selected industries, '
-                  'any sub-axis the chosen industry introduces (e.g. Gaming → '
-                  '"Genre") that you should ask NEXT, whether that sub-axis is '
-                  'already answered, and the selected platforms. Use the returned '
-                  'sub-axis + values as the options for your next ask_question.',
+              'selections. Call it right AFTER proposing `industries`, and '
+              'again after `platforms`. It reports the selected industries, '
+              'any sub-axis the chosen industry introduces (e.g. Gaming → '
+              '"Genre") that you should ask NEXT, whether that sub-axis is '
+              'already answered, and the selected platforms. Use the returned '
+              'sub-axis + values as the options for your next ask_question.',
           'parameters': {'type': 'object', 'properties': {}},
         },
       },
@@ -113,13 +111,13 @@ class SetupTools {
           'name': 'scope_options',
           'description':
               'Get vocabulary tailored to the user\'s selected industry + '
-                  'sub-axis (e.g. genre) for a category. Call this BEFORE asking '
-                  'objectives or features (use the returned values as the '
-                  'options), and when deriving languages/frameworks/libraries '
-                  '(pass the relevant platform). Platform-conditional: for '
-                  'languages/frameworks/libraries pass `platform` so you get the '
-                  'stack appropriate for that surface (e.g. Desktop games → '
-                  'C#/C++ engines; Mobile games → Flutter/Flame).',
+              'sub-axis (e.g. genre) for a category. Call this BEFORE asking '
+              'objectives or features (use the returned values as the '
+              'options), and when deriving languages/frameworks/libraries '
+              '(pass the relevant platform). Platform-conditional: for '
+              'languages/frameworks/libraries pass `platform` so you get the '
+              'stack appropriate for that surface (e.g. Desktop games → '
+              'C#/C++ engines; Mobile games → Flutter/Flame).',
           'parameters': {
             'type': 'object',
             'properties': {
@@ -138,7 +136,7 @@ class SetupTools {
                 'type': 'string',
                 'description':
                     'Optional platform bucket for stack categories: Mobile, '
-                        'Desktop, Web, Console, Embedded, Cloud/Server.',
+                    'Desktop, Web, Console, Embedded, Cloud/Server.',
               },
             },
             'required': ['category'],
@@ -151,8 +149,8 @@ class SetupTools {
           'name': 'lookup_package',
           'description':
               'Verify a library/framework against pub.dev or GitHub and get a '
-                  'deterministic freshness verdict (fresh|aging|stale|dead). '
-                  'Use before proposing any library tag.',
+              'deterministic freshness verdict (fresh|aging|stale|dead). '
+              'Use before proposing any library tag.',
           'parameters': {
             'type': 'object',
             'properties': {
@@ -175,11 +173,11 @@ class SetupTools {
           'name': 'propose_tags',
           'description':
               'Propose one or more tags for the project profile. Batch as many as '
-                  'you like in ONE call, across categories (e.g. a database + a '
-                  'service + features together) — no need to call this after every '
-                  'single message. Saved as `proposed` for the user to accept/'
-                  'reject. Languages and platforms must use the allowed vocab; '
-                  'databases/services/frameworks accept free entry.',
+              'you like in ONE call, across categories (e.g. a database + a '
+              'service + features together) — no need to call this after every '
+              'single message. Saved as `proposed` for the user to accept/'
+              'reject. Languages and platforms must use the allowed vocab; '
+              'databases/services/frameworks accept free entry.',
           'parameters': {
             'type': 'object',
             'properties': {
@@ -192,8 +190,8 @@ class SetupTools {
                       'type': 'string',
                       'description':
                           'One of the flow categories (${cats.join(', ')}), OR a '
-                              'sub-axis category reported by scope_status '
-                              '(e.g. `genre`).',
+                          'sub-axis category reported by scope_status '
+                          '(e.g. `genre`).',
                     },
                     'value': {'type': 'string'},
                     'layerKey': {
@@ -204,8 +202,8 @@ class SetupTools {
                       'type': 'string',
                       'description':
                           'Libraries ONLY: the language this package is used '
-                              'with (e.g. "Dart", "C#"). Must be an allowed '
-                              'Languages value. Omit for non-library tags.',
+                          'with (e.g. "Dart", "C#"). Must be an allowed '
+                          'Languages value. Omit for non-library tags.',
                     },
                     'rationale': {'type': 'string'},
                     'sourceUrl': {'type': 'string'},
@@ -224,8 +222,8 @@ class SetupTools {
           'name': 'finalize_setup',
           'description':
               'Resolve the architecture from the confirmed tags and generate the '
-                  '/PLANS layer files. Call when the user is satisfied with the '
-                  'profile.',
+              '/PLANS layer files. Call when the user is satisfied with the '
+              'profile.',
           'parameters': {'type': 'object', 'properties': {}},
         },
       },
@@ -244,7 +242,7 @@ class SetupTools {
           'name': 'list_plans',
           'description':
               'List the generated plan files under /PLANS (path + name) so you '
-                  'can decide which one a piece of detail belongs in.',
+              'can decide which one a piece of detail belongs in.',
           'parameters': {'type': 'object', 'properties': {}},
         },
       },
@@ -254,7 +252,7 @@ class SetupTools {
           'name': 'read_plan',
           'description':
               'Read the full Markdown of one plan file. ALWAYS read a plan '
-                  'before updating it so you preserve its existing content.',
+              'before updating it so you preserve its existing content.',
           'parameters': {
             'type': 'object',
             'properties': {
@@ -273,9 +271,9 @@ class SetupTools {
           'name': 'update_plan',
           'description':
               'Overwrite a plan file with an expanded version that folds the '
-                  "user's description into the right section. Preserve the "
-                  'existing headings and checkbox skeleton — ADD detail, never '
-                  'delete what is there. The change is applied immediately.',
+              "user's description into the right section. Preserve the "
+              'existing headings and checkbox skeleton — ADD detail, never '
+              'delete what is there. The change is applied immediately.',
           'parameters': {
             'type': 'object',
             'properties': {
@@ -287,7 +285,7 @@ class SetupTools {
                 'type': 'string',
                 'description':
                     'The complete new Markdown for the file (existing content '
-                        'plus your additions).',
+                    'plus your additions).',
               },
             },
             'required': ['path', 'content'],
@@ -325,8 +323,11 @@ class SetupToolExecutor {
   /// answer — typed free text or chip picks (see [SetupAnswer]). When null,
   /// ask_question reports that input isn't available.
   final Future<SetupAnswer> Function(
-          String question, List<String> options, bool multi)?
-      askQuestion;
+    String question,
+    List<String> options,
+    bool multi,
+  )?
+  askQuestion;
 
   Future<String> execute(String name, Map<String, dynamic> args) async {
     switch (name) {
@@ -409,13 +410,18 @@ class SetupToolExecutor {
   }
 
   /// Current selections + the sub-axis (if any) the chosen industry introduces.
-  Future<({List<String> industries, List<String> platforms, List<({String name, String key, List<String> values, bool answered})> subAxes})>
-      _readScope() async {
+  Future<
+    ({
+      List<String> industries,
+      List<String> platforms,
+      List<({String name, String key, List<String> values, bool answered})>
+      subAxes,
+    })
+  >
+  _readScope() async {
     final tags = await db.getTagsForProject(projectPk);
-    List<String> byCat(String c) => tags
-        .where((t) => t.category == c)
-        .map((t) => t.value)
-        .toList();
+    List<String> byCat(String c) =>
+        tags.where((t) => t.category == c).map((t) => t.value).toList();
     final industries = byCat('industries');
     final platforms = byCat('platforms');
     final axes = await db.subAxesForIndustries(industries);
@@ -426,7 +432,7 @@ class SetupToolExecutor {
           key: a.key,
           values: a.values,
           answered: byCat(a.key).isNotEmpty,
-        )
+        ),
     ];
     return (industries: industries, platforms: platforms, subAxes: subAxes);
   }
@@ -446,8 +452,9 @@ class SetupToolExecutor {
       return 'BOARD STATE: nothing selected yet.';
     }
     final b = StringBuffer(
-        'BOARD STATE (the source of truth — do NOT re-ask what is already '
-        'chosen; build on it):');
+      'BOARD STATE (the source of truth — do NOT re-ask what is already '
+      'chosen; build on it):',
+    );
     byCat.forEach((cat, vals) => b.write('\n- $cat: ${vals.join(', ')}'));
     return b.toString();
   }
@@ -464,14 +471,18 @@ class SetupToolExecutor {
     }
     final pending = s.subAxes.where((a) => !a.answered).toList();
     if (pending.isEmpty) {
-      b.write(' No sub-axis pending. Proceed to objectives/features '
-          '(call scope_options first for tailored options).');
+      b.write(
+        ' No sub-axis pending. Proceed to objectives/features '
+        '(call scope_options first for tailored options).',
+      );
     } else {
       for (final a in pending) {
-        b.write('\nSub-axis to ask NEXT: "${a.name}" (category `${a.key}`). '
-            'Ask the user which ${a.name.toLowerCase()}(s) apply, using these '
-            'options: ${a.values.join(', ')}. Then propose_tags with category '
-            '`${a.key}`.');
+        b.write(
+          '\nSub-axis to ask NEXT: "${a.name}" (category `${a.key}`). '
+          'Ask the user which ${a.name.toLowerCase()}(s) apply, using these '
+          'options: ${a.values.join(', ')}. Then propose_tags with category '
+          '`${a.key}`.',
+        );
       }
     }
     return b.toString();
@@ -488,13 +499,13 @@ class SetupToolExecutor {
     final tags = await db.getTagsForProject(projectPk);
     for (final a in s.subAxes) {
       subValues.addAll(
-          tags.where((t) => t.category == a.key).map((t) => t.value));
+        tags.where((t) => t.category == a.key).map((t) => t.value),
+      );
     }
     final rawPlatform = args['platform']?.toString();
-    final platform =
-        (rawPlatform != null && rawPlatform.trim().isNotEmpty)
-            ? _platformBucket(rawPlatform)
-            : null;
+    final platform = (rawPlatform != null && rawPlatform.trim().isNotEmpty)
+        ? _platformBucket(rawPlatform)
+        : null;
     final values = await db.scopeOptions(
       industries: s.industries,
       subValues: subValues,
@@ -592,19 +603,21 @@ class SetupToolExecutor {
         } catch (_) {}
       }
 
-      await controller.upsert(ProjectTag(
-        category: catStr,
-        value: value,
-        source: TagSource.ai,
-        origin: 'setup',
-        status: TagStatus.proposed,
-        layerKey: entry['layerKey']?.toString(),
-        forLanguage: forLanguage,
-        rationale: entry['rationale']?.toString(),
-        sourceUrl: sourceUrl,
-        verdict: verdict,
-        verifiedAt: verifiedAt,
-      ));
+      await controller.upsert(
+        ProjectTag(
+          category: catStr,
+          value: value,
+          source: TagSource.ai,
+          origin: 'setup',
+          status: TagStatus.proposed,
+          layerKey: entry['layerKey']?.toString(),
+          forLanguage: forLanguage,
+          rationale: entry['rationale']?.toString(),
+          sourceUrl: sourceUrl,
+          verdict: verdict,
+          verifiedAt: verifiedAt,
+        ),
+      );
       accepted.add(value);
       if (catStr == 'industries') proposedIndustries.add(value);
     }
@@ -618,12 +631,14 @@ class SetupToolExecutor {
     if (proposedIndustries.isNotEmpty) {
       final axes = await db.subAxesForIndustries(proposedIndustries);
       for (final a in axes) {
-        b.write('\nNEXT: "${a.name}" applies to '
-            '${proposedIndustries.join(', ')} — ask which '
-            '${a.name.toLowerCase()}(s) via ask_question using these options: '
-            '${a.values.join(', ')}; then propose_tags(category `${a.key}`). '
-            'After that, call scope_options for objectives and features to get '
-            'vocabulary tailored to this selection.');
+        b.write(
+          '\nNEXT: "${a.name}" applies to '
+          '${proposedIndustries.join(', ')} — ask which '
+          '${a.name.toLowerCase()}(s) via ask_question using these options: '
+          '${a.values.join(', ')}; then propose_tags(category `${a.key}`). '
+          'After that, call scope_options for objectives and features to get '
+          'vocabulary tailored to this selection.',
+        );
       }
     }
     return b.isEmpty ? 'No valid tags to propose.' : b.toString();
@@ -632,19 +647,21 @@ class SetupToolExecutor {
   Future<String> _finalize() async {
     final tags = await db.getTagsForProject(projectPk);
     final uiTags = tags
-        .map((row) => ProjectTag(
-              tagPk: row.tag_pk,
-              category: row.category,
-              value: row.value,
-              source: TagSourceX.fromWire(row.source),
-              origin: row.origin,
-              status: TagStatusX.fromWire(row.status),
-              layerKey: row.layerKey,
-              forLanguage: row.forLanguage,
-              rationale: row.rationale,
-              sourceUrl: row.sourceUrl,
-              verdict: row.verdict,
-            ))
+        .map(
+          (row) => ProjectTag(
+            tagPk: row.tag_pk,
+            category: row.category,
+            value: row.value,
+            source: TagSourceX.fromWire(row.source),
+            origin: row.origin,
+            status: TagStatusX.fromWire(row.status),
+            layerKey: row.layerKey,
+            forLanguage: row.forLanguage,
+            rationale: row.rationale,
+            sourceUrl: row.sourceUrl,
+            verdict: row.verdict,
+          ),
+        )
         .where((t) => !t.isRejected)
         .toList();
 

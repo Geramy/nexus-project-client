@@ -92,11 +92,17 @@ class CiLogEvent {
   final String line;
   final DateTime at;
 
-  CiLogEvent(this.line, {this.jobIndex, this.stepIndex, this.stream = CiLogStream.stdout, DateTime? at})
-      : at = at ?? DateTime.now();
+  CiLogEvent(
+    this.line, {
+    this.jobIndex,
+    this.stepIndex,
+    this.stream = CiLogStream.stdout,
+    DateTime? at,
+  }) : at = at ?? DateTime.now();
 
   /// A run-level system line (orchestration / status messages).
-  factory CiLogEvent.system(String line) => CiLogEvent(line, stream: CiLogStream.system);
+  factory CiLogEvent.system(String line) =>
+      CiLogEvent(line, stream: CiLogStream.system);
 }
 
 /// Sink a backend/runner uses to emit log lines as it works.
@@ -147,7 +153,11 @@ class CiStepOutcome {
   final String name;
   final CiStatus status;
   final int? exitCode;
-  const CiStepOutcome({required this.name, required this.status, this.exitCode});
+  const CiStepOutcome({
+    required this.name,
+    required this.status,
+    this.exitCode,
+  });
 }
 
 /// Result of a finished job.
@@ -155,7 +165,11 @@ class CiJobOutcome {
   final String name;
   final CiStatus status;
   final List<CiStepOutcome> steps;
-  const CiJobOutcome({required this.name, required this.status, this.steps = const []});
+  const CiJobOutcome({
+    required this.name,
+    required this.status,
+    this.steps = const [],
+  });
 }
 
 /// Final result of a run.

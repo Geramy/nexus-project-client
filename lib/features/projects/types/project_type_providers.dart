@@ -10,8 +10,10 @@ import '../../../infrastructure/database/nexus_database.dart' show Project;
 import 'project_type.dart';
 
 /// Reactive single project row for [projectId].
-final projectByIdProvider =
-    StreamProvider.family<Project?, int>((ref, projectId) {
+final projectByIdProvider = StreamProvider.family<Project?, int>((
+  ref,
+  projectId,
+) {
   return ref.watch(nexusDatabaseProvider).watchProject(projectId);
 });
 

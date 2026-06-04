@@ -34,6 +34,6 @@ class SetupScopes extends Table {
 
   @override
   List<Set<Column>> get uniqueKeys => [
-        {axis, value, parent_scope_fk}
-      ];
+    {axis, value, parent_scope_fk},
+  ];
 }

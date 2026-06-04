@@ -73,15 +73,18 @@ class _AiAssistDialogState extends ConsumerState<_AiAssistDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Describe the phone system you want',
-                style: theme.textTheme.titleSmall),
+            Text(
+              'Describe the phone system you want',
+              style: theme.textTheme.titleSmall,
+            ),
             Gap.xs,
             Text(
               'e.g. "A dental office: greet callers, press 1 for appointments, '
               '2 for billing, 3 to leave a voicemail. After hours, send everyone '
               'to voicemail."',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: context.nx.textMuted),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: context.nx.textMuted,
+              ),
             ),
             Gap.md,
             TextField(
@@ -89,14 +92,18 @@ class _AiAssistDialogState extends ConsumerState<_AiAssistDialog> {
               minLines: 3,
               maxLines: 6,
               decoration: const InputDecoration(
-                  border: OutlineInputBorder(), hintText: 'Describe your call flow…'),
+                border: OutlineInputBorder(),
+                hintText: 'Describe your call flow…',
+              ),
             ),
             Gap.md,
             GradientButton(
               onPressed: _busy || _desc.text.trim().isEmpty
                   ? null
-                  : () => _run(() => _ai.generateFlow(_desc.text.trim()),
-                      'Generating the call flow…'),
+                  : () => _run(
+                      () => _ai.generateFlow(_desc.text.trim()),
+                      'Generating the call flow…',
+                    ),
               busy: _busy,
               label: 'Generate call flow',
               icon: Icons.account_tree_outlined,
@@ -107,40 +114,60 @@ class _AiAssistDialogState extends ConsumerState<_AiAssistDialog> {
               onPressed: _busy
                   ? null
                   : () => _run(() async {
-                        final n = await _ai.synthesizePrompts(force: true);
-                        if (mounted) {
-                          setState(() => _status = 'Synthesized $n prompt(s).');
-                        }
-                      }, 'Synthesizing prompt audio with Omni TTS…'),
+                      final n = await _ai.synthesizePrompts(force: true);
+                      if (mounted) {
+                        setState(() => _status = 'Synthesized $n prompt(s).');
+                      }
+                    }, 'Synthesizing prompt audio with Omni TTS…'),
               icon: const Icon(Icons.graphic_eq, size: 18),
               label: const Text('Synthesize all prompt audio'),
             ),
             if (_status != null && _error == null) ...[
               Gap.sm,
-              Row(children: [
-                Icon(Icons.check_circle_outline,
-                    size: 16, color: theme.colorScheme.primary),
-                const SizedBox(width: 6),
-                Expanded(child: Text(_status!, style: theme.textTheme.bodySmall)),
-              ]),
+              Row(
+                children: [
+                  Icon(
+                    Icons.check_circle_outline,
+                    size: 16,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(_status!, style: theme.textTheme.bodySmall),
+                  ),
+                ],
+              ),
             ],
             if (_error != null) ...[
               Gap.sm,
-              Row(children: [
-                Icon(Icons.error_outline, size: 16, color: theme.colorScheme.error),
-                const SizedBox(width: 6),
-                Expanded(
-                    child: Text(_error!,
-                        style: TextStyle(color: theme.colorScheme.error, fontSize: 13))),
-              ]),
+              Row(
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    size: 16,
+                    color: theme.colorScheme.error,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      _error!,
+                      style: TextStyle(
+                        color: theme.colorScheme.error,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ],
         ),
       ),
       actions: [
         TextButton(
-            onPressed: _busy ? null : () => Navigator.pop(context),
-            child: const Text('Close')),
+          onPressed: _busy ? null : () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
       ],
     );
   }

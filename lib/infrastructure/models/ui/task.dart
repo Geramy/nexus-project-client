@@ -12,8 +12,8 @@ class Task {
   final double usdCost;
   final String? mastermindPersonaId;
   final List<String> subAgentIds;
-  final String? parentId;           // For task tree hierarchy
-  final List<String> childIds;      // Sub-tasks
+  final String? parentId; // For task tree hierarchy
+  final List<String> childIds; // Sub-tasks
 
   const Task({
     required this.id,

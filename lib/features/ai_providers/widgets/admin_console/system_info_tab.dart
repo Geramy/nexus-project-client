@@ -73,7 +73,8 @@ class _AdminSystemInfoTabState extends ConsumerState<AdminSystemInfoTab> {
             },
           ),
           const SizedBox(height: 12),
-          for (final entry in devices.entries) ..._buildDeviceCard(entry.key.toString(), entry.value),
+          for (final entry in devices.entries)
+            ..._buildDeviceCard(entry.key.toString(), entry.value),
         ],
       ),
     );
@@ -98,7 +99,8 @@ class _AdminSystemInfoTabState extends ConsumerState<AdminSystemInfoTab> {
             _Card(
               title: name,
               entries: {
-                for (final e in item.entries) e.key.toString(): e.value.toString(),
+                for (final e in item.entries)
+                  e.key.toString(): e.value.toString(),
               },
             ),
         const SizedBox(height: 12),
@@ -132,7 +134,10 @@ class _Card extends StatelessWidget {
                   children: [
                     Expanded(
                       flex: 2,
-                      child: Text(e.key, style: Theme.of(context).textTheme.bodyMedium),
+                      child: Text(
+                        e.key,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
                     ),
                     Expanded(
                       flex: 3,

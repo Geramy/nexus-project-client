@@ -44,7 +44,9 @@ class StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _color(context);
-    final bg = color.withValues(alpha: filled ? 0.9 : (context.nx.isDark ? 0.16 : 0.12));
+    final bg = color.withValues(
+      alpha: filled ? 0.9 : (context.nx.isDark ? 0.16 : 0.12),
+    );
     final fg = filled ? Colors.white : color;
     return Container(
       padding: EdgeInsets.symmetric(

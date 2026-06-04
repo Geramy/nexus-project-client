@@ -63,10 +63,9 @@ class AdminEndpoint {
 
   /// POST /v1/delete — remove a model from local storage.
   Future<Map<String, dynamic>> delete({required String modelName}) {
-    return _client.postJson(
-      _client.apiUriFor('/delete'),
-      {'model_name': modelName},
-    );
+    return _client.postJson(_client.apiUriFor('/delete'), {
+      'model_name': modelName,
+    });
   }
 
   /// POST /v1/install — install or update a recipe/backend pair.
@@ -75,16 +74,12 @@ class AdminEndpoint {
     required String backend,
     bool force = false,
   }) {
-    return _client.postJson(
-      _client.apiUriFor('/install'),
-      {
-        'recipe': recipe,
-        'backend': backend,
-        'stream': false,
-        if (force) 'force': true,
-      },
-      timeout: const Duration(minutes: 30),
-    );
+    return _client.postJson(_client.apiUriFor('/install'), {
+      'recipe': recipe,
+      'backend': backend,
+      'stream': false,
+      if (force) 'force': true,
+    }, timeout: const Duration(minutes: 30));
   }
 
   /// POST /v1/uninstall — remove a backend.
@@ -92,10 +87,10 @@ class AdminEndpoint {
     required String recipe,
     required String backend,
   }) {
-    return _client.postJson(
-      _client.apiUriFor('/uninstall'),
-      {'recipe': recipe, 'backend': backend},
-    );
+    return _client.postJson(_client.apiUriFor('/uninstall'), {
+      'recipe': recipe,
+      'backend': backend,
+    });
   }
 
   /// POST /v1/pull (stream=true) — install with progress events.
@@ -121,10 +116,7 @@ class AdminEndpoint {
       mmproj: mmproj,
       stream: true,
     );
-    final sse = _client.streamSseFromJsonPost(
-      _client.apiUriFor('/pull'),
-      body,
-    );
+    final sse = _client.streamSseFromJsonPost(_client.apiUriFor('/pull'), body);
 
     await for (final SseEvent ev in sse) {
       final data = ev.data.trim();
@@ -154,7 +146,9 @@ class AdminEndpoint {
           );
           return;
         case 'error':
-          yield PullEvent.error(payload['error']?.toString() ?? 'Unknown error');
+          yield PullEvent.error(
+            payload['error']?.toString() ?? 'Unknown error',
+          );
           return;
         default:
           break;

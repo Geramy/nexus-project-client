@@ -40,8 +40,9 @@ class LocalDockerBackend implements BuildBackend {
 
     final imageTag = request.imageTag;
     final dockerfilePath = request.dockerfilePath;
-    final buildContext =
-        request.buildContext.isEmpty ? '.' : request.buildContext;
+    final buildContext = request.buildContext.isEmpty
+        ? '.'
+        : request.buildContext;
 
     // Assemble: docker build -t <tag> -f <dockerfile> [--build-arg k=v ...] <ctx>
     final args = <String>['build'];

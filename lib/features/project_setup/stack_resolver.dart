@@ -13,12 +13,12 @@ enum Layer { client, server, db, worker, module }
 extension LayerX on Layer {
   String get key => name;
   String get label => switch (this) {
-        Layer.client => 'Client',
-        Layer.server => 'Server',
-        Layer.db => 'Database',
-        Layer.worker => 'Worker',
-        Layer.module => 'Module',
-      };
+    Layer.client => 'Client',
+    Layer.server => 'Server',
+    Layer.db => 'Database',
+    Layer.worker => 'Worker',
+    Layer.module => 'Module',
+  };
 }
 
 /// Deterministic architecture resolver. Reads the (non-rejected) intent tags —
@@ -56,61 +56,105 @@ class StackResolver {
     final resolved = <ProjectTag>[];
 
     void add(TagCategory category, String value, Layer layer, String why) {
-      resolved.add(ProjectTag(
-        category: category.wire,
-        value: value,
-        source: TagSource.ai,
-        origin: 'setup',
-        status: TagStatus.proposed,
-        layerKey: layer.key,
-        rationale: why,
-      ));
+      resolved.add(
+        ProjectTag(
+          category: category.wire,
+          value: value,
+          source: TagSource.ai,
+          origin: 'setup',
+          status: TagStatus.proposed,
+          layerKey: layer.key,
+          rationale: why,
+        ),
+      );
     }
 
     // ---- Client: any UI surface → Flutter/Dart ----
-    final hasUi = platforms.isNotEmpty ||
+    final hasUi =
+        platforms.isNotEmpty ||
         has(objectives, 'ui') ||
         has(objectives, 'dashboard') ||
         has(objectives, 'customer');
     if (hasUi) {
-      add(TagCategory.languages, 'Dart', Layer.client,
-          'Flutter/Dart is the default frontend for any UI surface.');
-      add(TagCategory.frameworks, 'Flutter', Layer.client,
-          'Cross-platform UI for the selected platforms.');
+      add(
+        TagCategory.languages,
+        'Dart',
+        Layer.client,
+        'Flutter/Dart is the default frontend for any UI surface.',
+      );
+      add(
+        TagCategory.frameworks,
+        'Flutter',
+        Layer.client,
+        'Cross-platform UI for the selected platforms.',
+      );
     }
 
     // ---- Server / API tier ----
     // Default to C# / ASP.NET Core + EF Core. When the objectives signal heavy
     // computation / highly distributed / ML work, the server tier becomes
     // native C/C++ (Drogon) instead — this merges the old separate worker layer.
-    final heavyServer = has(objectives, 'heavy computation') ||
+    final heavyServer =
+        has(objectives, 'heavy computation') ||
         has(objectives, 'distributed') ||
         has(objectives, 'machine learning');
     if (heavyServer) {
-      add(TagCategory.languages, 'C++', Layer.server,
-          'Heavy computation / highly distributed / ML workloads warrant a native C/C++ API tier.');
-      add(TagCategory.frameworks, 'Drogon', Layer.server,
-          'High-performance C++ HTTP/API framework for the native server tier.');
+      add(
+        TagCategory.languages,
+        'C++',
+        Layer.server,
+        'Heavy computation / highly distributed / ML workloads warrant a native C/C++ API tier.',
+      );
+      add(
+        TagCategory.frameworks,
+        'Drogon',
+        Layer.server,
+        'High-performance C++ HTTP/API framework for the native server tier.',
+      );
     } else {
-      add(TagCategory.languages, 'C#', Layer.server,
-          'Default API/server tier — C# / ASP.NET Core for standard business backends.');
-      add(TagCategory.frameworks, 'ASP.NET Core', Layer.server,
-          'Default server framework for the API tier.');
-      add(TagCategory.frameworks, 'Entity Framework Core', Layer.server,
-          'ORM for the C# server tier talking to PostgreSQL.');
+      add(
+        TagCategory.languages,
+        'C#',
+        Layer.server,
+        'Default API/server tier — C# / ASP.NET Core for standard business backends.',
+      );
+      add(
+        TagCategory.frameworks,
+        'ASP.NET Core',
+        Layer.server,
+        'Default server framework for the API tier.',
+      );
+      add(
+        TagCategory.frameworks,
+        'Entity Framework Core',
+        Layer.server,
+        'ORM for the C# server tier talking to PostgreSQL.',
+      );
     }
 
     // ---- Database: always PostgreSQL ----
-    add(TagCategory.languages, 'SQL', Layer.db,
-        'PostgreSQL is the recommended database.');
-    add(TagCategory.frameworks, 'PostgreSQL', Layer.db,
-        'Recommended relational database for the server.');
+    add(
+      TagCategory.languages,
+      'SQL',
+      Layer.db,
+      'PostgreSQL is the recommended database.',
+    );
+    add(
+      TagCategory.frameworks,
+      'PostgreSQL',
+      Layer.db,
+      'Recommended relational database for the server.',
+    );
 
     // ---- Module: memory-safety critical → Rust (last resort) ----
     if (has(objectives, 'memory-safety') || has(objectives, 'memory safety')) {
       layers.add(Layer.module);
-      add(TagCategory.languages, 'Rust', Layer.module,
-          'Memory-safety-critical work — Rust as a hardened last resort (confirm to enable).');
+      add(
+        TagCategory.languages,
+        'Rust',
+        Layer.module,
+        'Memory-safety-critical work — Rust as a hardened last resort (confirm to enable).',
+      );
     }
 
     return ResolvedStack(

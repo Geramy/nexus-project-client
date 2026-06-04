@@ -13,10 +13,13 @@ import 'project.dart';
 class Builds extends Table {
   IntColumn get build_pk => integer().autoIncrement()();
   IntColumn get client_fk => integer().references(Clients, #client_pk)();
-  IntColumn get project_fk => integer().nullable().references(Projects, #project_pk)();
+  IntColumn get project_fk =>
+      integer().nullable().references(Projects, #project_pk)();
 
   TextColumn get name => text()();
-  TextColumn get status => text().withDefault(const Constant('pending'))(); // pending, running, success, failed
+  TextColumn get status => text().withDefault(
+    const Constant('pending'),
+  )(); // pending, running, success, failed
   TextColumn get triggeredBy => text().nullable()(); // agent or user
 
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();

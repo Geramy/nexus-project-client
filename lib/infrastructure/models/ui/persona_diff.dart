@@ -27,9 +27,10 @@ class PersonaDiff {
 
 /// A single field that has been overridden on an instance relative to its prefab.
 class PersonaFieldChange {
-  final String fieldName;           // e.g. "primaryModel", "costPerMillionTokens", "capabilities"
-  final dynamic baseValue;          // value from the prefab
-  final dynamic localValue;         // value on the instance (the override)
+  final String
+  fieldName; // e.g. "primaryModel", "costPerMillionTokens", "capabilities"
+  final dynamic baseValue; // value from the prefab
+  final dynamic localValue; // value on the instance (the override)
 
   const PersonaFieldChange({
     required this.fieldName,
@@ -48,9 +49,9 @@ class PersonaFieldChange {
 /// Note: `effective` and `basePrefab` are the raw Drift rows from the database.
 /// UI layers should map them to `ui_model.AgentPersona` when needed.
 class ResolvedPersona {
-  final dynamic effective;           // Drift AgentPersona row (final merged values)
-  final dynamic? basePrefab;         // Drift AgentPersona row (the source prefab)
-  final PersonaDiff? diff;           // Structured diff of local overrides
+  final dynamic effective; // Drift AgentPersona row (final merged values)
+  final dynamic? basePrefab; // Drift AgentPersona row (the source prefab)
+  final PersonaDiff? diff; // Structured diff of local overrides
 
   /// True if this persona is derived from a prefab.
   bool get isFromPrefab => basePrefab != null;
@@ -58,9 +59,5 @@ class ResolvedPersona {
   /// True if the user has made local changes on top of the prefab.
   bool get hasLocalOverrides => diff?.hasChanges ?? false;
 
-  const ResolvedPersona({
-    required this.effective,
-    this.basePrefab,
-    this.diff,
-  });
+  const ResolvedPersona({required this.effective, this.basePrefab, this.diff});
 }

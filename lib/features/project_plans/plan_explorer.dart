@@ -44,16 +44,23 @@ class _PlanExplorerState extends ConsumerState<PlanExplorer> {
               children: [
                 const Icon(Icons.account_tree_outlined, size: 18),
                 const SizedBox(width: 8),
-                Expanded(child: Text('Plans', style: Theme.of(context).textTheme.titleSmall)),
+                Expanded(
+                  child: Text(
+                    'Plans',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
                 IconButton(
                   icon: const Icon(Icons.create_new_folder_outlined, size: 18),
                   tooltip: 'New folder',
-                  onPressed: () => _create(projectId, parentPath: null, isFolder: true),
+                  onPressed: () =>
+                      _create(projectId, parentPath: null, isFolder: true),
                 ),
                 IconButton(
                   icon: const Icon(Icons.note_add_outlined, size: 18),
                   tooltip: 'New plan',
-                  onPressed: () => _create(projectId, parentPath: null, isFolder: false),
+                  onPressed: () =>
+                      _create(projectId, parentPath: null, isFolder: false),
                 ),
               ],
             ),
@@ -67,18 +74,29 @@ class _PlanExplorerState extends ConsumerState<PlanExplorer> {
                 if (plans.isEmpty) {
                   return const Padding(
                     padding: EdgeInsets.all(16),
-                    child: Text('No plans yet.\nUse the + buttons to add a plan or folder.',
-                        style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    child: Text(
+                      'No plans yet.\nUse the + buttons to add a plan or folder.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
                   );
                 }
-                final roots = plans.where((p) => p.parent == plansRoot).toList()..sort(_byKind);
+                final roots = plans.where((p) => p.parent == plansRoot).toList()
+                  ..sort(_byKind);
                 return ListView(
                   padding: const EdgeInsets.symmetric(vertical: 4),
-                  children: [for (final r in roots) ..._buildNode(r, plans, openPath, 0, projectId)],
+                  children: [
+                    for (final r in roots)
+                      ..._buildNode(r, plans, openPath, 0, projectId),
+                  ],
                 );
               },
-              loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-              error: (e, _) => Padding(padding: const EdgeInsets.all(16), child: Text('Error: $e', style: const TextStyle(fontSize: 12))),
+              loading: () => const Center(
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              error: (e, _) => Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text('Error: $e', style: const TextStyle(fontSize: 12)),
+              ),
             ),
           ),
         ],
@@ -108,17 +126,33 @@ class _PlanExplorerState extends ConsumerState<PlanExplorer> {
             break;
           }
         }
-        final valid = current != null && personas.any((p) => p.agent_pk == current) ? current : null;
+        final valid =
+            current != null && personas.any((p) => p.agent_pk == current)
+            ? current
+            : null;
         return Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(children: const [
-                Icon(Icons.smart_toy_outlined, size: 14, color: Colors.purple),
-                SizedBox(width: 6),
-                Text('Coordinator Agent', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey)),
-              ]),
+              Row(
+                children: const [
+                  Icon(
+                    Icons.smart_toy_outlined,
+                    size: 14,
+                    color: Colors.purple,
+                  ),
+                  SizedBox(width: 6),
+                  Text(
+                    'Coordinator Agent',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 6),
               DropdownButtonFormField<int?>(
                 initialValue: valid,
@@ -127,28 +161,53 @@ class _PlanExplorerState extends ConsumerState<PlanExplorer> {
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
                   isDense: true,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
                 ),
                 items: [
-                  const DropdownMenuItem(value: null, child: Text('No agent (server default)', overflow: TextOverflow.ellipsis)),
+                  const DropdownMenuItem(
+                    value: null,
+                    child: Text(
+                      'No agent (server default)',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                   for (final p in personas)
-                    DropdownMenuItem(value: p.agent_pk, child: Text(p.name, overflow: TextOverflow.ellipsis)),
+                    DropdownMenuItem(
+                      value: p.agent_pk,
+                      child: Text(p.name, overflow: TextOverflow.ellipsis),
+                    ),
                 ],
                 onChanged: (v) async {
-                  await ref.read(nexusDatabaseProvider).setProjectAgentPersona(projectId, v);
+                  await ref
+                      .read(nexusDatabaseProvider)
+                      .setProjectAgentPersona(projectId, v);
                   if (!mounted) return;
                   final name = v == null
                       ? 'none (server default)'
-                      : personas.firstWhere((p) => p.agent_pk == v, orElse: () => personas.first).name;
+                      : personas
+                            .firstWhere(
+                              (p) => p.agent_pk == v,
+                              orElse: () => personas.first,
+                            )
+                            .name;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Coordinator agent set to: $name'), duration: const Duration(seconds: 2)),
+                    SnackBar(
+                      content: Text('Coordinator agent set to: $name'),
+                      duration: const Duration(seconds: 2),
+                    ),
                   );
                 },
               ),
               if (personas.isEmpty)
                 const Padding(
                   padding: EdgeInsets.only(top: 4),
-                  child: Text('No personas yet — create one in Agents.', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                  child: Text(
+                    'No personas yet — create one in Agents.',
+                    style: TextStyle(fontSize: 10, color: Colors.grey),
+                  ),
                 ),
             ],
           ),
@@ -159,32 +218,60 @@ class _PlanExplorerState extends ConsumerState<PlanExplorer> {
     );
   }
 
-  List<Widget> _buildNode(PlanNode node, List<PlanNode> all, String? openPath, int depth, int projectId) {
+  List<Widget> _buildNode(
+    PlanNode node,
+    List<PlanNode> all,
+    String? openPath,
+    int depth,
+    int projectId,
+  ) {
     final isOpen = node.path == openPath;
-    final children = all.where((p) => p.parent == node.path).toList()..sort(_byKind);
+    final children = all.where((p) => p.parent == node.path).toList()
+      ..sort(_byKind);
     final expanded = _expanded.contains(node.path);
 
     final row = InkWell(
       onTap: () {
         if (node.isFolder) {
-          setState(() => expanded ? _expanded.remove(node.path) : _expanded.add(node.path));
+          setState(
+            () => expanded
+                ? _expanded.remove(node.path)
+                : _expanded.add(node.path),
+          );
         } else {
           ref.read(openPlanNotifierProvider.notifier).open(node.path);
           ref.read(planModeNotifierProvider.notifier).set(PlanMode.edit);
         }
       },
       child: Container(
-        color: isOpen ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.35) : null,
-        padding: EdgeInsets.only(left: 8.0 + depth * 14, top: 5, bottom: 5, right: 4),
+        color: isOpen
+            ? Theme.of(
+                context,
+              ).colorScheme.primaryContainer.withValues(alpha: 0.35)
+            : null,
+        padding: EdgeInsets.only(
+          left: 8.0 + depth * 14,
+          top: 5,
+          bottom: 5,
+          right: 4,
+        ),
         child: Row(
           children: [
             Icon(
-              node.isFolder ? (expanded ? Icons.folder_open : Icons.folder) : Icons.description_outlined,
+              node.isFolder
+                  ? (expanded ? Icons.folder_open : Icons.folder)
+                  : Icons.description_outlined,
               size: 16,
               color: node.isFolder ? Colors.amber.shade700 : Colors.blueGrey,
             ),
             const SizedBox(width: 6),
-            Expanded(child: Text(node.name, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
+            Expanded(
+              child: Text(
+                node.name,
+                style: const TextStyle(fontSize: 13),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
             _rowMenu(node, projectId),
           ],
         ),
@@ -194,7 +281,8 @@ class _PlanExplorerState extends ConsumerState<PlanExplorer> {
     return [
       row,
       if (node.isFolder && expanded)
-        for (final c in children) ..._buildNode(c, all, openPath, depth + 1, projectId),
+        for (final c in children)
+          ..._buildNode(c, all, openPath, depth + 1, projectId),
     ];
   }
 
@@ -204,8 +292,13 @@ class _PlanExplorerState extends ConsumerState<PlanExplorer> {
       padding: EdgeInsets.zero,
       tooltip: 'Options',
       itemBuilder: (_) => [
-        if (node.isFolder) const PopupMenuItem(value: 'newPlan', child: Text('New plan inside')),
-        if (node.isFolder) const PopupMenuItem(value: 'newFolder', child: Text('New folder inside')),
+        if (node.isFolder)
+          const PopupMenuItem(value: 'newPlan', child: Text('New plan inside')),
+        if (node.isFolder)
+          const PopupMenuItem(
+            value: 'newFolder',
+            child: Text('New folder inside'),
+          ),
         const PopupMenuItem(value: 'rename', child: Text('Rename')),
         const PopupMenuItem(value: 'delete', child: Text('Delete')),
       ],
@@ -236,11 +329,22 @@ class _PlanExplorerState extends ConsumerState<PlanExplorer> {
     ref.read(gitStatusRevisionProvider(projectId).notifier).state++;
   }
 
-  Future<void> _create(int projectId, {required String? parentPath, required bool isFolder}) async {
-    final name = await _promptName(isFolder ? 'New folder' : 'New plan', isFolder ? 'Folder name' : 'Plan name');
+  Future<void> _create(
+    int projectId, {
+    required String? parentPath,
+    required bool isFolder,
+  }) async {
+    final name = await _promptName(
+      isFolder ? 'New folder' : 'New plan',
+      isFolder ? 'Folder name' : 'Plan name',
+    );
     if (name == null || name.isEmpty) return;
     final store = await ref.read(planStoreProvider(projectId).future);
-    final path = await store.create(parent: parentPath, name: name, isFolder: isFolder);
+    final path = await store.create(
+      parent: parentPath,
+      name: name,
+      isFolder: isFolder,
+    );
     _bump(projectId);
     if (!isFolder) {
       ref.read(openPlanNotifierProvider.notifier).open(path);
@@ -263,12 +367,20 @@ class _PlanExplorerState extends ConsumerState<PlanExplorer> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Delete ${node.isFolder ? 'folder' : 'plan'}'),
-        content: Text(node.isFolder
-            ? 'Delete "${node.name}" and everything inside it? Tasks generated from these plans keep their history but lose the plan link.'
-            : 'Delete "${node.name}"? Tasks generated from it keep their history but lose the plan link.'),
+        content: Text(
+          node.isFolder
+              ? 'Delete "${node.name}" and everything inside it? Tasks generated from these plans keep their history but lose the plan link.'
+              : 'Delete "${node.name}"? Tasks generated from it keep their history but lose the plan link.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
         ],
       ),
     );
@@ -287,10 +399,20 @@ class _PlanExplorerState extends ConsumerState<PlanExplorer> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(title),
-        content: TextField(controller: ctrl, autofocus: true, decoration: InputDecoration(labelText: label)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          decoration: InputDecoration(labelText: label),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('OK')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: const Text('OK'),
+          ),
         ],
       ),
     );

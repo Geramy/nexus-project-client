@@ -96,4 +96,6 @@ Map<String, TextStyle> highlightThemeFor(Brightness brightness) =>
 
 /// Background behind highlighted code, matched to the chosen theme.
 Color highlightBackground(Brightness brightness) =>
-    brightness == Brightness.dark ? const Color(0xFF282C34) : const Color(0xFFFAFAFA);
+    brightness == Brightness.dark
+    ? const Color(0xFF282C34)
+    : const Color(0xFFFAFAFA);

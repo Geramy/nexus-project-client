@@ -20,6 +20,6 @@ class SetupFlows extends Table {
 
   @override
   List<Set<Column>> get uniqueKeys => [
-        {projectType, subCategory}
-      ];
+    {projectType, subCategory},
+  ];
 }

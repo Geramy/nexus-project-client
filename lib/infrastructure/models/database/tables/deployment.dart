@@ -11,13 +11,15 @@ import 'project.dart';
 class Deployments extends Table {
   IntColumn get deployment_pk => integer().autoIncrement()();
   IntColumn get client_fk => integer().references(Clients, #client_pk)();
-  IntColumn get project_fk => integer().nullable().references(Projects, #project_pk)();
+  IntColumn get project_fk =>
+      integer().nullable().references(Projects, #project_pk)();
 
   TextColumn get name => text().withLength(min: 1, max: 150)();
   TextColumn get environment => text().withDefault(const Constant('staging'))();
   TextColumn get status => text().withDefault(const Constant('pending'))();
 
-  TextColumn get triggeredBy => text().nullable()(); // user or agent persona (polymorphic label)
+  TextColumn get triggeredBy =>
+      text().nullable()(); // user or agent persona (polymorphic label)
 
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get completedAt => dateTime().nullable()();

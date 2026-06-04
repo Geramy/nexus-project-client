@@ -11,10 +11,12 @@ import 'package:drift/drift.dart' show Value;
 import 'package:nexus_projects_client/core/providers/app_shell_provider.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/infrastructure/lemonade/models/server_config.dart';
-import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart' show InferenceServersCompanion;
+import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart'
+    show InferenceServersCompanion;
 import 'package:nexus_projects_client/infrastructure/lemonade/services/secure_key_store.dart';
 import 'package:nexus_projects_client/features/agents/dialogs/server_config_dialog.dart';
-import 'package:nexus_projects_client/infrastructure/models/ui/inference_server.dart' as ui_model;
+import 'package:nexus_projects_client/infrastructure/models/ui/inference_server.dart'
+    as ui_model;
 import 'package:nexus_projects_client/infrastructure/lemonade/providers/lemonade_servers_provider.dart';
 import 'package:nexus_projects_client/features/ai_providers/providers/ai_servers_cache_provider.dart';
 
@@ -23,7 +25,11 @@ class ConfiguredServerCard extends ConsumerWidget {
   final ServerConfig server;
   final bool isSelected;
 
-  const ConfiguredServerCard({super.key, required this.server, required this.isSelected});
+  const ConfiguredServerCard({
+    super.key,
+    required this.server,
+    required this.isSelected,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -44,7 +50,9 @@ class ConfiguredServerCard extends ConsumerWidget {
               IconButton(
                 icon: const Icon(Icons.check_circle_outline),
                 tooltip: 'Select',
-                onPressed: () => ref.read(selectedLemonadeServerProvider.notifier).selectServer(server),
+                onPressed: () => ref
+                    .read(selectedLemonadeServerProvider.notifier)
+                    .selectServer(server),
               ),
             IconButton(
               icon: const Icon(Icons.edit_outlined),
@@ -58,7 +66,9 @@ class ConfiguredServerCard extends ConsumerWidget {
             ),
           ],
         ),
-        onTap: () => ref.read(selectedLemonadeServerProvider.notifier).selectServer(server),
+        onTap: () => ref
+            .read(selectedLemonadeServerProvider.notifier)
+            .selectServer(server),
       ),
     );
   }
@@ -92,7 +102,9 @@ class ConfiguredServerCard extends ConsumerWidget {
       // The DB row is the source of truth for the key (it's what the coordinator
       // client actually uses). Fall back to SecureKeyStore only if the DB is
       // empty, for backward compatibility with keys saved before this change.
-      apiKey: row.apiKey.isNotEmpty ? row.apiKey : (await SecureKeyStore.readApiKey(row.name) ?? ''),
+      apiKey: row.apiKey.isNotEmpty
+          ? row.apiKey
+          : (await SecureKeyStore.readApiKey(row.name) ?? ''),
       providerType: row.providerType,
       maxConcurrency: row.maxConcurrency,
       maxAgents: row.maxAgents,
@@ -111,9 +123,9 @@ class ConfiguredServerCard extends ConsumerWidget {
       final availableModelsJson = jsonEncode(updated.availableModels);
       final capabilitiesJson = jsonEncode(updated.capabilities);
 
-      await (db.update(db.inferenceServers)
-            ..where((s) => s.server_pk.equals(int.parse(updated.id))))
-          .write(
+      await (db.update(
+        db.inferenceServers,
+      )..where((s) => s.server_pk.equals(int.parse(updated.id)))).write(
         InferenceServersCompanion(
           baseUrl: Value(updated.baseUrl),
           // Persist the edited API key (was hardcoded to '' here, which wiped
@@ -138,7 +150,10 @@ class ConfiguredServerCard extends ConsumerWidget {
         title: const Text('Remove Server'),
         content: Text('Are you sure you want to remove "${server.name}"?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Remove'),
@@ -162,7 +177,9 @@ class ConfiguredServerCard extends ConsumerWidget {
       orElse: () => throw Exception('Server not found'),
     );
 
-    await (db.delete(db.inferenceServers)..where((s) => s.server_pk.equals(row.server_pk))).go();
+    await (db.delete(
+      db.inferenceServers,
+    )..where((s) => s.server_pk.equals(row.server_pk))).go();
 
     ref.invalidate(lemonadeServersProvider);
 
@@ -170,8 +187,8 @@ class ConfiguredServerCard extends ConsumerWidget {
       ref.read(selectedLemonadeServerProvider.notifier).selectServer(null);
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Server "${server.name}" removed.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Server "${server.name}" removed.')));
   }
 }

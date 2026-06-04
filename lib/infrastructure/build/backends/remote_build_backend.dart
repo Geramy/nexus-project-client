@@ -39,8 +39,8 @@ class RemoteBuildBackend implements BuildBackend {
     required String baseUrl,
     this.authToken,
     HttpClient? httpClient,
-  })  : baseUrl = _normalize(baseUrl),
-        _httpClient = httpClient ?? HttpClient();
+  }) : baseUrl = _normalize(baseUrl),
+       _httpClient = httpClient ?? HttpClient();
 
   static String _normalize(String url) {
     var u = url.trim();
@@ -78,15 +78,15 @@ class RemoteBuildBackend implements BuildBackend {
   }
 
   Map<String, dynamic> _requestToJson(CiRunRequest request) => {
-        'kind': request.kind.wire,
-        'dockerfilePath': request.dockerfilePath,
-        'imageTag': request.imageTag,
-        'buildContext': request.buildContext,
-        'buildArgs': request.buildArgs,
-        'workflowPath': request.workflowPath,
-        'branch': request.branch,
-        'commitOid': request.commitOid,
-      };
+    'kind': request.kind.wire,
+    'dockerfilePath': request.dockerfilePath,
+    'imageTag': request.imageTag,
+    'buildContext': request.buildContext,
+    'buildArgs': request.buildArgs,
+    'workflowPath': request.workflowPath,
+    'branch': request.branch,
+    'commitOid': request.commitOid,
+  };
 
   @override
   Future<CiRunOutcome> execute(
@@ -127,10 +127,12 @@ class RemoteBuildBackend implements BuildBackend {
 
       if (resp.statusCode != 200) {
         await resp.drain<void>();
-        log(CiLogEvent(
-          'Nexus build server returned HTTP ${resp.statusCode}.',
-          stream: CiLogStream.system,
-        ));
+        log(
+          CiLogEvent(
+            'Nexus build server returned HTTP ${resp.statusCode}.',
+            stream: CiLogStream.system,
+          ),
+        );
         return CiRunOutcome.failedToStart(
           'Nexus build server returned HTTP ${resp.statusCode}.',
         );
@@ -155,12 +157,14 @@ class RemoteBuildBackend implements BuildBackend {
 
         final type = obj['type'] as String?;
         if (type == 'log') {
-          log(CiLogEvent(
-            (obj['line'] as String?) ?? '',
-            jobIndex: (obj['jobIndex'] as num?)?.toInt(),
-            stepIndex: (obj['stepIndex'] as num?)?.toInt(),
-            stream: CiLogStreamX.fromWire(obj['stream'] as String?),
-          ));
+          log(
+            CiLogEvent(
+              (obj['line'] as String?) ?? '',
+              jobIndex: (obj['jobIndex'] as num?)?.toInt(),
+              stepIndex: (obj['stepIndex'] as num?)?.toInt(),
+              stream: CiLogStreamX.fromWire(obj['stream'] as String?),
+            ),
+          );
         } else if (type == 'result') {
           outcome = _parseResult(obj);
         }
@@ -184,8 +188,12 @@ class RemoteBuildBackend implements BuildBackend {
       if (cancelled) {
         return const CiRunOutcome(status: CiStatus.cancelled);
       }
-      log(CiLogEvent('Remote build failed: ${e.message}',
-          stream: CiLogStream.system));
+      log(
+        CiLogEvent(
+          'Remote build failed: ${e.message}',
+          stream: CiLogStream.system,
+        ),
+      );
       return CiRunOutcome.failedToStart('Remote build failed: ${e.message}');
     } catch (e) {
       if (cancelled) {
@@ -225,8 +233,8 @@ class RemoteBuildBackend implements BuildBackend {
   }
 
   CiStepOutcome _parseStep(Map<String, dynamic> obj) => CiStepOutcome(
-        name: (obj['name'] as String?) ?? '',
-        status: CiStatusX.fromWire(obj['status'] as String?),
-        exitCode: (obj['exitCode'] as num?)?.toInt(),
-      );
+    name: (obj['name'] as String?) ?? '',
+    status: CiStatusX.fromWire(obj['status'] as String?),
+    exitCode: (obj['exitCode'] as num?)?.toInt(),
+  );
 }

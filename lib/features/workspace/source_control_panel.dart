@@ -44,9 +44,12 @@ class _SourceControlPanelState extends ConsumerState<SourceControlPanel> {
     final gitAsync = ref.watch(gitStatusProvider(projectId));
     final git = gitAsync.valueOrNull ?? GitStatusSnapshot.noRepo;
 
-    final changes = git.byPath.entries.where((e) => gitStatusIsDirty(e.value)).toList()
-      ..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase()));
-    final selectedCount = changes.where((e) => !_excluded.contains(e.key)).length;
+    final changes =
+        git.byPath.entries.where((e) => gitStatusIsDirty(e.value)).toList()
+          ..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase()));
+    final selectedCount = changes
+        .where((e) => !_excluded.contains(e.key))
+        .length;
     // Drop any excluded paths no longer in the changes list.
     final liveKeys = changes.map((e) => e.key).toSet();
     _excluded.retainAll(liveKeys);
@@ -58,7 +61,15 @@ class _SourceControlPanelState extends ConsumerState<SourceControlPanel> {
         const Divider(height: 1),
         _commitForm(context, projectId, selectedCount),
         const Divider(height: 1),
-        Expanded(child: _changesList(context, projectId, changes, selectedCount, gitAsync.hasError)),
+        Expanded(
+          child: _changesList(
+            context,
+            projectId,
+            changes,
+            selectedCount,
+            gitAsync.hasError,
+          ),
+        ),
       ],
     );
   }
@@ -70,11 +81,23 @@ class _SourceControlPanelState extends ConsumerState<SourceControlPanel> {
         children: [
           const Icon(Icons.source_outlined, size: 18),
           const SizedBox(width: 8),
-          const Expanded(child: Text('Source Control', style: TextStyle(fontWeight: FontWeight.w600))),
+          const Expanded(
+            child: Text(
+              'Source Control',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
           if (git.hasRepo)
             Chip(
-              avatar: const Icon(Icons.call_split, size: 12, color: Colors.grey),
-              label: Text(git.branch ?? '(detached)', style: const TextStyle(fontSize: 11)),
+              avatar: const Icon(
+                Icons.call_split,
+                size: 12,
+                color: Colors.grey,
+              ),
+              label: Text(
+                git.branch ?? '(detached)',
+                style: const TextStyle(fontSize: 11),
+              ),
               visualDensity: VisualDensity.compact,
               padding: const EdgeInsets.symmetric(horizontal: 4),
             ),
@@ -85,14 +108,19 @@ class _SourceControlPanelState extends ConsumerState<SourceControlPanel> {
             onPressed: () {
               debugPrint('[ui] push tapped (remote layer not wired)');
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Push needs a remote configured — the Remote layer lands next.')),
+                const SnackBar(
+                  content: Text(
+                    'Push needs a remote configured — the Remote layer lands next.',
+                  ),
+                ),
               );
             },
           ),
           IconButton(
             icon: const Icon(Icons.refresh, size: 18),
             tooltip: 'Refresh',
-            onPressed: () => ref.read(gitStatusRevisionProvider(projectId).notifier).state++,
+            onPressed: () =>
+                ref.read(gitStatusRevisionProvider(projectId).notifier).state++,
           ),
         ],
       ),
@@ -100,7 +128,8 @@ class _SourceControlPanelState extends ConsumerState<SourceControlPanel> {
   }
 
   Widget _commitForm(BuildContext context, int projectId, int selectedCount) {
-    final canCommit = selectedCount > 0 && !_committing && _titleCtrl.text.trim().isNotEmpty;
+    final canCommit =
+        selectedCount > 0 && !_committing && _titleCtrl.text.trim().isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       child: Column(
@@ -131,13 +160,19 @@ class _SourceControlPanelState extends ConsumerState<SourceControlPanel> {
           FilledButton.icon(
             onPressed: canCommit ? () => _commit(context, projectId) : null,
             icon: _committing
-                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
                 : const Icon(Icons.commit, size: 16),
-            label: Text(_committing
-                ? 'Committing…'
-                : selectedCount > 0
-                    ? 'Commit $selectedCount selected'
-                    : 'Nothing selected'),
+            label: Text(
+              _committing
+                  ? 'Committing…'
+                  : selectedCount > 0
+                  ? 'Commit $selectedCount selected'
+                  : 'Nothing selected',
+            ),
           ),
         ],
       ),
@@ -166,21 +201,36 @@ class _SourceControlPanelState extends ConsumerState<SourceControlPanel> {
       _excluded.clear();
       ref.read(gitStatusRevisionProvider(projectId).notifier).state++;
       ref.read(workspaceRevisionProvider(projectId).notifier).state++;
-      debugPrint('[git] commit ok: ${oid.substring(0, 7)} (${selected.length} file(s))');
+      debugPrint(
+        '[git] commit ok: ${oid.substring(0, 7)} (${selected.length} file(s))',
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Committed ${oid.substring(0, 7)} (${selected.length} files)'), duration: const Duration(seconds: 2)),
+        SnackBar(
+          content: Text(
+            'Committed ${oid.substring(0, 7)} (${selected.length} files)',
+          ),
+          duration: const Duration(seconds: 2),
+        ),
       );
     } catch (e, st) {
       debugPrint('[git] commit failed: $e\n$st');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Commit failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Commit failed: $e')));
     } finally {
       if (mounted) setState(() => _committing = false);
     }
   }
 
-  Widget _changesList(BuildContext context, int projectId, List<MapEntry<String, GitFileStatus>> changes, int selectedCount, bool gitErrored) {
+  Widget _changesList(
+    BuildContext context,
+    int projectId,
+    List<MapEntry<String, GitFileStatus>> changes,
+    int selectedCount,
+    bool gitErrored,
+  ) {
     if (gitErrored) {
       return const Padding(
         padding: EdgeInsets.all(16),
@@ -194,8 +244,11 @@ class _SourceControlPanelState extends ConsumerState<SourceControlPanel> {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(24),
-          child: Text('No changes — working tree is clean.',
-              style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+          child: Text(
+            'No changes — working tree is clean.',
+            style: TextStyle(color: Colors.grey),
+            textAlign: TextAlign.center,
+          ),
         ),
       );
     }
@@ -206,18 +259,34 @@ class _SourceControlPanelState extends ConsumerState<SourceControlPanel> {
           padding: const EdgeInsets.fromLTRB(12, 8, 8, 4),
           child: Row(
             children: [
-              Text('Changes ($selectedCount/${changes.length})',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey)),
+              Text(
+                'Changes ($selectedCount/${changes.length})',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey,
+                ),
+              ),
               const Spacer(),
               TextButton(
                 onPressed: () => setState(() => _excluded.clear()),
-                style: TextButton.styleFrom(minimumSize: const Size(0, 28), padding: const EdgeInsets.symmetric(horizontal: 8)),
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(0, 28),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
                 child: const Text('Select All', style: TextStyle(fontSize: 12)),
               ),
               TextButton(
-                onPressed: () => setState(() => _excluded.addAll(changes.map((e) => e.key))),
-                style: TextButton.styleFrom(minimumSize: const Size(0, 28), padding: const EdgeInsets.symmetric(horizontal: 8)),
-                child: const Text('Select None', style: TextStyle(fontSize: 12)),
+                onPressed: () =>
+                    setState(() => _excluded.addAll(changes.map((e) => e.key))),
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(0, 28),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                child: const Text(
+                  'Select None',
+                  style: TextStyle(fontSize: 12),
+                ),
               ),
             ],
           ),
@@ -226,20 +295,35 @@ class _SourceControlPanelState extends ConsumerState<SourceControlPanel> {
           child: ListView.builder(
             padding: EdgeInsets.zero,
             itemCount: changes.length,
-            itemBuilder: (_, i) => _changeRow(context, projectId, changes[i].key, changes[i].value),
+            itemBuilder: (_, i) => _changeRow(
+              context,
+              projectId,
+              changes[i].key,
+              changes[i].value,
+            ),
           ),
         ),
       ],
     );
   }
 
-  Widget _changeRow(BuildContext context, int projectId, String path, GitFileStatus status) {
+  Widget _changeRow(
+    BuildContext context,
+    int projectId,
+    String path,
+    GitFileStatus status,
+  ) {
     final deco = gitDecorationFor(status);
     final basename = path.split('/').last;
-    final dirname = path.substring(0, path.length - basename.length - (path == '/$basename' ? 1 : 0));
+    final dirname = path.substring(
+      0,
+      path.length - basename.length - (path == '/$basename' ? 1 : 0),
+    );
     final included = !_excluded.contains(path);
     return InkWell(
-      onTap: () => ref.read(selectedWorkspaceFileProvider(projectId).notifier).state = path,
+      onTap: () =>
+          ref.read(selectedWorkspaceFileProvider(projectId).notifier).state =
+              path,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
         child: Row(
@@ -261,19 +345,36 @@ class _SourceControlPanelState extends ConsumerState<SourceControlPanel> {
                 width: 18,
                 child: Tooltip(
                   message: deco.tooltip,
-                  child: Text(deco.badge,
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: deco.color)),
+                  child: Text(
+                    deco.badge,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: deco.color,
+                    ),
+                  ),
                 ),
               ),
             Expanded(
               child: RichText(
                 overflow: TextOverflow.ellipsis,
                 text: TextSpan(
-                  style: DefaultTextStyle.of(context).style.copyWith(fontSize: 12),
+                  style: DefaultTextStyle.of(
+                    context,
+                  ).style.copyWith(fontSize: 12),
                   children: [
-                    TextSpan(text: basename, style: TextStyle(color: deco?.color)),
+                    TextSpan(
+                      text: basename,
+                      style: TextStyle(color: deco?.color),
+                    ),
                     if (dirname.isNotEmpty)
-                      TextSpan(text: ' $dirname', style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                      TextSpan(
+                        text: ' $dirname',
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 11,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -282,7 +383,9 @@ class _SourceControlPanelState extends ConsumerState<SourceControlPanel> {
               icon: const Icon(Icons.undo, size: 14),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-              tooltip: status == GitFileStatus.untracked ? 'Delete (untracked)' : 'Discard changes',
+              tooltip: status == GitFileStatus.untracked
+                  ? 'Delete (untracked)'
+                  : 'Discard changes',
               onPressed: () => _discard(context, projectId, path, status),
             ),
           ],
@@ -291,20 +394,35 @@ class _SourceControlPanelState extends ConsumerState<SourceControlPanel> {
     );
   }
 
-  Future<void> _discard(BuildContext context, int projectId, String path, GitFileStatus status) async {
+  Future<void> _discard(
+    BuildContext context,
+    int projectId,
+    String path,
+    GitFileStatus status,
+  ) async {
     final isUntracked = status == GitFileStatus.untracked;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(isUntracked ? 'Delete untracked file?' : 'Discard changes?'),
-        content: Text(isUntracked
-            ? 'Remove "$path" from the workspace? It is not in any commit, so this cannot be undone.'
-            : 'Restore "$path" to its committed (HEAD) version? Your uncommitted changes will be lost.'),
+        title: Text(
+          isUntracked ? 'Delete untracked file?' : 'Discard changes?',
+        ),
+        content: Text(
+          isUntracked
+              ? 'Remove "$path" from the workspace? It is not in any commit, so this cannot be undone.'
+              : 'Restore "$path" to its committed (HEAD) version? Your uncommitted changes will be lost.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(isUntracked ? 'Delete' : 'Discard', style: const TextStyle(color: Colors.red)),
+            child: Text(
+              isUntracked ? 'Delete' : 'Discard',
+              style: const TextStyle(color: Colors.red),
+            ),
           ),
         ],
       ),
@@ -315,14 +433,17 @@ class _SourceControlPanelState extends ConsumerState<SourceControlPanel> {
       if (isUntracked) {
         await fs.delete(path);
         if (ref.read(selectedWorkspaceFileProvider(projectId)) == path) {
-          ref.read(selectedWorkspaceFileProvider(projectId).notifier).state = null;
+          ref.read(selectedWorkspaceFileProvider(projectId).notifier).state =
+              null;
         }
       } else {
         // Tracked (modified or deleted): restore the HEAD blob into the workspace.
         final engine = await ref.read(gitEngineProvider(projectId).future);
         final bytes = await engine.headFileBytes(path);
         if (bytes == null) {
-          debugPrint('[git] discard: "$path" has no HEAD blob (treating as no-op)');
+          debugPrint(
+            '[git] discard: "$path" has no HEAD blob (treating as no-op)',
+          );
         } else {
           await fs.writeBytes(path, bytes);
         }
@@ -333,7 +454,9 @@ class _SourceControlPanelState extends ConsumerState<SourceControlPanel> {
     } catch (e, st) {
       debugPrint('[git] discard failed for $path: $e\n$st');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Discard failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Discard failed: $e')));
     }
   }
 }

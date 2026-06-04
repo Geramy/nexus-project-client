@@ -33,12 +33,7 @@ class NxtprjGitEngine {
 
   bool _disposed = false;
 
-  NxtprjGitEngine._(
-    this._ws,
-    this._odb,
-    this._refdb,
-    this._repo,
-  );
+  NxtprjGitEngine._(this._ws, this._odb, this._refdb, this._repo);
 
   /// Default branch when HEAD is unborn or symbolic-but-unresolvable.
   static const String _defaultBranch = 'main';
@@ -166,7 +161,8 @@ class NxtprjGitEngine {
 
   /// The branch ref to commit onto: HEAD's symbolic target, falling back to the
   /// default branch when HEAD is unborn/detached.
-  String _commitRefName() => _headSymbolicTarget() ?? 'refs/heads/$_defaultBranch';
+  String _commitRefName() =>
+      _headSymbolicTarget() ?? 'refs/heads/$_defaultBranch';
 
   // ── Commit ────────────────────────────────────────────────────────────
 
@@ -180,15 +176,17 @@ class NxtprjGitEngine {
     required String message,
     String authorName = 'Coordinator',
     String authorEmail = 'agent@nexus.local',
+    Workspace? tree,
   }) async {
-    final entries = await _ws.walk();
+    final ws = tree ?? _ws;
+    final entries = await ws.walk();
     // Collect file contents keyed by their path segments.
     final files = <List<String>, Uint8List>{};
     for (final e in entries) {
       if (e.isDirectory) continue;
       final segs = _segments(e.path);
       if (segs.isEmpty) continue;
-      files[segs] = await _ws.readBytes(e.path);
+      files[segs] = await ws.readBytes(e.path);
     }
 
     final treeOid = _buildTree(files);
@@ -200,6 +198,76 @@ class NxtprjGitEngine {
       authorEmail: authorEmail,
       treeHex: treeOid,
       parentHex: parentHex,
+    );
+  }
+
+  /// Commit the full contents of an ISOLATED working tree [tree] onto [branch]
+  /// in the shared object/ref database — without touching HEAD or any other
+  /// working tree. The parent is [branch]'s current tip and the branch ref is
+  /// advanced directly, so any number of per-task trees can commit to their own
+  /// branches concurrently (serialize the call through the git lane). Returns
+  /// the new commit hex.
+  Future<String> commitFrom(
+    Workspace tree, {
+    required String branch,
+    required String message,
+    String authorName = 'Coordinator',
+    String authorEmail = 'agent@nexus.local',
+  }) async {
+    final entries = await tree.walk();
+    final files = <List<String>, Uint8List>{};
+    for (final e in entries) {
+      if (e.isDirectory) continue;
+      final segs = _segments(e.path);
+      if (segs.isEmpty) continue;
+      files[segs] = await tree.readBytes(e.path);
+    }
+    final treeOid = _buildTree(files);
+    final refName = 'refs/heads/$branch';
+    final parentHex = _resolveOid(refName);
+    return _createCommit(
+      message: message,
+      authorName: authorName,
+      authorEmail: authorEmail,
+      treeHex: treeOid,
+      parentHex: parentHex,
+      refName: refName,
+    );
+  }
+
+  /// Hydrate an isolated working tree [tree] with the tip of [branch] (writing
+  /// every tracked blob, deleting files absent from that tree) — the per-task
+  /// equivalent of [checkoutBranch], but it never moves HEAD or the shared tree.
+  /// No-op (clears nothing) when the branch is unborn.
+  Future<void> materializeInto(String branch, Workspace tree) async {
+    final tipHex = _resolveOid('refs/heads/$branch');
+    if (tipHex == null) return;
+    await _materializeTree(tipHex, tree: tree);
+  }
+
+  /// Create [name] pointing at [base]'s tip without checking it out or touching
+  /// any working tree (ref-only). Used to root a task branch on main/parent so a
+  /// per-task tree can then be materialized from it. No-op if [name] exists.
+  Future<void> createBranchAt(String name, {required String base}) async {
+    final clean = name.trim();
+    if (clean.isEmpty ||
+        !_branchNameOk.hasMatch(clean) ||
+        clean.startsWith('/') ||
+        clean.endsWith('/')) {
+      throw StateError('Invalid branch name: "$name"');
+    }
+    final refName = 'refs/heads/$clean';
+    final exists = _ws.database.select('SELECT 1 FROM git_refs WHERE name=?', [
+      refName,
+    ]).isNotEmpty;
+    if (exists) return;
+    final baseHex = _resolveOid('refs/heads/$base');
+    // Unborn base (fresh project, no commit yet): leave the task branch unborn
+    // too — it's born by the worker's first commitFrom (parent = none).
+    if (baseHex == null) return;
+    _ws.database.execute(
+      'INSERT INTO git_refs(name, target, symbolic) VALUES(?, ?, NULL)',
+      [refName, baseHex],
     );
   }
 
@@ -230,8 +298,12 @@ class NxtprjGitEngine {
         // Subtrees first.
         node.dirs.forEach((name, child) {
           final childOidHex = _writeDir(child);
-          _insertEntry(builder, name, childOidHex,
-              git_filemode_t.GIT_FILEMODE_TREE);
+          _insertEntry(
+            builder,
+            name,
+            childOidHex,
+            git_filemode_t.GIT_FILEMODE_TREE,
+          );
         });
         // Existing blobs from HEAD (unchanged in this commit) — referenced by
         // their existing oid, no rewrite. Inserted before new-content files so
@@ -242,8 +314,12 @@ class NxtprjGitEngine {
         // Then files (blobs).
         node.files.forEach((name, bytes) {
           final blobOidHex = _createBlob(bytes);
-          _insertEntry(builder, name, blobOidHex,
-              git_filemode_t.GIT_FILEMODE_BLOB);
+          _insertEntry(
+            builder,
+            name,
+            blobOidHex,
+            git_filemode_t.GIT_FILEMODE_BLOB,
+          );
         });
 
         final oidOut = calloc<git_oid>();
@@ -274,7 +350,12 @@ class NxtprjGitEngine {
     try {
       _oidFromHex(oidHex, oid);
       final rc = libgit2.git_treebuilder_insert(
-          entryOut, builder, cName.cast(), oid, mode);
+        entryOut,
+        builder,
+        cName.cast(),
+        oid,
+        mode,
+      );
       if (rc != 0) throw StateError('git_treebuilder_insert failed ($rc)');
     } finally {
       calloc.free(entryOut);
@@ -292,7 +373,11 @@ class NxtprjGitEngine {
         buf.cast<Uint8>().asTypedList(bytes.length).setAll(0, bytes);
       }
       final rc = libgit2.git_blob_create_from_buffer(
-          oidOut, _repo, buf.cast(), bytes.length);
+        oidOut,
+        _repo,
+        buf.cast(),
+        bytes.length,
+      );
       if (rc != 0) throw StateError('git_blob_create_from_buffer failed ($rc)');
       return _oidHex(oidOut);
     } finally {
@@ -307,12 +392,16 @@ class NxtprjGitEngine {
     required String authorEmail,
     required String treeHex,
     required String? parentHex,
+    String? refName,
   }) {
     final sigOut = calloc<Pointer<git_signature>>();
     final cName = authorName.toNativeUtf8();
     final cEmail = authorEmail.toNativeUtf8();
     final cMessage = message.toNativeUtf8();
-    final refNameStr = _commitRefName();
+    // Advance an explicit branch ref when given (so a per-task commit moves
+    // task/<id> directly, never the shared HEAD — the key to safe concurrency);
+    // otherwise move whatever branch HEAD points at.
+    final refNameStr = refName ?? _commitRefName();
     final treeOid = calloc<git_oid>();
     final treeOut = calloc<Pointer<git_tree>>();
     final commitOut = calloc<git_oid>();
@@ -321,8 +410,11 @@ class NxtprjGitEngine {
     Pointer<git_tree> tree = nullptr;
     Pointer<git_signature> sig = nullptr;
     try {
-      final rcSig =
-          libgit2.git_signature_now(sigOut, cName.cast(), cEmail.cast());
+      final rcSig = libgit2.git_signature_now(
+        sigOut,
+        cName.cast(),
+        cEmail.cast(),
+      );
       if (rcSig != 0) throw StateError('git_signature_now failed ($rcSig)');
       sig = sigOut.value;
 
@@ -392,7 +484,7 @@ class NxtprjGitEngine {
 
   /// Walk the first-parent commit chain from HEAD, newest first.
   Future<List<({String oid, String message, DateTime when, String author})>>
-      log({int limit = 50}) async {
+  log({int limit = 50}) async {
     final out =
         <({String oid, String message, DateTime when, String author})>[];
     final headHex = await headOid();
@@ -413,8 +505,9 @@ class NxtprjGitEngine {
             oid: cursor,
             message: _readCString(libgit2.git_commit_message(commit)),
             when: DateTime.fromMillisecondsSinceEpoch(
-                libgit2.git_commit_time(commit) * 1000,
-                isUtc: true),
+              libgit2.git_commit_time(commit) * 1000,
+              isUtc: true,
+            ),
             author: _signatureName(libgit2.git_commit_author(commit)),
           ));
           // Advance to the first parent, if any.
@@ -460,7 +553,8 @@ class NxtprjGitEngine {
     final headHex = await headOid();
 
     final entries = await _ws.walk();
-    final wsFiles = <String, Uint8List>{}; // path-without-leading-slash -> bytes
+    final wsFiles =
+        <String, Uint8List>{}; // path-without-leading-slash -> bytes
     for (final e in entries) {
       if (e.isDirectory) continue;
       final rel = _segments(e.path).join('/');
@@ -494,8 +588,9 @@ class NxtprjGitEngine {
         byPath[wsKey] = GitFileStatus.untracked;
       } else {
         final blobOid = _hashBlob(entry.value);
-        byPath[wsKey] =
-            blobOid == trackedOid ? GitFileStatus.clean : GitFileStatus.modified;
+        byPath[wsKey] = blobOid == trackedOid
+            ? GitFileStatus.clean
+            : GitFileStatus.modified;
       }
     }
     // Tracked files that no longer exist in the workspace → deleted.
@@ -505,8 +600,7 @@ class NxtprjGitEngine {
       }
     }
 
-    final dirty =
-        byPath.values.any((s) => s != GitFileStatus.clean);
+    final dirty = byPath.values.any((s) => s != GitFileStatus.clean);
     return GitStatusSnapshot(
       hasRepo: true,
       branch: branch ?? _defaultBranch,
@@ -551,7 +645,11 @@ class NxtprjGitEngine {
   }
 
   /// Recursively collect blob entries from [tree] into [out] under [prefix].
-  void _walkTree(Pointer<git_tree> tree, String prefix, Map<String, String> out) {
+  void _walkTree(
+    Pointer<git_tree> tree,
+    String prefix,
+    Map<String, String> out,
+  ) {
     final count = libgit2.git_tree_entrycount(tree);
     for (var i = 0; i < count; i++) {
       final entry = libgit2.git_tree_entry_byindex(tree, i);
@@ -611,13 +709,12 @@ class NxtprjGitEngine {
   /// Read a ref row straight from the refdb-backed SQLite table.
   _RefRow? _lookupRefRow(String name) {
     final rows = _ws.database.select(
-        'SELECT name, target, symbolic FROM git_refs WHERE name=?', [name]);
+      'SELECT name, target, symbolic FROM git_refs WHERE name=?',
+      [name],
+    );
     if (rows.isEmpty) return null;
     final r = rows.first;
-    return _RefRow(
-      r['target'] as String?,
-      r['symbolic'] as String?,
-    );
+    return _RefRow(r['target'] as String?, r['symbolic'] as String?);
   }
 
   // ── Low-level FFI string/oid utilities ─────────────────────────────────
@@ -638,8 +735,11 @@ class NxtprjGitEngine {
   void _oidFromHex(String hex, Pointer<git_oid> out) {
     final cHex = hex.toNativeUtf8();
     try {
-      final rc =
-          libgit2.git_oid_fromstr(out, cHex.cast(), git_oid_t.GIT_OID_SHA1);
+      final rc = libgit2.git_oid_fromstr(
+        out,
+        cHex.cast(),
+        git_oid_t.GIT_OID_SHA1,
+      );
       if (rc != 0) throw StateError('git_oid_fromstr failed ($rc) for "$hex"');
     } finally {
       calloc.free(cHex);
@@ -666,8 +766,11 @@ class NxtprjGitEngine {
   Future<List<String>> branches() async {
     const prefix = 'refs/heads/';
     final rows = _ws.database.select(
-        "SELECT name FROM git_refs WHERE name LIKE 'refs/heads/%' ORDER BY name");
-    return rows.map((r) => (r['name'] as String).substring(prefix.length)).toList();
+      "SELECT name FROM git_refs WHERE name LIKE 'refs/heads/%' ORDER BY name",
+    );
+    return rows
+        .map((r) => (r['name'] as String).substring(prefix.length))
+        .toList();
   }
 
   /// Create a new branch at the current HEAD commit. Optionally switch to it.
@@ -675,7 +778,10 @@ class NxtprjGitEngine {
   /// or already exists.
   Future<void> createBranch(String name, {bool checkout = false}) async {
     final clean = name.trim();
-    if (clean.isEmpty || !_branchNameOk.hasMatch(clean) || clean.startsWith('/') || clean.endsWith('/')) {
+    if (clean.isEmpty ||
+        !_branchNameOk.hasMatch(clean) ||
+        clean.startsWith('/') ||
+        clean.endsWith('/')) {
       throw StateError('Invalid branch name: "$name"');
     }
     final headHex = await headOid();
@@ -683,12 +789,14 @@ class NxtprjGitEngine {
       throw StateError('Commit something before creating a branch.');
     }
     final refName = 'refs/heads/$clean';
-    final exists = _ws.database
-        .select('SELECT 1 FROM git_refs WHERE name=?', [refName]).isNotEmpty;
+    final exists = _ws.database.select('SELECT 1 FROM git_refs WHERE name=?', [
+      refName,
+    ]).isNotEmpty;
     if (exists) throw StateError('Branch "$clean" already exists.');
     _ws.database.execute(
-        'INSERT INTO git_refs(name, target, symbolic) VALUES(?, ?, NULL)',
-        [refName, headHex]);
+      'INSERT INTO git_refs(name, target, symbolic) VALUES(?, ?, NULL)',
+      [refName, headHex],
+    );
     if (checkout) await checkoutBranch(clean);
   }
 
@@ -698,14 +806,16 @@ class NxtprjGitEngine {
   /// should confirm with the user first.
   Future<void> checkoutBranch(String name) async {
     final refName = 'refs/heads/$name';
-    final exists = _ws.database
-        .select('SELECT 1 FROM git_refs WHERE name=?', [refName]).isNotEmpty;
+    final exists = _ws.database.select('SELECT 1 FROM git_refs WHERE name=?', [
+      refName,
+    ]).isNotEmpty;
     if (!exists) throw StateError('Branch "$name" does not exist.');
 
     // Repoint HEAD (symbolic) at the target branch.
     _ws.database.execute(
-        'INSERT OR REPLACE INTO git_refs(name, target, symbolic) VALUES(?, NULL, ?)',
-        ['HEAD', refName]);
+      'INSERT OR REPLACE INTO git_refs(name, target, symbolic) VALUES(?, NULL, ?)',
+      ['HEAD', refName],
+    );
 
     final tipHex = _resolveOid('HEAD');
     if (tipHex == null) return; // Unborn target branch: leave workspace as-is.
@@ -714,17 +824,18 @@ class NxtprjGitEngine {
 
   /// Overwrite the workspace files to match [commitHex]'s tree: write every
   /// tracked blob and delete workspace files absent from that tree.
-  Future<void> _materializeTree(String commitHex) async {
+  Future<void> _materializeTree(String commitHex, {Workspace? tree}) async {
+    final ws = tree ?? _ws;
     final target = _flattenHeadTree(commitHex); // rel -> blob oid hex
     for (final entry in target.entries) {
-      await _ws.writeBytes('/${entry.key}', _readBlobBytes(entry.value));
+      await ws.writeBytes('/${entry.key}', _readBlobBytes(entry.value));
     }
-    final wsEntries = await _ws.walk();
+    final wsEntries = await ws.walk();
     for (final e in wsEntries) {
       if (e.isDirectory) continue;
       final rel = _segments(e.path).join('/');
       if (rel.isNotEmpty && !target.containsKey(rel)) {
-        await _ws.delete(e.path);
+        await ws.delete(e.path);
       }
     }
   }
@@ -806,7 +917,8 @@ class NxtprjGitEngine {
       final o = ourTree[p];
       final t = theirTree[p];
       if (o == t) {
-        if (o != null) merged[p] = o; // identical on both sides (or both deleted)
+        if (o != null)
+          merged[p] = o; // identical on both sides (or both deleted)
         continue;
       }
       if (o == b) {
@@ -919,13 +1031,17 @@ class NxtprjGitEngine {
     final treeOut = calloc<Pointer<git_tree>>();
     final commitOut = calloc<git_oid>();
     final parentArr = calloc<Pointer<git_commit>>(
-        parentHexes.isEmpty ? 1 : parentHexes.length);
+      parentHexes.isEmpty ? 1 : parentHexes.length,
+    );
     final parents = <Pointer<git_commit>>[];
     Pointer<git_tree> tree = nullptr;
     Pointer<git_signature> sig = nullptr;
     try {
-      final rcSig =
-          libgit2.git_signature_now(sigOut, cName.cast(), cEmail.cast());
+      final rcSig = libgit2.git_signature_now(
+        sigOut,
+        cName.cast(),
+        cEmail.cast(),
+      );
       if (rcSig != 0) throw StateError('git_signature_now failed ($rcSig)');
       sig = sigOut.value;
 
@@ -1113,7 +1229,8 @@ class NxtprjGitEngine {
     final parentTreeOut = calloc<Pointer<git_tree>>();
     try {
       _oidFromHex(commitOidHex, oid);
-      if (libgit2.git_commit_lookup(commitOut, _repo, oid) != 0) return const [];
+      if (libgit2.git_commit_lookup(commitOut, _repo, oid) != 0)
+        return const [];
       final commit = commitOut.value;
       try {
         if (libgit2.git_commit_tree(newTreeOut, commit) != 0) return const [];
@@ -1144,14 +1261,35 @@ class NxtprjGitEngine {
             final path = '/${entry.key}';
             final oldOid = oldMap[entry.key];
             if (oldOid == null) {
-              out.add(CommitFileChange(path: path, change: CommitChangeKind.added, oldOid: null, newOid: entry.value));
+              out.add(
+                CommitFileChange(
+                  path: path,
+                  change: CommitChangeKind.added,
+                  oldOid: null,
+                  newOid: entry.value,
+                ),
+              );
             } else if (oldOid != entry.value) {
-              out.add(CommitFileChange(path: path, change: CommitChangeKind.modified, oldOid: oldOid, newOid: entry.value));
+              out.add(
+                CommitFileChange(
+                  path: path,
+                  change: CommitChangeKind.modified,
+                  oldOid: oldOid,
+                  newOid: entry.value,
+                ),
+              );
             }
           }
           for (final entry in oldMap.entries) {
             if (!newMap.containsKey(entry.key)) {
-              out.add(CommitFileChange(path: '/${entry.key}', change: CommitChangeKind.deleted, oldOid: entry.value, newOid: null));
+              out.add(
+                CommitFileChange(
+                  path: '/${entry.key}',
+                  change: CommitChangeKind.deleted,
+                  oldOid: entry.value,
+                  newOid: null,
+                ),
+              );
             }
           }
           out.sort((a, b) => a.path.compareTo(b.path));
@@ -1203,14 +1341,21 @@ class CommitFileChange {
   final CommitChangeKind change;
   final String? oldOid;
   final String? newOid;
-  const CommitFileChange({required this.path, required this.change, this.oldOid, this.newOid});
+  const CommitFileChange({
+    required this.path,
+    required this.change,
+    this.oldOid,
+    this.newOid,
+  });
 }
 
 /// In-memory directory node used while assembling the commit tree.
 class _DirNode {
   final Map<String, _DirNode> dirs = {};
+
   /// New content from the workspace (will be written as a blob).
   final Map<String, Uint8List> files = {};
+
   /// Existing blob oid hex from HEAD tree (referenced as-is, no blob write).
   final Map<String, String> existingFiles = {};
 }

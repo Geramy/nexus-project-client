@@ -9,7 +9,12 @@ class ImageResponse {
   const ImageResponse(this.images);
   factory ImageResponse.fromJson(Map<String, dynamic> json) {
     final data = json['data'];
-    final list = (data is List ? data.whereType<Map<String, dynamic>>().map(GeneratedImage.fromJson).toList() : <GeneratedImage>[]);
+    final list = (data is List
+        ? data
+              .whereType<Map<String, dynamic>>()
+              .map(GeneratedImage.fromJson)
+              .toList()
+        : <GeneratedImage>[]);
     return ImageResponse(list);
   }
 }
@@ -18,5 +23,8 @@ class GeneratedImage {
   final String? b64Json;
   final String? url;
   const GeneratedImage({this.b64Json, this.url});
-  factory GeneratedImage.fromJson(Map<String, dynamic> json) => GeneratedImage(b64Json: json['b64_json'] as String?, url: json['url'] as String?);
+  factory GeneratedImage.fromJson(Map<String, dynamic> json) => GeneratedImage(
+    b64Json: json['b64_json'] as String?,
+    url: json['url'] as String?,
+  );
 }

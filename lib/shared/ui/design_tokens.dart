@@ -53,13 +53,30 @@ abstract final class AppMotion {
 /// Pre-built [SizedBox] gaps so layouts read as `Gap.lg` instead of
 /// `SizedBox(height: 16)`. Use the axis that matches the parent Flex.
 abstract final class Gap {
-  static const Widget xs = SizedBox(width: AppSpacing.xs, height: AppSpacing.xs);
-  static const Widget sm = SizedBox(width: AppSpacing.sm, height: AppSpacing.sm);
-  static const Widget md = SizedBox(width: AppSpacing.md, height: AppSpacing.md);
-  static const Widget lg = SizedBox(width: AppSpacing.lg, height: AppSpacing.lg);
-  static const Widget xl = SizedBox(width: AppSpacing.xl, height: AppSpacing.xl);
-  static const Widget xxl =
-      SizedBox(width: AppSpacing.xxl, height: AppSpacing.xxl);
+  static const Widget xs = SizedBox(
+    width: AppSpacing.xs,
+    height: AppSpacing.xs,
+  );
+  static const Widget sm = SizedBox(
+    width: AppSpacing.sm,
+    height: AppSpacing.sm,
+  );
+  static const Widget md = SizedBox(
+    width: AppSpacing.md,
+    height: AppSpacing.md,
+  );
+  static const Widget lg = SizedBox(
+    width: AppSpacing.lg,
+    height: AppSpacing.lg,
+  );
+  static const Widget xl = SizedBox(
+    width: AppSpacing.xl,
+    height: AppSpacing.xl,
+  );
+  static const Widget xxl = SizedBox(
+    width: AppSpacing.xxl,
+    height: AppSpacing.xxl,
+  );
 }
 
 /// Semantic accessors layered over the active [ColorScheme]. Centralises the
@@ -113,40 +130,40 @@ class NexusPalette {
 /// [ColorScheme] so they adapt per theme.
 abstract final class AppGradients {
   static LinearGradient accent(ColorScheme s) => LinearGradient(
-        colors: [s.primary, s.tertiary],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      );
+    colors: [s.primary, s.tertiary],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
 
   static LinearGradient subtle(ColorScheme s) => LinearGradient(
-        colors: [
-          s.primary.withValues(alpha: 0.18),
-          s.tertiary.withValues(alpha: 0.10),
-        ],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      );
+    colors: [
+      s.primary.withValues(alpha: 0.18),
+      s.tertiary.withValues(alpha: 0.10),
+    ],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
 }
 
 /// Soft elevation shadows tuned for the dark Nebula backdrop (and reused, more
 /// subtly, on the light theme). Avoid Material's default harsh drop shadows.
 abstract final class AppShadows {
   static List<BoxShadow> card(Color tint) => [
-        BoxShadow(
-          color: tint.withValues(alpha: 0.18),
-          blurRadius: 24,
-          spreadRadius: -6,
-          offset: const Offset(0, 10),
-        ),
-      ];
+    BoxShadow(
+      color: tint.withValues(alpha: 0.18),
+      blurRadius: 24,
+      spreadRadius: -6,
+      offset: const Offset(0, 10),
+    ),
+  ];
 
   /// A colored glow used behind accent surfaces / hero cards.
   static List<BoxShadow> glow(Color color, {double strength = 0.35}) => [
-        BoxShadow(
-          color: color.withValues(alpha: strength),
-          blurRadius: 32,
-          spreadRadius: -8,
-          offset: const Offset(0, 8),
-        ),
-      ];
+    BoxShadow(
+      color: color.withValues(alpha: strength),
+      blurRadius: 32,
+      spreadRadius: -8,
+      offset: const Offset(0, 8),
+    ),
+  ];
 }

@@ -6,7 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
-import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart' show NexusDatabase;
+import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart'
+    show NexusDatabase;
 
 /// Kanban board view for the Project Overview (moved during organization refactor 2026-05).
 /// Groups tasks by status columns. Supports drag-to-move between columns.
@@ -23,7 +24,12 @@ class TaskKanbanBoard extends ConsumerWidget {
   });
 
   // Standard Kanban columns (can be made configurable later)
-  static const List<String> _columns = ['Todo', 'In Progress', 'Review', 'Done'];
+  static const List<String> _columns = [
+    'Todo',
+    'In Progress',
+    'Review',
+    'Done',
+  ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -59,7 +65,9 @@ class TaskKanbanBoard extends ConsumerWidget {
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 6),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+              color: Theme.of(
+                context,
+              ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
@@ -70,7 +78,10 @@ class TaskKanbanBoard extends ConsumerWidget {
               children: [
                 // Column header
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.surface,
                     borderRadius: const BorderRadius.only(
@@ -84,19 +95,30 @@ class TaskKanbanBoard extends ConsumerWidget {
                         child: Text(
                           columnName,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 6),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 1,
+                        ),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.6),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.primaryContainer.withValues(alpha: 0.6),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
                           '${columnTasks.length}',
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ],
@@ -116,7 +138,9 @@ class TaskKanbanBoard extends ConsumerWidget {
 
                       return Container(
                         color: isActive
-                            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.08)
+                            ? Theme.of(
+                                context,
+                              ).colorScheme.primary.withValues(alpha: 0.08)
                             : Colors.transparent,
                         child: ListView.builder(
                           padding: const EdgeInsets.all(8),
@@ -144,7 +168,11 @@ class TaskKanbanBoard extends ConsumerWidget {
     );
   }
 
-  Future<void> _moveTaskToStatus(WidgetRef ref, int taskId, String newStatus) async {
+  Future<void> _moveTaskToStatus(
+    WidgetRef ref,
+    int taskId,
+    String newStatus,
+  ) async {
     final db = ref.read(nexusDatabaseProvider);
 
     // Targeted partial update — only change status
@@ -187,27 +215,49 @@ class _KanbanCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 260),
-          child: _buildCardContent(context, priorityColor, title, isSelected: false),
+          child: _buildCardContent(
+            context,
+            priorityColor,
+            title,
+            isSelected: false,
+          ),
         ),
       ),
       childWhenDragging: Opacity(
         opacity: 0.3,
-        child: _buildCardContent(context, priorityColor, title, isSelected: isSelected),
+        child: _buildCardContent(
+          context,
+          priorityColor,
+          title,
+          isSelected: isSelected,
+        ),
       ),
       child: GestureDetector(
         onTap: onTap,
-        child: _buildCardContent(context, priorityColor, title, isSelected: isSelected),
+        child: _buildCardContent(
+          context,
+          priorityColor,
+          title,
+          isSelected: isSelected,
+        ),
       ),
     );
   }
 
-  Widget _buildCardContent(BuildContext context, Color priorityColor, String title, {required bool isSelected}) {
+  Widget _buildCardContent(
+    BuildContext context,
+    Color priorityColor,
+    String title, {
+    required bool isSelected,
+  }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: isSelected
-            ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.35)
+            ? Theme.of(
+                context,
+              ).colorScheme.primaryContainer.withValues(alpha: 0.35)
             : Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
@@ -241,7 +291,10 @@ class _KanbanCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   '#${task.task_pk}  $title',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),

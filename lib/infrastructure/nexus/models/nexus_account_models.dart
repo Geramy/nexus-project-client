@@ -33,18 +33,19 @@ class NexusUser {
   factory NexusUser.fromJson(Map<String, dynamic> json) {
     return NexusUser(
       email: (json['email'] ?? '') as String,
-      displayName: (json['display_name'] ?? json['displayName'] ?? '') as String,
+      displayName:
+          (json['display_name'] ?? json['displayName'] ?? '') as String,
       role: (json['role'] ?? 'Member') as String,
       accountId: _asInt(json['account_id'] ?? json['accountId']),
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'email': email,
-        'display_name': displayName,
-        'role': role,
-        'account_id': accountId,
-      };
+    'email': email,
+    'display_name': displayName,
+    'role': role,
+    'account_id': accountId,
+  };
 }
 
 /// A reference to the tenant Client (company / account) the user belongs to.
@@ -172,14 +173,12 @@ class PlanCatalog {
   const PlanCatalog({required this.plans, required this.addons});
 
   factory PlanCatalog.fromJson(Map<String, dynamic> json) {
-    final plans = _asList(json['plans'])
-        .map((e) => Plan.fromJson(_asMap(e)))
-        .toList()
-      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    final addons = _asList(json['addons'])
-        .map((e) => AddOn.fromJson(_asMap(e)))
-        .toList()
-      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final plans =
+        _asList(json['plans']).map((e) => Plan.fromJson(_asMap(e))).toList()
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final addons =
+        _asList(json['addons']).map((e) => AddOn.fromJson(_asMap(e))).toList()
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
     return PlanCatalog(plans: plans, addons: addons);
   }
 }
@@ -256,7 +255,8 @@ class UsageSnapshot {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class Subscription {
-  final String status; // None | Trialing | Active | PastDue | Canceled | Incomplete | Paused
+  final String
+  status; // None | Trialing | Active | PastDue | Canceled | Incomplete | Paused
   final String? planKey;
   final DateTime? currentPeriodStart;
   final DateTime? currentPeriodEnd;
@@ -361,9 +361,9 @@ class AgentUsageReport {
     return AgentUsageReport(
       since: _asDate(json['since']),
       totalCost: _asDouble(json['total_cost']) ?? 0,
-      agents: _asList(json['agents'])
-          .map((e) => AgentUsageRow.fromJson(_asMap(e)))
-          .toList(),
+      agents: _asList(
+        json['agents'],
+      ).map((e) => AgentUsageRow.fromJson(_asMap(e))).toList(),
     );
   }
 }

@@ -3,12 +3,12 @@
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
 /// Adapted port from ~/IdeaProjects/lemonade_mobile/lib/providers/servers_provider.dart
-/// 
+///
 /// This version unifies on the existing Nexus Drift database (InferenceServers table)
 /// instead of introducing a second Isar DB. Only rows that are detected as full
 /// local Lemonade servers (omni collections / admin endpoints) get the rich
 /// server management infrastructure (ServersScreen + AdminConsole).
-/// 
+///
 /// Routed/routed servers (nexus-projects-server) continue to use the lighter
 /// EndpointsTab + ServerConfigDialog path and are never presented through this provider.
 import 'package:flutter/foundation.dart';
@@ -16,7 +16,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:convert';
 
 import 'package:drift/drift.dart' show Value;
-import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart' show InferenceServersCompanion;
+import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart'
+    show InferenceServersCompanion;
 
 import '../models/server_config.dart';
 import '../../../core/providers/database_provider.dart';
@@ -28,13 +29,13 @@ import '../services/secure_key_store.dart';
 /// or capabilities indicate full admin + omni support).
 final lemonadeServersProvider =
     StateNotifierProvider<LemonadeServersNotifier, List<ServerConfig>>(
-  (ref) => LemonadeServersNotifier(ref),
-);
+      (ref) => LemonadeServersNotifier(ref),
+    );
 
 final selectedLemonadeServerProvider =
     StateNotifierProvider<SelectedLemonadeServerNotifier, ServerConfig?>(
-  (ref) => SelectedLemonadeServerNotifier(ref),
-);
+      (ref) => SelectedLemonadeServerNotifier(ref),
+    );
 
 class LemonadeServersNotifier extends StateNotifier<List<ServerConfig>> {
   final Ref ref;
@@ -53,7 +54,8 @@ class LemonadeServersNotifier extends StateNotifier<List<ServerConfig>> {
       for (final row in rows) {
         // Only surface servers that are marked as Lemonade (or have the capability flag).
         final caps = _parseCaps(row.capabilitiesJson);
-        final isLemonade = row.providerType == 'lemonade' ||
+        final isLemonade =
+            row.providerType == 'lemonade' ||
             (caps['isLemonade'] == true) ||
             (caps['fullLemonadeManaged'] == true);
 
@@ -74,11 +76,9 @@ class LemonadeServersNotifier extends StateNotifier<List<ServerConfig>> {
           }
         }
 
-        configs.add(ServerConfig(
-          name: row.name,
-          baseUrl: row.baseUrl,
-          apiKey: apiKey,
-        ));
+        configs.add(
+          ServerConfig(name: row.name, baseUrl: row.baseUrl, apiKey: apiKey),
+        );
       }
       state = configs;
     } catch (e) {
@@ -126,7 +126,9 @@ class LemonadeServersNotifier extends StateNotifier<List<ServerConfig>> {
         isEnabled: const Value(true),
         availableModelsJson: const Value('[]'),
         extraConfigJson: const Value('{}'),
-        capabilitiesJson: const Value('{"isLemonade":true,"fullLemonadeManaged":true}'),
+        capabilitiesJson: const Value(
+          '{"isLemonade":true,"fullLemonadeManaged":true}',
+        ),
       );
 
       await db.createInferenceServer(newRow);
@@ -146,7 +148,10 @@ class LemonadeServersNotifier extends StateNotifier<List<ServerConfig>> {
     state = state.where((s) => s.name != server.name).toList(growable: false);
   }
 
-  Future<void> updateServer(ServerConfig oldServer, ServerConfig newServer) async {
+  Future<void> updateServer(
+    ServerConfig oldServer,
+    ServerConfig newServer,
+  ) async {
     if (oldServer.name != newServer.name) {
       try {
         await SecureKeyStore.renameApiKey(oldServer.name, newServer.name);
@@ -175,9 +180,9 @@ class SelectedLemonadeServerNotifier extends StateNotifier<ServerConfig?> {
     ref.listen(lemonadeServersProvider, (previous, next) {
       if (_savedServerName != null && next.isNotEmpty) {
         state = next.cast<ServerConfig?>().firstWhere(
-              (server) => server?.name == _savedServerName,
-              orElse: () => null,
-            );
+          (server) => server?.name == _savedServerName,
+          orElse: () => null,
+        );
       }
     });
   }

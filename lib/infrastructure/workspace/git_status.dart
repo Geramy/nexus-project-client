@@ -29,7 +29,13 @@ class GitDecoration {
   final bool muted;
   final bool strike;
   final String tooltip;
-  const GitDecoration(this.badge, this.color, this.tooltip, {this.muted = false, this.strike = false});
+  const GitDecoration(
+    this.badge,
+    this.color,
+    this.tooltip, {
+    this.muted = false,
+    this.strike = false,
+  });
 }
 
 GitDecoration? gitDecorationFor(GitFileStatus s) {
@@ -45,7 +51,12 @@ GitDecoration? gitDecorationFor(GitFileStatus s) {
     case GitFileStatus.untracked:
       return const GitDecoration('U', Color(0xFF4FA66A), 'Untracked');
     case GitFileStatus.deleted:
-      return const GitDecoration('D', Color(0xFFD16969), 'Deleted', strike: true);
+      return const GitDecoration(
+        'D',
+        Color(0xFFD16969),
+        'Deleted',
+        strike: true,
+      );
     case GitFileStatus.renamed:
       return const GitDecoration('R', Color(0xFFE2A03F), 'Renamed');
     case GitFileStatus.conflicted:
@@ -88,13 +99,15 @@ class GitStatusSnapshot {
 
   static const GitStatusSnapshot noRepo = GitStatusSnapshot(hasRepo: false);
 
-  GitFileStatus statusFor(String wsPath) => byPath[wsPath] ?? GitFileStatus.clean;
+  GitFileStatus statusFor(String wsPath) =>
+      byPath[wsPath] ?? GitFileStatus.clean;
 
   /// Aggregate status for a folder: dirty if any descendant path is dirty.
   bool folderHasChanges(String folderWsPath) {
     final prefix = folderWsPath == '/' ? '/' : '$folderWsPath/';
     for (final e in byPath.entries) {
-      if ((folderWsPath == '/' || e.key.startsWith(prefix)) && gitStatusIsDirty(e.value)) {
+      if ((folderWsPath == '/' || e.key.startsWith(prefix)) &&
+          gitStatusIsDirty(e.value)) {
         return true;
       }
     }
@@ -110,13 +123,20 @@ abstract class GitStatusSource {
 }
 
 /// libgit2-backed git status, sourced from the SQLite-bound git engine.
-final gitStatusSourceProvider = Provider<GitStatusSource>((ref) => NxtprjGitStatusSource(ref));
+final gitStatusSourceProvider = Provider<GitStatusSource>(
+  (ref) => NxtprjGitStatusSource(ref),
+);
 
 /// Git status for a project's workspace (decorates the file tree). Refreshes
 /// when [gitStatusRevisionProvider] is bumped (after commits/stages/etc.).
-final gitStatusProvider = FutureProvider.family<GitStatusSnapshot, int>((ref, projectId) async {
+final gitStatusProvider = FutureProvider.family<GitStatusSnapshot, int>((
+  ref,
+  projectId,
+) async {
   ref.watch(gitStatusRevisionProvider(projectId));
   return ref.watch(gitStatusSourceProvider).snapshot(projectId);
 });
 
-final gitStatusRevisionProvider = StateProvider.family<int, int>((ref, projectId) => 0);
+final gitStatusRevisionProvider = StateProvider.family<int, int>(
+  (ref, projectId) => 0,
+);

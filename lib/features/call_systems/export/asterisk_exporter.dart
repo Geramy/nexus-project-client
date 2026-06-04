@@ -108,7 +108,9 @@ class AsteriskExporter implements CallSystemExporter {
     b.writeln('; Experience mode: ${_escapeComment(project.experienceMode)}');
     if (project.isOutbound) {
       b.writeln(';');
-      b.writeln('; NOTE: outbound project — ensure TCPA/consent/DNC compliance');
+      b.writeln(
+        '; NOTE: outbound project — ensure TCPA/consent/DNC compliance',
+      );
       b.writeln(';       and an appropriate trunk/CallerID are configured.');
     }
     b.writeln('; ============================================================');
@@ -119,8 +121,7 @@ class AsteriskExporter implements CallSystemExporter {
     if (project.variables.isNotEmpty) {
       b.writeln('[globals]');
       for (final entry in project.variables.entries) {
-        b.writeln(
-            '${_sanitize(entry.key)}=${_escapeArg('${entry.value}')}');
+        b.writeln('${_sanitize(entry.key)}=${_escapeArg('${entry.value}')}');
       }
       b.writeln();
     }
@@ -134,7 +135,9 @@ class AsteriskExporter implements CallSystemExporter {
     b.writeln('; ---- Inbound number routing -------------------------------');
     b.writeln('[$_inboundContext]');
     if (project.dids.isEmpty) {
-      b.writeln('; (no DIDs defined — wire your trunk to a flow context below)');
+      b.writeln(
+        '; (no DIDs defined — wire your trunk to a flow context below)',
+      );
     }
     for (final did in project.dids) {
       final label = did.label == null ? '' : ' ; ${_escapeComment(did.label!)}';
@@ -144,11 +147,16 @@ class AsteriskExporter implements CallSystemExporter {
       final pattern = _sanitize(did.e164);
       if (flow == null) {
         b.writeln(
-            '; DID ${_escapeComment(did.e164)} has no flow — routes nowhere$label');
-        b.writeln('exten => $pattern,1,NoOp(Unrouted DID ${_escapeComment(did.e164)})');
+          '; DID ${_escapeComment(did.e164)} has no flow — routes nowhere$label',
+        );
+        b.writeln(
+          'exten => $pattern,1,NoOp(Unrouted DID ${_escapeComment(did.e164)})',
+        );
         b.writeln(' same => n,Hangup()');
       } else {
-        b.writeln('exten => $pattern,1,NoOp(Inbound to ${_escapeComment(flow.name)})$label');
+        b.writeln(
+          'exten => $pattern,1,NoOp(Inbound to ${_escapeComment(flow.name)})$label',
+        );
         b.writeln(' same => n,Goto(${_contextName(flow)},s,1)');
       }
     }
@@ -216,8 +224,9 @@ class AsteriskExporter implements CallSystemExporter {
       final ext = q.number == null ? _sanitize(q.id) : _sanitize(q.number!);
       final queueName = _sanitize(q.id);
       b.writeln(
-          '; ${_escapeComment(q.name)} — strategy ${q.strategy.name}, '
-          'agents ${q.agentExtensionIds.length}, maxWait ${q.maxWaitSeconds}s');
+        '; ${_escapeComment(q.name)} — strategy ${q.strategy.name}, '
+        'agents ${q.agentExtensionIds.length}, maxWait ${q.maxWaitSeconds}s',
+      );
       b.writeln('exten => $ext,1,NoOp(Queue ${_escapeComment(q.name)})');
       b.writeln(' same => n,Answer()');
       // Queue(<queue>,options,URL,announceoverride,timeout) — pass max wait.
@@ -230,7 +239,10 @@ class AsteriskExporter implements CallSystemExporter {
   // ── Flow → context ──────────────────────────────────────────────────
 
   void _writeFlowContext(
-      StringBuffer b, CallSystemProject project, CallFlow flow) {
+    StringBuffer b,
+    CallSystemProject project,
+    CallFlow flow,
+  ) {
     b.writeln('; ============================================================');
     b.writeln('; Flow: ${_escapeComment(flow.name)}');
     if (flow.description != null && flow.description!.isNotEmpty) {
@@ -278,15 +290,20 @@ class AsteriskExporter implements CallSystemExporter {
 
   // ── Node → priority chain ───────────────────────────────────────────
 
-  void _writeNode(StringBuffer b, CallSystemProject project, CallFlow flow,
-      CallNode node) {
+  void _writeNode(
+    StringBuffer b,
+    CallSystemProject project,
+    CallFlow flow,
+    CallNode node,
+  ) {
     final label = _nodeLabel(node);
     // First priority of a node carries the (label) so Goto() can target it.
-    void first(String app) =>
-        b.writeln('exten => s,n($label),$app');
+    void first(String app) => b.writeln('exten => s,n($label),$app');
     void next(String app) => b.writeln(' same => n,$app');
 
-    b.writeln('; node ${node.id} [${node.type.key}] ${_escapeComment(node.label)}');
+    b.writeln(
+      '; node ${node.id} [${node.type.key}] ${_escapeComment(node.label)}',
+    );
 
     switch (node.type) {
       case CallNodeType.entry:
@@ -318,17 +335,21 @@ class AsteriskExporter implements CallSystemExporter {
         first('NoOp(Gather digits -> $variable)');
         next('Read($variable,$promptFile,$maxDigits)');
         // 'next' on success; 'timeout' if nothing was entered.
-        next('GotoIf(\$["\${$variable}" = ""]?'
-            '${_gotoTarget(flow, node.outputs['timeout'])}:'
-            '${_gotoTarget(flow, node.outputs['next'])})');
+        next(
+          'GotoIf(\$["\${$variable}" = ""]?'
+          '${_gotoTarget(flow, node.outputs['timeout'])}:'
+          '${_gotoTarget(flow, node.outputs['next'])})',
+        );
         break;
 
       case CallNodeType.gatherSpeech:
         // Asterisk has no built-in STT; this requires an external speech engine
         // (res_speech / AGI). Emit a stub and a caveat.
         first('NoOp(Speech gather not natively supported — see notes)');
-        next('Verbose(1,Gather speech: '
-            '${_escapeArg('${node.config['variable'] ?? ''}')})');
+        next(
+          'Verbose(1,Gather speech: '
+          '${_escapeArg('${node.config['variable'] ?? ''}')})',
+        );
         next(_gotoFor(flow, node.outputs['next'] ?? node.outputs['nomatch']));
         break;
 
@@ -348,12 +369,18 @@ class AsteriskExporter implements CallSystemExporter {
         first('NoOp(Dial $number)');
         next('Dial(PJSIP/$number,30)');
         // DIALSTATUS routes the result ports.
-        next('GotoIf(\$["\${DIALSTATUS}" = "ANSWER"]?'
-            '${_gotoTarget(flow, node.outputs['answered'])})');
-        next('GotoIf(\$["\${DIALSTATUS}" = "BUSY"]?'
-            '${_gotoTarget(flow, node.outputs['busy'])})');
-        next('GotoIf(\$["\${DIALSTATUS}" = "NOANSWER"]?'
-            '${_gotoTarget(flow, node.outputs['noanswer'])})');
+        next(
+          'GotoIf(\$["\${DIALSTATUS}" = "ANSWER"]?'
+          '${_gotoTarget(flow, node.outputs['answered'])})',
+        );
+        next(
+          'GotoIf(\$["\${DIALSTATUS}" = "BUSY"]?'
+          '${_gotoTarget(flow, node.outputs['busy'])})',
+        );
+        next(
+          'GotoIf(\$["\${DIALSTATUS}" = "NOANSWER"]?'
+          '${_gotoTarget(flow, node.outputs['noanswer'])})',
+        );
         next(_gotoFor(flow, node.outputs['failed']));
         break;
 
@@ -366,16 +393,21 @@ class AsteriskExporter implements CallSystemExporter {
             : _dialDevice(ext);
         first('NoOp(Transfer to extension $extNumber)');
         next('Dial($device,${ext?.ringSeconds ?? 20})');
-        next('GotoIf(\$["\${DIALSTATUS}" = "ANSWER"]?'
-            '${_gotoTarget(flow, node.outputs['answered'])})');
-        next('GotoIf(\$["\${DIALSTATUS}" = "BUSY"]?'
-            '${_gotoTarget(flow, node.outputs['busy'])})');
+        next(
+          'GotoIf(\$["\${DIALSTATUS}" = "ANSWER"]?'
+          '${_gotoTarget(flow, node.outputs['answered'])})',
+        );
+        next(
+          'GotoIf(\$["\${DIALSTATUS}" = "BUSY"]?'
+          '${_gotoTarget(flow, node.outputs['busy'])})',
+        );
         next(_gotoFor(flow, node.outputs['noanswer']));
         break;
 
       case CallNodeType.ringGroup:
         // Hand off to the ring-group context entry, then branch on result.
-        final rgId = '${node.config['ringGroupId'] ?? node.config['number'] ?? ''}';
+        final rgId =
+            '${node.config['ringGroupId'] ?? node.config['number'] ?? ''}';
         final rg = _ringGroupByIdOrNumber(project, rgId);
         first('NoOp(Ring group $rgId)');
         if (rg != null) {
@@ -388,8 +420,10 @@ class AsteriskExporter implements CallSystemExporter {
         } else {
           next('NoOp(Unknown ring group $rgId)');
         }
-        next('GotoIf(\$["\${DIALSTATUS}" = "ANSWER"]?'
-            '${_gotoTarget(flow, node.outputs['answered'])})');
+        next(
+          'GotoIf(\$["\${DIALSTATUS}" = "ANSWER"]?'
+          '${_gotoTarget(flow, node.outputs['answered'])})',
+        );
         next(_gotoFor(flow, node.outputs['noanswer']));
         break;
 
@@ -402,16 +436,21 @@ class AsteriskExporter implements CallSystemExporter {
         next('Answer()');
         next('Queue($queueName,t,,,${q?.maxWaitSeconds ?? 300})');
         // After Queue returns, QUEUESTATUS tells us why.
-        next('GotoIf(\$["\${QUEUESTATUS}" = "TIMEOUT"]?'
-            '${_gotoTarget(flow, node.outputs['timeout'])})');
-        next('GotoIf(\$["\${QUEUESTATUS}" = "JOINEMPTY"]?'
-            '${_gotoTarget(flow, node.outputs['empty'])})');
+        next(
+          'GotoIf(\$["\${QUEUESTATUS}" = "TIMEOUT"]?'
+          '${_gotoTarget(flow, node.outputs['timeout'])})',
+        );
+        next(
+          'GotoIf(\$["\${QUEUESTATUS}" = "JOINEMPTY"]?'
+          '${_gotoTarget(flow, node.outputs['empty'])})',
+        );
         next(_gotoFor(flow, node.outputs['answered']));
         break;
 
       case CallNodeType.voicemail:
         // Send caller to a mailbox. 'done' continues after the message.
-        final vmId = '${node.config['voicemailBoxId'] ?? node.config['mailbox'] ?? ''}';
+        final vmId =
+            '${node.config['voicemailBoxId'] ?? node.config['mailbox'] ?? ''}';
         final vm = _voicemailByIdOrNumber(project, vmId);
         final mailbox = vm == null ? _sanitize(vmId) : _voicemailMailbox(vm);
         first('NoOp(Voicemail $mailbox)');
@@ -426,11 +465,14 @@ class AsteriskExporter implements CallSystemExporter {
 
       case CallNodeType.condition:
         // Branch on an expression in config['expression'] (or a variable).
-        final expr = '${node.config['expression'] ?? node.config['variable'] ?? '1'}';
+        final expr =
+            '${node.config['expression'] ?? node.config['variable'] ?? '1'}';
         first('NoOp(Condition)');
-        next('GotoIf(\$[${_escapeArg(expr)}]?'
-            '${_gotoTarget(flow, node.outputs['true'])}:'
-            '${_gotoTarget(flow, node.outputs['false'])})');
+        next(
+          'GotoIf(\$[${_escapeArg(expr)}]?'
+          '${_gotoTarget(flow, node.outputs['true'])}:'
+          '${_gotoTarget(flow, node.outputs['false'])})',
+        );
         break;
 
       case CallNodeType.setVariable:
@@ -449,9 +491,11 @@ class AsteriskExporter implements CallSystemExporter {
         first('NoOp(HTTP request -> $into)');
         next('Set($into=\${CURL($url)})');
         // success if we got a non-empty body, else failure.
-        next('GotoIf(\$["\${$into}" != ""]?'
-            '${_gotoTarget(flow, node.outputs['success'])}:'
-            '${_gotoTarget(flow, node.outputs['failure'])})');
+        next(
+          'GotoIf(\$["\${$into}" != ""]?'
+          '${_gotoTarget(flow, node.outputs['success'])}:'
+          '${_gotoTarget(flow, node.outputs['failure'])})',
+        );
         break;
 
       case CallNodeType.record:
@@ -467,7 +511,9 @@ class AsteriskExporter implements CallSystemExporter {
         // names; our model's extensions feed that. Branch on match.
         first('NoOp(Dial-by-name directory)');
         next('Directory(default,${_contextName(flow)})');
-        next(_gotoFor(flow, node.outputs['matched'] ?? node.outputs['nomatch']));
+        next(
+          _gotoFor(flow, node.outputs['matched'] ?? node.outputs['nomatch']),
+        );
         break;
 
       case CallNodeType.hangup:
@@ -496,8 +542,12 @@ class AsteriskExporter implements CallSystemExporter {
   /// IVR menu: `Background` (plays prompt while accepting DTMF) + `WaitExten`,
   /// then per-digit `exten => <digit>` matches that Goto the branch target. The
   /// digit ports are the extra (non-base) keys in [CallNode.outputs].
-  void _writeMenuNode(StringBuffer b, CallSystemProject project, CallFlow flow,
-      CallNode node) {
+  void _writeMenuNode(
+    StringBuffer b,
+    CallSystemProject project,
+    CallFlow flow,
+    CallNode node,
+  ) {
     final label = _nodeLabel(node);
     final promptFile = _promptFile(project, node);
     final timeoutSecs = '${node.config['timeout'] ?? 5}';
@@ -515,7 +565,8 @@ class AsteriskExporter implements CallSystemExporter {
       // A digit branch is its own matched extension in this context that simply
       // Goto()s the target node's label.
       b.writeln(
-          'exten => ${_sanitize(digit)},1,${_gotoFor(flow, entry.value)}');
+        'exten => ${_sanitize(digit)},1,${_gotoFor(flow, entry.value)}',
+      );
     }
 
     // Asterisk's reserved 't' (timeout) and 'i' (invalid) extensions.
@@ -529,13 +580,20 @@ class AsteriskExporter implements CallSystemExporter {
   /// takes `<time>,<weekdays>,<monthdays>,<months>`. We translate each open
   /// [TimeRange]; the first matching range routes to 'open', holidays route to
   /// 'holiday', everything else to 'closed'.
-  void _writeScheduleNode(StringBuffer b, CallSystemProject project,
-      CallFlow flow, CallNode node) {
+  void _writeScheduleNode(
+    StringBuffer b,
+    CallSystemProject project,
+    CallFlow flow,
+    CallNode node,
+  ) {
     final label = _nodeLabel(node);
-    final tcId = '${node.config['timeConditionId'] ?? node.config['scheduleId'] ?? ''}';
+    final tcId =
+        '${node.config['timeConditionId'] ?? node.config['scheduleId'] ?? ''}';
     final tc = _timeConditionById(project, tcId);
 
-    b.writeln('exten => s,n($label),NoOp(Schedule ${_escapeComment(node.label)})');
+    b.writeln(
+      'exten => s,n($label),NoOp(Schedule ${_escapeComment(node.label)})',
+    );
 
     if (tc == null) {
       b.writeln(' same => n,NoOp(Unknown time condition $tcId)');
@@ -550,8 +608,10 @@ class AsteriskExporter implements CallSystemExporter {
         final month = _monthName(int.tryParse(parts[1]));
         final day = int.tryParse(parts[2]);
         if (month != null && day != null) {
-          b.writeln(' same => n,GotoIfTime(*,*,$day,$month?'
-              '${_gotoTarget(flow, node.outputs['holiday'])})');
+          b.writeln(
+            ' same => n,GotoIfTime(*,*,$day,$month?'
+            '${_gotoTarget(flow, node.outputs['holiday'])})',
+          );
         }
       }
     }
@@ -560,8 +620,10 @@ class AsteriskExporter implements CallSystemExporter {
     for (final r in tc.openRanges) {
       final time = '${_hhmm(r.startMinute)}-${_hhmm(r.endMinute)}';
       final dow = _weekdays(r.days);
-      b.writeln(' same => n,GotoIfTime($time,$dow,*,*?'
-          '${_gotoTarget(flow, node.outputs['open'])})');
+      b.writeln(
+        ' same => n,GotoIfTime($time,$dow,*,*?'
+        '${_gotoTarget(flow, node.outputs['open'])})',
+      );
     }
 
     // Fall through = closed.
@@ -575,7 +637,10 @@ class AsteriskExporter implements CallSystemExporter {
   /// reference a conventional file path AND emit the text as a comment so the
   /// operator knows what to synthesise/record.
   List<String> _playPromptLines(
-      CallSystemProject project, CallNode node, {required bool background}) {
+    CallSystemProject project,
+    CallNode node, {
+    required bool background,
+  }) {
     final promptId = node.config['promptId'];
     if (promptId == null) return const [];
     final prompt = project.promptById('$promptId');
@@ -629,8 +694,7 @@ class AsteriskExporter implements CallSystemExporter {
   }
 
   /// A full `Goto(...)` application for a port (used as a standalone priority).
-  String _gotoApp(CallFlow flow, String? targetId) =>
-      _gotoFor(flow, targetId);
+  String _gotoApp(CallFlow flow, String? targetId) => _gotoFor(flow, targetId);
 
   // ── Entity lookups ──────────────────────────────────────────────────
 
@@ -731,8 +795,18 @@ class AsteriskExporter implements CallSystemExporter {
   /// Asterisk month token (jan..dec) from a 1..12 month number.
   String? _monthName(int? m) {
     const names = [
-      'jan', 'feb', 'mar', 'apr', 'may', 'jun',
-      'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
+      'jan',
+      'feb',
+      'mar',
+      'apr',
+      'may',
+      'jun',
+      'jul',
+      'aug',
+      'sep',
+      'oct',
+      'nov',
+      'dec',
     ];
     if (m == null || m < 1 || m > 12) return null;
     return names[m - 1];
@@ -760,10 +834,12 @@ class AsteriskExporter implements CallSystemExporter {
         .map((r) => r.name)
         .toList();
     if (nonRingAll.isNotEmpty) {
-      out.add('Ring groups ${nonRingAll.join(', ')} use a sequential/rotating '
-          'strategy (${'hunt/roundRobin/etc.'}); Asterisk dialplan rings them '
-          'in parallel here. Use a hunt-group construct (e.g. dialplan loops or '
-          'FreePBX ring groups) for true sequential behaviour.');
+      out.add(
+        'Ring groups ${nonRingAll.join(', ')} use a sequential/rotating '
+        'strategy (${'hunt/roundRobin/etc.'}); Asterisk dialplan rings them '
+        'in parallel here. Use a hunt-group construct (e.g. dialplan loops or '
+        'FreePBX ring groups) for true sequential behaviour.',
+      );
     }
 
     // Detect node types Asterisk can't natively express across all flows.
@@ -773,26 +849,36 @@ class AsteriskExporter implements CallSystemExporter {
     final hasSubFlow = _anyNode(project, CallNodeType.subFlow);
 
     if (hasSpeech) {
-      out.add('gatherSpeech nodes need an external speech-recognition engine '
-          '(res_speech/AGI); the generated dialplan only stubs them.');
+      out.add(
+        'gatherSpeech nodes need an external speech-recognition engine '
+        '(res_speech/AGI); the generated dialplan only stubs them.',
+      );
     }
     if (hasAi) {
-      out.add('aiVoicebot nodes run in the Nexus managed runtime (streamed '
-          'STT/LLM/TTS); the dialplan emits a placeholder — bridge via AGI/'
-          'external media to enable them on raw Asterisk.');
+      out.add(
+        'aiVoicebot nodes run in the Nexus managed runtime (streamed '
+        'STT/LLM/TTS); the dialplan emits a placeholder — bridge via AGI/'
+        'external media to enable them on raw Asterisk.',
+      );
     }
     if (hasHttp) {
-      out.add('httpRequest nodes use CURL() for a best-effort GET; POST bodies, '
-          'headers and JSON parsing require AGI or func_curl configuration.');
+      out.add(
+        'httpRequest nodes use CURL() for a best-effort GET; POST bodies, '
+        'headers and JSON parsing require AGI or func_curl configuration.',
+      );
     }
     if (hasSubFlow) {
-      out.add('subFlow nodes Goto the sub-flow context without a true return; '
-          'for call/return semantics convert them to Gosub()/Return() manually.');
+      out.add(
+        'subFlow nodes Goto the sub-flow context without a true return; '
+        'for call/return semantics convert them to Gosub()/Return() manually.',
+      );
     }
 
     if (project.isOutbound) {
-      out.add('This is an outbound project: configure an outbound trunk and '
-          'CallerID, and ensure TCPA/consent/DNC compliance before dialing.');
+      out.add(
+        'This is an outbound project: configure an outbound trunk and '
+        'CallerID, and ensure TCPA/consent/DNC compliance before dialing.',
+      );
     }
 
     return out;

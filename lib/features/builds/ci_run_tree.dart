@@ -31,7 +31,10 @@ class CiRunCard extends StatelessWidget {
         title: Row(
           children: [
             Expanded(
-              child: Text(run.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+              child: Text(
+                run.name,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
             ),
             const SizedBox(width: 8),
             StatusChip(status: run.status),
@@ -39,15 +42,20 @@ class CiRunCard extends StatelessWidget {
         ),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 2),
-          child: Text(subtitleParts.join(' • '),
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+          child: Text(
+            subtitleParts.join(' • '),
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
         ),
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
         children: [
           if (run.errorText != null && run.errorText!.isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Text(run.errorText!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+              child: Text(
+                run.errorText!,
+                style: const TextStyle(color: Colors.red, fontSize: 12),
+              ),
             ),
           StreamBuilder<List<CiJob>>(
             stream: db.watchCiJobsForRun(run.ci_run_pk),
@@ -56,7 +64,10 @@ class CiRunCard extends StatelessWidget {
               if (jobs.isEmpty) {
                 return const Padding(
                   padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Text('No jobs.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  child: Text(
+                    'No jobs.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
                 );
               }
               return Column(
@@ -80,7 +91,9 @@ class _JobTile extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 2),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+        color: Theme.of(
+          context,
+        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(6),
       ),
       child: ExpansionTile(
@@ -88,13 +101,18 @@ class _JobTile extends StatelessWidget {
         leading: const Icon(Icons.settings_suggest, size: 18),
         title: Row(
           children: [
-            Expanded(child: Text(job.name, style: const TextStyle(fontSize: 13))),
+            Expanded(
+              child: Text(job.name, style: const TextStyle(fontSize: 13)),
+            ),
             const SizedBox(width: 8),
             StatusChip(status: job.status),
           ],
         ),
         subtitle: job.runsOn != null
-            ? Text(job.runsOn!, style: const TextStyle(fontSize: 11, color: Colors.grey))
+            ? Text(
+                job.runsOn!,
+                style: const TextStyle(fontSize: 11, color: Colors.grey),
+              )
             : null,
         childrenPadding: const EdgeInsets.only(left: 12, right: 8, bottom: 6),
         children: [
@@ -105,7 +123,10 @@ class _JobTile extends StatelessWidget {
               if (steps.isEmpty) {
                 return const Padding(
                   padding: EdgeInsets.symmetric(vertical: 6),
-                  child: Text('No steps.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  child: Text(
+                    'No steps.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
                 );
               }
               return Column(
@@ -150,8 +171,10 @@ class _StepTile extends StatelessWidget {
                 child: Row(
                   children: [
                     Expanded(
-                      child: Text(step.name,
-                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                      child: Text(
+                        step.name,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
                     ),
                     StatusChip(status: step.status),
                     IconButton(
@@ -164,11 +187,13 @@ class _StepTile extends StatelessWidget {
               if (step.exitCode != null)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text('Exit code: ${step.exitCode}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: step.exitCode == 0 ? Colors.green : Colors.red,
-                      )),
+                  child: Text(
+                    'Exit code: ${step.exitCode}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: step.exitCode == 0 ? Colors.green : Colors.red,
+                    ),
+                  ),
                 ),
               const SizedBox(height: 8),
               Expanded(
@@ -225,8 +250,14 @@ class StatusChip extends StatelessWidget {
               child: CircularProgressIndicator(strokeWidth: 2, color: color),
             ),
           if (running) const SizedBox(width: 6),
-          Text(status,
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color)),
+          Text(
+            status,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
         ],
       ),
     );
@@ -262,7 +293,11 @@ String _relativeTime(DateTime t) {
 class CiRunsEmptyState extends StatelessWidget {
   final IconData icon;
   final String message;
-  const CiRunsEmptyState({super.key, required this.icon, required this.message});
+  const CiRunsEmptyState({
+    super.key,
+    required this.icon,
+    required this.message,
+  });
 
   @override
   Widget build(BuildContext context) {

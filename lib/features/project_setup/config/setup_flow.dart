@@ -17,10 +17,14 @@ enum SetupStageInput { choices, freeform, mixed }
 /// flow round-trips unchanged).
 enum SetupVocab { closed, curated, open }
 
-SetupStageInput _inputFromKey(String? k) => SetupStageInput.values
-    .firstWhere((e) => e.name == k, orElse: () => SetupStageInput.mixed);
-SetupVocab _vocabFromKey(String? k) => SetupVocab.values
-    .firstWhere((e) => e.name == k, orElse: () => SetupVocab.curated);
+SetupStageInput _inputFromKey(String? k) => SetupStageInput.values.firstWhere(
+  (e) => e.name == k,
+  orElse: () => SetupStageInput.mixed,
+);
+SetupVocab _vocabFromKey(String? k) => SetupVocab.values.firstWhere(
+  (e) => e.name == k,
+  orElse: () => SetupVocab.curated,
+);
 
 /// One stage of a setup interview. [key] is the tag category the stage feeds
 /// (stored on ProjectTags.category); [guidance] tells the host what to ask and
@@ -46,24 +50,24 @@ class SetupStage {
   });
 
   Map<String, dynamic> toJson() => {
-        'key': key,
-        'title': title,
-        'guidance': guidance,
-        'input': input.name,
-        'vocab': vocab.name,
-        'suggestions': suggestions,
-      };
+    'key': key,
+    'title': title,
+    'guidance': guidance,
+    'input': input.name,
+    'vocab': vocab.name,
+    'suggestions': suggestions,
+  };
 
   factory SetupStage.fromJson(Map<String, dynamic> j) => SetupStage(
-        key: j['key'] as String,
-        title: (j['title'] as String?) ?? '',
-        guidance: (j['guidance'] as String?) ?? '',
-        input: _inputFromKey(j['input'] as String?),
-        vocab: _vocabFromKey(j['vocab'] as String?),
-        suggestions: ((j['suggestions'] as List?) ?? const [])
-            .map((e) => e.toString())
-            .toList(),
-      );
+    key: j['key'] as String,
+    title: (j['title'] as String?) ?? '',
+    guidance: (j['guidance'] as String?) ?? '',
+    input: _inputFromKey(j['input'] as String?),
+    vocab: _vocabFromKey(j['vocab'] as String?),
+    suggestions: ((j['suggestions'] as List?) ?? const [])
+        .map((e) => e.toString())
+        .toList(),
+  );
 }
 
 /// A full setup interview for a (projectType, subCategory). [intro] frames the
@@ -96,14 +100,14 @@ class SetupFlowDefinition {
   }
 
   Map<String, dynamic> toJson() => {
-        'schemaVersion': schemaVersion,
-        'projectType': projectType,
-        'subCategory': subCategory,
-        'name': name,
-        'intro': intro,
-        'stages': stages.map((s) => s.toJson()).toList(),
-        'finalizeGuidance': finalizeGuidance,
-      };
+    'schemaVersion': schemaVersion,
+    'projectType': projectType,
+    'subCategory': subCategory,
+    'name': name,
+    'intro': intro,
+    'stages': stages.map((s) => s.toJson()).toList(),
+    'finalizeGuidance': finalizeGuidance,
+  };
 
   factory SetupFlowDefinition.fromJson(Map<String, dynamic> j) =>
       SetupFlowDefinition(
@@ -112,7 +116,9 @@ class SetupFlowDefinition {
         name: (j['name'] as String?) ?? 'Setup',
         intro: (j['intro'] as String?) ?? '',
         stages: ((j['stages'] as List?) ?? const [])
-            .map((e) => SetupStage.fromJson(Map<String, dynamic>.from(e as Map)))
+            .map(
+              (e) => SetupStage.fromJson(Map<String, dynamic>.from(e as Map)),
+            )
             .toList(),
         finalizeGuidance: (j['finalizeGuidance'] as String?) ?? '',
       );

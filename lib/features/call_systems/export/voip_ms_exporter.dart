@@ -156,7 +156,8 @@ class VoipMsExporter implements CallSystemExporter {
 
         // The greeting recording for the menu (config['promptId']).
         final promptId = node.config['promptId'] as String?;
-        final greeting = (promptId != null && project.promptById(promptId) != null)
+        final greeting =
+            (promptId != null && project.promptById(promptId) != null)
             ? 'recording:${_recordingSlug(promptId)}'
             : null;
 
@@ -215,7 +216,12 @@ class VoipMsExporter implements CallSystemExporter {
         final entry = flow.entryNode;
         // Entry is a pass-through: follow its single 'next' port.
         final firstTargetId = entry?.outputs['next'];
-        destination = _resolveDestination(project, flow, firstTargetId, caveats);
+        destination = _resolveDestination(
+          project,
+          flow,
+          firstTargetId,
+          caveats,
+        );
       }
       didRouting.add({
         'did': did.e164,
@@ -298,17 +304,16 @@ class VoipMsExporter implements CallSystemExporter {
     for (final route in didRouting) {
       apiCalls.add({
         'function': 'setDIDRouting',
-        'params': {
-          'did': route['did'],
-          'routing': route['routing'],
-        },
+        'params': {'did': route['did'], 'routing': route['routing']},
       });
     }
 
     // Merge in the static, structural caveats so they always travel with the
     // plan even on a trivial project.
-    final allCaveats = <String>{..._structuralCaveats(project), ...caveats}
-        .toList();
+    final allCaveats = <String>{
+      ..._structuralCaveats(project),
+      ...caveats,
+    }.toList();
 
     final plan = <String, dynamic>{
       'provider': providerKey,
@@ -336,8 +341,9 @@ class VoipMsExporter implements CallSystemExporter {
     };
 
     return {
-      'voip_ms_deployment_plan.json':
-          const JsonEncoder.withIndent('  ').convert(plan),
+      'voip_ms_deployment_plan.json': const JsonEncoder.withIndent(
+        '  ',
+      ).convert(plan),
     };
   }
 
@@ -457,19 +463,24 @@ class VoipMsExporter implements CallSystemExporter {
 
       case CallNodeType.ringGroup:
         // Prefer an explicit ring-group id in config; else the first defined.
-        final rgId = node.config['ringGroupId'] as String? ??
-            (project.ringGroups.isNotEmpty ? project.ringGroups.first.id : null);
+        final rgId =
+            node.config['ringGroupId'] as String? ??
+            (project.ringGroups.isNotEmpty
+                ? project.ringGroups.first.id
+                : null);
         if (rgId != null) return 'ringgroup:${_ringGroupSlug(rgId)}';
         return 'hangup';
 
       case CallNodeType.queue:
-        final qId = node.config['queueId'] as String? ??
+        final qId =
+            node.config['queueId'] as String? ??
             (project.queues.isNotEmpty ? project.queues.first.id : null);
         if (qId != null) return 'queue:${_queueSlug(qId)}';
         return 'hangup';
 
       case CallNodeType.voicemail:
-        final vbId = node.config['voicemailBoxId'] as String? ??
+        final vbId =
+            node.config['voicemailBoxId'] as String? ??
             (project.voicemailBoxes.isNotEmpty
                 ? project.voicemailBoxes.first.id
                 : null);
@@ -543,8 +554,7 @@ class VoipMsExporter implements CallSystemExporter {
       if (e.id == extensionId) return 'sip:${e.number}';
     }
     // Some configs may already hold a literal number rather than an id.
-    if (extensionId.isNotEmpty &&
-        RegExp(r'^\d+$').hasMatch(extensionId)) {
+    if (extensionId.isNotEmpty && RegExp(r'^\d+$').hasMatch(extensionId)) {
       return 'sip:$extensionId';
     }
     return null;

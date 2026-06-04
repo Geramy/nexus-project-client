@@ -16,7 +16,8 @@ class ChatSessions extends Table {
   IntColumn get project_fk => integer().references(Projects, #project_pk)();
   TextColumn get plan_path => text().nullable()();
 
-  TextColumn get title => text().withDefault(const Constant('New conversation'))();
+  TextColumn get title =>
+      text().withDefault(const Constant('New conversation'))();
 
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();

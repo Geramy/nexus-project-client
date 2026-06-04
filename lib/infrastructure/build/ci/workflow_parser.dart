@@ -93,10 +93,9 @@ class WorkflowParser {
 
   String _defaultStepName(String? run, String? uses) {
     if (run != null && run.trim().isNotEmpty) {
-      final firstLine = run.split('\n').firstWhere(
-            (l) => l.trim().isNotEmpty,
-            orElse: () => run,
-          );
+      final firstLine = run
+          .split('\n')
+          .firstWhere((l) => l.trim().isNotEmpty, orElse: () => run);
       return firstLine.trim();
     }
     if (uses != null && uses.trim().isNotEmpty) return uses.trim();

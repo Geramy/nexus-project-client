@@ -42,14 +42,24 @@ class _Row {
   final String? right;
   final int? rightNo;
   final _Kind kind;
-  const _Row({this.left, this.leftNo, this.right, this.rightNo, required this.kind});
+  const _Row({
+    this.left,
+    this.leftNo,
+    this.right,
+    this.rightNo,
+    required this.kind,
+  });
 }
 
 class _CommitDiffBody extends StatelessWidget {
   final String path;
   final String? before;
   final String? after;
-  const _CommitDiffBody({required this.path, required this.before, required this.after});
+  const _CommitDiffBody({
+    required this.path,
+    required this.before,
+    required this.after,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -59,8 +69,12 @@ class _CommitDiffBody extends StatelessWidget {
     final langId = languageIdForPath(path);
     final rows = _buildRows(before, after);
 
-    final added = rows.where((r) => r.kind == _Kind.added || r.kind == _Kind.modified).length;
-    final removed = rows.where((r) => r.kind == _Kind.removed || r.kind == _Kind.modified).length;
+    final added = rows
+        .where((r) => r.kind == _Kind.added || r.kind == _Kind.modified)
+        .length;
+    final removed = rows
+        .where((r) => r.kind == _Kind.removed || r.kind == _Kind.modified)
+        .length;
 
     return Column(
       children: [
@@ -73,12 +87,32 @@ class _CommitDiffBody extends StatelessWidget {
               const Icon(Icons.difference_outlined, size: 18),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(path,
-                    style: const TextStyle(fontFamily: 'monospace', fontSize: 13, fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis),
+                child: Text(
+                  path,
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              if (removed > 0) Text('−$removed  ', style: const TextStyle(color: Color(0xFFD16969), fontSize: 12)),
-              if (added > 0) Text('+$added', style: const TextStyle(color: Color(0xFF4FA66A), fontSize: 12)),
+              if (removed > 0)
+                Text(
+                  '−$removed  ',
+                  style: const TextStyle(
+                    color: Color(0xFFD16969),
+                    fontSize: 12,
+                  ),
+                ),
+              if (added > 0)
+                Text(
+                  '+$added',
+                  style: const TextStyle(
+                    color: Color(0xFF4FA66A),
+                    fontSize: 12,
+                  ),
+                ),
               IconButton(
                 icon: const Icon(Icons.close, size: 18),
                 tooltip: 'Close',
@@ -101,10 +135,16 @@ class _CommitDiffBody extends StatelessWidget {
           child: Container(
             color: bg,
             child: rows.isEmpty
-                ? const Center(child: Text('(no content)', style: TextStyle(color: Colors.grey)))
+                ? const Center(
+                    child: Text(
+                      '(no content)',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  )
                 : ListView.builder(
                     itemCount: rows.length,
-                    itemBuilder: (_, i) => _DiffRow(row: rows[i], langId: langId, theme: theme),
+                    itemBuilder: (_, i) =>
+                        _DiffRow(row: rows[i], langId: langId, theme: theme),
                   ),
           ),
         ),
@@ -118,24 +158,39 @@ class _ColTitle extends StatelessWidget {
   const _ColTitle(this.text);
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: Text(text, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey)),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+    child: Text(
+      text,
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        color: Colors.grey,
+      ),
+    ),
+  );
 }
 
 class _DiffRow extends StatelessWidget {
   final _Row row;
   final String? langId;
   final Map<String, TextStyle> theme;
-  const _DiffRow({required this.row, required this.langId, required this.theme});
+  const _DiffRow({
+    required this.row,
+    required this.langId,
+    required this.theme,
+  });
 
   static const _addBg = Color(0x334FA66A);
   static const _delBg = Color(0x33D16969);
 
   @override
   Widget build(BuildContext context) {
-    final leftBg = (row.kind == _Kind.removed || row.kind == _Kind.modified) ? _delBg : null;
-    final rightBg = (row.kind == _Kind.added || row.kind == _Kind.modified) ? _addBg : null;
+    final leftBg = (row.kind == _Kind.removed || row.kind == _Kind.modified)
+        ? _delBg
+        : null;
+    final rightBg = (row.kind == _Kind.added || row.kind == _Kind.modified)
+        ? _addBg
+        : null;
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -157,9 +212,15 @@ class _DiffRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 36,
-            child: Text(lineNo?.toString() ?? '',
-                textAlign: TextAlign.right,
-                style: const TextStyle(fontSize: 11, color: Colors.grey, fontFamily: 'monospace')),
+            child: Text(
+              lineNo?.toString() ?? '',
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 11,
+                color: Colors.grey,
+                fontFamily: 'monospace',
+              ),
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(child: _code(text)),
@@ -172,21 +233,34 @@ class _DiffRow extends StatelessWidget {
     if (text == null) return const SizedBox.shrink();
     if (text.isEmpty) return const SizedBox(height: 16);
     if (langId == null) {
-      return Text(text, style: const TextStyle(fontFamily: 'monospace', fontSize: 12.5, height: 1.3));
+      return Text(
+        text,
+        style: const TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 12.5,
+          height: 1.3,
+        ),
+      );
     }
     return HighlightView(
       text,
       language: langId!,
       theme: theme,
       padding: EdgeInsets.zero,
-      textStyle: const TextStyle(fontFamily: 'monospace', fontSize: 12.5, height: 1.3),
+      textStyle: const TextStyle(
+        fontFamily: 'monospace',
+        fontSize: 12.5,
+        height: 1.3,
+      ),
     );
   }
 }
 
 /// Build aligned side-by-side rows from before/after text via an LCS line diff.
 List<_Row> _buildRows(String? before, String? after) {
-  final a = (before ?? '').isEmpty && before == null ? <String>[] : _lines(before);
+  final a = (before ?? '').isEmpty && before == null
+      ? <String>[]
+      : _lines(before);
   final b = (after ?? '').isEmpty && after == null ? <String>[] : _lines(after);
 
   // Guard against pathological cost on huge files: above the cap, don't run the
@@ -200,7 +274,15 @@ List<_Row> _buildRows(String? before, String? after) {
   while (k < ops.length) {
     final op = ops[k];
     if (op.equal) {
-      rows.add(_Row(left: op.text, leftNo: ++ai, right: op.text, rightNo: ++bi, kind: _Kind.equal));
+      rows.add(
+        _Row(
+          left: op.text,
+          leftNo: ++ai,
+          right: op.text,
+          rightNo: ++bi,
+          kind: _Kind.equal,
+        ),
+      );
       k++;
       continue;
     }
@@ -222,13 +304,15 @@ List<_Row> _buildRows(String? before, String? after) {
       final kind = (l != null && r != null)
           ? _Kind.modified
           : (l != null ? _Kind.removed : _Kind.added);
-      rows.add(_Row(
-        left: l,
-        leftNo: l != null ? ++ai : null,
-        right: r,
-        rightNo: r != null ? ++bi : null,
-        kind: kind,
-      ));
+      rows.add(
+        _Row(
+          left: l,
+          leftNo: l != null ? ++ai : null,
+          right: r,
+          rightNo: r != null ? ++bi : null,
+          kind: kind,
+        ),
+      );
     }
   }
   return rows;
@@ -250,17 +334,23 @@ class _Op {
 }
 
 List<_Op> _bulk(List<String> a, List<String> b) => [
-      for (final l in a) _Op(l, equal: false, removed: true),
-      for (final l in b) _Op(l, equal: false, removed: false),
-    ];
+  for (final l in a) _Op(l, equal: false, removed: true),
+  for (final l in b) _Op(l, equal: false, removed: false),
+];
 
 /// Classic LCS line diff → ordered ops (equal / removed / added).
 List<_Op> _lcs(List<String> a, List<String> b) {
   final n = a.length, m = b.length;
-  final dp = List.generate(n + 1, (_) => List<int>.filled(m + 1, 0), growable: false);
+  final dp = List.generate(
+    n + 1,
+    (_) => List<int>.filled(m + 1, 0),
+    growable: false,
+  );
   for (var i = n - 1; i >= 0; i--) {
     for (var j = m - 1; j >= 0; j--) {
-      dp[i][j] = a[i] == b[j] ? dp[i + 1][j + 1] + 1 : math.max(dp[i + 1][j], dp[i][j + 1]);
+      dp[i][j] = a[i] == b[j]
+          ? dp[i + 1][j + 1] + 1
+          : math.max(dp[i + 1][j], dp[i][j + 1]);
     }
   }
   final ops = <_Op>[];

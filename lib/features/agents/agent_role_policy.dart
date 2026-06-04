@@ -115,12 +115,8 @@ const Map<String, Map<String, ToolPerm>> kSkillCatalog = {
     kToolRunVerification: ToolPerm.grant,
     kToolSubmitVerdict: ToolPerm.grant,
   },
-  'completion': {
-    kToolSubmitForCompletion: ToolPerm.grant,
-  },
-  'diagramming': {
-    'generate_diagram': ToolPerm.grant,
-  },
+  'completion': {kToolSubmitForCompletion: ToolPerm.grant},
+  'diagramming': {'generate_diagram': ToolPerm.grant},
 };
 
 /// Display metadata for each skill bundle: human description, category, and
@@ -133,18 +129,66 @@ class SkillMeta {
 }
 
 const Map<String, SkillMeta> kSkillMeta = {
-  'plan-authoring': SkillMeta('Create and maintain technical plans.', 'plans', 'low'),
-  'task-management': SkillMeta('Create, update, and manage tasks.', 'tasks', 'low'),
-  'work-assignment': SkillMeta('List agents and assign tasks to them.', 'orchestration', 'medium'),
-  'build-authoring': SkillMeta('Configure a task\'s build gate and scaffold CI workflows.', 'build', 'medium'),
-  'review': SkillMeta('Review submissions and approve or reject tasks.', 'orchestration', 'medium'),
-  'code-read': SkillMeta('Read and search the workspace without modifying it.', 'filesystem', 'low'),
-  'code-write': SkillMeta('Create, edit, and delete workspace files.', 'filesystem', 'high'),
-  'vcs-local': SkillMeta('Local git: status, log, branches, commit.', 'git', 'medium'),
-  'vcs-integration': SkillMeta('Integrate work: pull, merge, push.', 'git', 'critical'),
-  'build-ci': SkillMeta('Build Docker images and run CI workflows.', 'build', 'high'),
-  'verification': SkillMeta('Run a task verification and emit a verdict.', 'testing', 'low'),
-  'completion': SkillMeta('Submit a task for completion review.', 'workflow', 'low'),
+  'plan-authoring': SkillMeta(
+    'Create and maintain technical plans.',
+    'plans',
+    'low',
+  ),
+  'task-management': SkillMeta(
+    'Create, update, and manage tasks.',
+    'tasks',
+    'low',
+  ),
+  'work-assignment': SkillMeta(
+    'List agents and assign tasks to them.',
+    'orchestration',
+    'medium',
+  ),
+  'build-authoring': SkillMeta(
+    'Configure a task\'s build gate and scaffold CI workflows.',
+    'build',
+    'medium',
+  ),
+  'review': SkillMeta(
+    'Review submissions and approve or reject tasks.',
+    'orchestration',
+    'medium',
+  ),
+  'code-read': SkillMeta(
+    'Read and search the workspace without modifying it.',
+    'filesystem',
+    'low',
+  ),
+  'code-write': SkillMeta(
+    'Create, edit, and delete workspace files.',
+    'filesystem',
+    'high',
+  ),
+  'vcs-local': SkillMeta(
+    'Local git: status, log, branches, commit.',
+    'git',
+    'medium',
+  ),
+  'vcs-integration': SkillMeta(
+    'Integrate work: pull, merge, push.',
+    'git',
+    'critical',
+  ),
+  'build-ci': SkillMeta(
+    'Build Docker images and run CI workflows.',
+    'build',
+    'high',
+  ),
+  'verification': SkillMeta(
+    'Run a task verification and emit a verdict.',
+    'testing',
+    'low',
+  ),
+  'completion': SkillMeta(
+    'Submit a task for completion review.',
+    'workflow',
+    'low',
+  ),
   'diagramming': SkillMeta('Generate diagrams.', 'other', 'low'),
 };
 
@@ -191,20 +235,17 @@ const Map<AgentRole, List<String>> kRoleSkills = {
   AgentRole.sdeDatabase: _workerSkills,
   AgentRole.sdeUiUx: _workerSkills,
   AgentRole.sdeDevOps: _devOpsSkills,
-  AgentRole.verificationAgent: [
-    'code-read',
-    'verification',
-  ],
+  AgentRole.verificationAgent: ['code-read', 'verification'],
 };
 
 /// Every tool the rule engine knows about: the catalog plus orchestration tools
 /// plus anything referenced by a skill. Used to materialize a full default-deny
 /// permission map.
 Set<String> get _allKnownTools => {
-      for (final s in kCoordinatorToolSpecs) s.name,
-      ...kOrchestrationToolNames,
-      for (final skill in kSkillCatalog.values) ...skill.keys,
-    };
+  for (final s in kCoordinatorToolSpecs) s.name,
+  ...kOrchestrationToolNames,
+  for (final skill in kSkillCatalog.values) ...skill.keys,
+};
 
 /// The skill names granted to [role].
 List<String> defaultSkillNames(AgentRole role) => kRoleSkills[role] ?? const [];
@@ -230,7 +271,10 @@ Map<String, ToolPerm> toolPermissionsForSkills(Iterable<String> skills) {
 /// Serializes a skill list into a `configJson` string, ready to store on a
 /// seeded persona (the executor reads `configJson.toolPermissions`).
 String configJsonForSkills(Iterable<String> skills) =>
-    AgentToolPermissions.writeIntoConfigJson(null, toolPermissionsForSkills(skills));
+    AgentToolPermissions.writeIntoConfigJson(
+      null,
+      toolPermissionsForSkills(skills),
+    );
 
 /// Builds the full default tool-permission map for [role]. Tools outside the
 /// role's skills are denied.
@@ -240,7 +284,10 @@ Map<String, ToolPerm> defaultToolPermissions(AgentRole role) =>
 /// Serializes [role]'s default permissions into a `configJson` string, ready to
 /// store on a seeded persona (the executor reads `configJson.toolPermissions`).
 String defaultConfigJson(AgentRole role) =>
-    AgentToolPermissions.writeIntoConfigJson(null, defaultToolPermissions(role));
+    AgentToolPermissions.writeIntoConfigJson(
+      null,
+      defaultToolPermissions(role),
+    );
 
 /// The tools this role may actually call (grant or ask), for the prompt's
 /// "tools you should use" section.
@@ -268,7 +315,8 @@ You are part of an autonomous software team working in one project workspace:
 - A Verification Agent proves each submission and emits a pass/fail verdict.''';
 
   final body = switch (role) {
-    AgentRole.projectManager => '''
+    AgentRole.projectManager =>
+      '''
 Your role: Project Manager. You are the human's single point of contact.
 Build and maintain technical plans, decompose them into well-scoped tasks, and
 assign each task to the most suitable agent by its title. For every task, write
@@ -276,33 +324,40 @@ clear acceptance criteria and a concrete, runnable verification (a command and
 its expected result) so the Verification Agent can prove completion. You do not
 write code, push, or merge — you delegate. When a task reaches Done, summarize
 the outcome and its proof to the human in the chat.''',
-    AgentRole.coordinator => '''
+    AgentRole.coordinator =>
+      '''
 Your role: Coordinator (integration). When a task passes verification, merge its
 branch into main, then run the build/CI. Resolve merge conflicts; if a conflict
 needs source changes beyond a trivial merge, send the task back rather than
 editing features yourself. You are the only role permitted to push or merge.''',
-    AgentRole.sdeGeneralist => '''
+    AgentRole.sdeGeneralist =>
+      '''
 Your role: SDE Generalist. Implement the assigned task end-to-end on its branch.
 Work autonomously: read the code, make the changes, commit to your task branch.
 Do not push or merge — the Coordinator integrates after verification.''',
-    AgentRole.sdeNetworking => '''
+    AgentRole.sdeNetworking =>
+      '''
 Your role: SDE Networking. Implement the assigned task on its branch, with depth
 in protocols, API clients, sockets, and transport code. Commit to your task
 branch; do not push or merge.''',
-    AgentRole.sdePhysics => '''
+    AgentRole.sdePhysics =>
+      '''
 Your role: SDE Physics. Implement the assigned task on its branch, with depth in
 simulation, numerical methods, and physics. Prefer numeric/unit tests as proof.
 Commit to your task branch; do not push or merge.''',
-    AgentRole.sdeDatabase => '''
+    AgentRole.sdeDatabase =>
+      '''
 Your role: SDE Database. Implement the assigned task on its branch, with depth in
 schema, migrations, and queries. Verify with migration and query tests. Commit
 to your task branch; do not push or merge.''',
-    AgentRole.sdeUiUx => '''
+    AgentRole.sdeUiUx =>
+      '''
 Your role: SDE UI/UX. Implement the assigned task on its branch, with depth in
 Flutter widgets, layout, and accessibility. UI correctness can't be fully
 auto-proven — state honestly what you verified (build, widget tests) and what a
 human still needs to eyeball. Commit to your task branch; do not push or merge.''',
-    AgentRole.sdeDevOps => '''
+    AgentRole.sdeDevOps =>
+      '''
 Your role: SDE DevOps (build/release engineering). Implement the assigned task
 on its branch, with deep expertise in Dockerfiles, CMake (CMakeLists.txt), and
 CI workflow YAML (GitHub-Actions format). Author clean, minimal, reproducible
@@ -314,7 +369,8 @@ set_task_build_config to point the pipeline at the Dockerfile and/or workflow yo
 authored (and an image tag). Verify your files build locally where you can
 (build_docker_image / run_workflow) before submitting. Commit to your task
 branch; do not push or merge.''',
-    AgentRole.verificationAgent => '''
+    AgentRole.verificationAgent =>
+      '''
 Your role: Verification Agent. Run the task's verification exactly as specified
 and judge the result against its acceptance criteria. You may read code and run
 checks, but you must NOT edit anything — your integrity comes from not being able
@@ -325,8 +381,8 @@ evidence you observed.''',
   final finish = role.isWorker
       ? 'When the task is complete, call submit_for_completion with a summary and the evidence (test output, diffs, build ids).'
       : role == AgentRole.verificationAgent
-          ? 'Finish by calling submit_verdict with pass or fail and the proof you gathered.'
-          : 'Use your tools to drive the work to completion.';
+      ? 'Finish by calling submit_verdict with pass or fail and the proof you gathered.'
+      : 'Use your tools to drive the work to completion.';
 
   return '$team\n\n$body\n\nTools you should use: $usable.\n\n$finish';
 }

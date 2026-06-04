@@ -9,7 +9,12 @@ class LemonadeApiException implements Exception {
   final String? endpoint;
   final Object? cause;
 
-  LemonadeApiException(this.message, {this.statusCode, this.endpoint, this.cause});
+  LemonadeApiException(
+    this.message, {
+    this.statusCode,
+    this.endpoint,
+    this.cause,
+  });
 
   @override
   String toString() {
@@ -21,19 +26,27 @@ class LemonadeApiException implements Exception {
 }
 
 class NotFoundException extends LemonadeApiException {
-  NotFoundException(super.message, {super.endpoint, super.cause}) : super(statusCode: 404);
+  NotFoundException(super.message, {super.endpoint, super.cause})
+    : super(statusCode: 404);
 }
 
 class UnauthorizedException extends LemonadeApiException {
-  UnauthorizedException(super.message, {super.endpoint, super.cause}) : super(statusCode: 401);
+  UnauthorizedException(super.message, {super.endpoint, super.cause})
+    : super(statusCode: 401);
 }
 
 class ModelMismatchException extends LemonadeApiException {
-  ModelMismatchException(super.message, {super.endpoint, super.cause}) : super(statusCode: 400);
+  ModelMismatchException(super.message, {super.endpoint, super.cause})
+    : super(statusCode: 400);
 }
 
 class ServerException extends LemonadeApiException {
-  ServerException(super.message, {super.statusCode, super.endpoint, super.cause});
+  ServerException(
+    super.message, {
+    super.statusCode,
+    super.endpoint,
+    super.cause,
+  });
 }
 
 class StreamProtocolException extends LemonadeApiException {

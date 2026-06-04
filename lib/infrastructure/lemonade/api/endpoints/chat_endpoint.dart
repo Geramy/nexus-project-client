@@ -18,9 +18,19 @@ class ChatEndpoint {
   const ChatEndpoint(this._client);
 
   /// `POST /v1/chat/completions` with `stream: false`.
-  Future<ChatCompletion> create(ChatCompletionRequest request, {Duration? timeout}) async {
-    if (request.stream) throw StreamProtocolException('create() requires stream:false; use stream() instead.');
-    final body = await _client.postJson(_client.apiUriFor('/chat/completions'), request.toWireJson(), timeout: timeout);
+  Future<ChatCompletion> create(
+    ChatCompletionRequest request, {
+    Duration? timeout,
+  }) async {
+    if (request.stream)
+      throw StreamProtocolException(
+        'create() requires stream:false; use stream() instead.',
+      );
+    final body = await _client.postJson(
+      _client.apiUriFor('/chat/completions'),
+      request.toWireJson(),
+      timeout: timeout,
+    );
     return ChatCompletion.fromJson(body);
   }
 
@@ -28,10 +38,18 @@ class ChatEndpoint {
   /// Yields [ChatContentDelta], [ChatToolCallDelta], and finally [ChatStreamFinish].
   Stream<ChatStreamEvent> stream(ChatCompletionRequest request) async* {
     final req = ChatCompletionRequest(
-      model: request.model, messages: request.messages, tools: request.tools,
-      stream: true, temperature: request.temperature, topP: request.topP,
-      topK: request.topK, repeatPenalty: request.repeatPenalty, maxCompletionTokens: request.maxCompletionTokens,
-      stop: request.stop, enableThinking: request.enableThinking, extra: request.extra,
+      model: request.model,
+      messages: request.messages,
+      tools: request.tools,
+      stream: true,
+      temperature: request.temperature,
+      topP: request.topP,
+      topK: request.topK,
+      repeatPenalty: request.repeatPenalty,
+      maxCompletionTokens: request.maxCompletionTokens,
+      stop: request.stop,
+      enableThinking: request.enableThinking,
+      extra: request.extra,
     );
 
     final assembler = ToolCallAssembler();
@@ -39,7 +57,10 @@ class ChatEndpoint {
     String? finishReason;
     var sawFinish = false;
 
-    final sse = _client.streamSseFromJsonPost(_client.apiUriFor('/chat/completions'), req.toWireJson());
+    final sse = _client.streamSseFromJsonPost(
+      _client.apiUriFor('/chat/completions'),
+      req.toWireJson(),
+    );
 
     await for (final event in sse) {
       final data = event.data.trim();
@@ -73,10 +94,17 @@ class ChatEndpoint {
       }
 
       final fr = first['finish_reason'];
-      if (fr is String) { finishReason = fr; sawFinish = true; }
+      if (fr is String) {
+        finishReason = fr;
+        sawFinish = true;
+      }
     }
 
-    yield ChatStreamFinish(finishReason: finishReason ?? (sawFinish ? null : 'stop'), toolCalls: assembler.finalize(), contentSoFar: contentBuf.toString());
+    yield ChatStreamFinish(
+      finishReason: finishReason ?? (sawFinish ? null : 'stop'),
+      toolCalls: assembler.finalize(),
+      contentSoFar: contentBuf.toString(),
+    );
   }
 }
 

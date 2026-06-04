@@ -90,7 +90,7 @@ class TelnyxExporter implements CallSystemExporter {
               if (did.label != null) 'label': did.label,
               'flowId': did.flowId,
               'managed': did.managed,
-            }
+            },
         ],
         // Carried verbatim so the webhook can interpolate ${var} into speak text.
         'variables': project.variables,
@@ -99,8 +99,9 @@ class TelnyxExporter implements CallSystemExporter {
     };
 
     return {
-      'telnyx_call_control.json':
-          const JsonEncoder.withIndent('  ').convert(root),
+      'telnyx_call_control.json': const JsonEncoder.withIndent(
+        '  ',
+      ).convert(root),
     };
   }
 
@@ -123,57 +124,69 @@ class TelnyxExporter implements CallSystemExporter {
     ];
 
     // Surface capability gaps that actually appear in this project.
-    final hasQueue = project.flows
-        .any((f) => f.nodes.any((n) => n.type == CallNodeType.queue));
-    final hasDirectory = project.flows
-        .any((f) => f.nodes.any((n) => n.type == CallNodeType.playDirectory));
-    final hasSchedule = project.flows
-        .any((f) => f.nodes.any((n) => n.type == CallNodeType.schedule));
-    final hasRingGroup = project.flows
-        .any((f) => f.nodes.any((n) => n.type == CallNodeType.ringGroup));
-    final hasVoicebot = project.flows
-        .any((f) => f.nodes.any((n) => n.type == CallNodeType.aiVoicebot));
-    final hasSubFlow = project.flows
-        .any((f) => f.nodes.any((n) => n.type == CallNodeType.subFlow));
+    final hasQueue = project.flows.any(
+      (f) => f.nodes.any((n) => n.type == CallNodeType.queue),
+    );
+    final hasDirectory = project.flows.any(
+      (f) => f.nodes.any((n) => n.type == CallNodeType.playDirectory),
+    );
+    final hasSchedule = project.flows.any(
+      (f) => f.nodes.any((n) => n.type == CallNodeType.schedule),
+    );
+    final hasRingGroup = project.flows.any(
+      (f) => f.nodes.any((n) => n.type == CallNodeType.ringGroup),
+    );
+    final hasVoicebot = project.flows.any(
+      (f) => f.nodes.any((n) => n.type == CallNodeType.aiVoicebot),
+    );
+    final hasSubFlow = project.flows.any(
+      (f) => f.nodes.any((n) => n.type == CallNodeType.subFlow),
+    );
 
     if (hasQueue) {
       out.add(
-          'ACD queues are not a native Call Control primitive. Queue states are '
-          'emitted as the "enqueue" command (Telnyx call queues) with agent '
-          'extensions listed; ring-strategy/music-on-hold are advisory and must '
-          'be implemented in your dequeue/agent-dial logic.');
+        'ACD queues are not a native Call Control primitive. Queue states are '
+        'emitted as the "enqueue" command (Telnyx call queues) with agent '
+        'extensions listed; ring-strategy/music-on-hold are advisory and must '
+        'be implemented in your dequeue/agent-dial logic.',
+      );
     }
     if (hasRingGroup) {
       out.add(
-          'Ring groups are modeled by simultaneously dialing members. Only '
-          'ring-all maps cleanly to a single "dial"; hunt/round-robin strategies '
-          'require your webhook to dial members sequentially (the strategy is '
-          'recorded in the state for that logic).');
+        'Ring groups are modeled by simultaneously dialing members. Only '
+        'ring-all maps cleanly to a single "dial"; hunt/round-robin strategies '
+        'require your webhook to dial members sequentially (the strategy is '
+        'recorded in the state for that logic).',
+      );
     }
     if (hasSchedule) {
       out.add(
-          'Time-of-day/holiday evaluation has no Call Control command. Schedule '
-          'states carry the referenced TimeCondition; your webhook must evaluate '
-          'open/closed/holiday and pick the matching transition.');
+        'Time-of-day/holiday evaluation has no Call Control command. Schedule '
+        'states carry the referenced TimeCondition; your webhook must evaluate '
+        'open/closed/holiday and pick the matching transition.',
+      );
     }
     if (hasDirectory) {
       out.add(
-          'Dial-by-name directory has no native command. Directory states are '
-          'emitted as a gather_using_speak shell; matching a spoken/typed name '
-          'to an extension must be handled in your webhook.');
+        'Dial-by-name directory has no native command. Directory states are '
+        'emitted as a gather_using_speak shell; matching a spoken/typed name '
+        'to an extension must be handled in your webhook.',
+      );
     }
     if (hasVoicebot) {
       out.add(
-          'aiVoicebot states emit a "streaming_start" command to bridge call '
-          'media to your Omni voicebot via Telnyx media streaming '
-          '(WebSocket/bidirectional). The transfer/hangup/next ports are driven '
-          'by control messages your voicebot sends back.');
+        'aiVoicebot states emit a "streaming_start" command to bridge call '
+        'media to your Omni voicebot via Telnyx media streaming '
+        '(WebSocket/bidirectional). The transfer/hangup/next ports are driven '
+        'by control messages your voicebot sends back.',
+      );
     }
     if (hasSubFlow) {
       out.add(
-          'subFlow states are a dispatcher convention (push/pop the target '
-          'flow), not a Telnyx command. The "returned" port resumes after the '
-          'sub-flow completes.');
+        'subFlow states are a dispatcher convention (push/pop the target '
+        'flow), not a Telnyx command. The "returned" port resumes after the '
+        'sub-flow completes.',
+      );
     }
     return out;
   }
@@ -230,12 +243,17 @@ class TelnyxExporter implements CallSystemExporter {
 
   /// Maps a single [CallNode] to its Call Control command(s) + transition table.
   Map<String, dynamic> _exportNode(
-      CallSystemProject project, CallNode node, bool reachable) {
+    CallSystemProject project,
+    CallNode node,
+    bool reachable,
+  ) {
     final transitions = _transitions(node);
     final extraNotes = <String>[];
     if (!reachable) {
-      extraNotes.add('Unreachable from entry node; state emitted for '
-          'completeness but never entered.');
+      extraNotes.add(
+        'Unreachable from entry node; state emitted for '
+        'completeness but never entered.',
+      );
     }
 
     // The (command, event→port) pair this node type maps to.
@@ -262,9 +280,7 @@ class TelnyxExporter implements CallSystemExporter {
   /// null/unconnected), then overlay the node's actual `outputs` — which for
   /// `menu` nodes also contributes the extra digit/timeout/invalid ports.
   Map<String, String?> _transitions(CallNode node) {
-    final out = <String, String?>{
-      for (final p in node.type.basePorts) p: null,
-    };
+    final out = <String, String?>{for (final p in node.type.basePorts) p: null};
     out.addAll(node.outputs);
     return out;
   }
@@ -293,7 +309,9 @@ class TelnyxExporter implements CallSystemExporter {
   /// Builds a `speak` OR `playback_start` command for a promptId, picking the
   /// right one based on whether the prompt is TTS or a recorded asset.
   Map<String, dynamic>? _speakOrPlay(
-      CallSystemProject project, String? promptId) {
+    CallSystemProject project,
+    String? promptId,
+  ) {
     if (promptId == null) return null;
     final audio = _audioPrompt(project, promptId);
     if (audio != null) {
@@ -333,17 +351,17 @@ class TelnyxExporter implements CallSystemExporter {
 
   /// Returns the command(s) and event→port hints for a node.
   _NodeCommand _commandFor(
-      CallSystemProject project, CallNode node, List<String> notes) {
+    CallSystemProject project,
+    CallNode node,
+    List<String> notes,
+  ) {
     final cfg = node.config;
     switch (node.type) {
       // ── entry ───────────────────────────────────────────────────────────
       case CallNodeType.entry:
         // The webhook answers the call here; 'next' continues the flow.
         return _NodeCommand(
-          command: {
-            'command': 'answer',
-            'payload': const <String, dynamic>{},
-          },
+          command: {'command': 'answer', 'payload': const <String, dynamic>{}},
           events: const {'call.answered': 'next'},
         );
 
@@ -366,17 +384,19 @@ class TelnyxExporter implements CallSystemExporter {
         // The digit ports live in outputs as extra keys ('1','2',...) plus the
         // base 'timeout'/'invalid' ports.
         final text = _promptText(project, cfg['promptId'] as String?);
-        final digits = node.outputs.keys
-            .where((k) => k != 'timeout' && k != 'invalid')
-            .toList()
-          ..sort();
+        final digits =
+            node.outputs.keys
+                .where((k) => k != 'timeout' && k != 'invalid')
+                .toList()
+              ..sort();
         return _NodeCommand(
           command: {
             'command': 'gather_using_speak',
             'payload': {
               'payload': text,
               'voice': _telnyxVoice(
-                  project.promptById(cfg['promptId'] as String? ?? '')?.voice),
+                project.promptById(cfg['promptId'] as String? ?? '')?.voice,
+              ),
               'language': 'en-US',
               // Single-digit menu selection.
               'minimum_digits': 1,
@@ -423,8 +443,10 @@ class TelnyxExporter implements CallSystemExporter {
       case CallNodeType.gatherSpeech:
         final text = _promptText(project, cfg['promptId'] as String?);
         final variable = cfg['variable'] as String?;
-        notes.add('gatherSpeech uses Telnyx speech recognition (gather with '
-            'transcription); confirm STT is enabled on your number/region.');
+        notes.add(
+          'gatherSpeech uses Telnyx speech recognition (gather with '
+          'transcription); confirm STT is enabled on your number/region.',
+        );
         return _NodeCommand(
           command: {
             'command': 'gather_using_speak',
@@ -432,9 +454,7 @@ class TelnyxExporter implements CallSystemExporter {
               if (text.isNotEmpty) 'payload': text,
               'voice': 'female',
               'language': 'en-US',
-              'speech': {
-                'language': 'en-US',
-              },
+              'speech': {'language': 'en-US'},
               if (variable != null) 'client_state_variable': variable,
             },
           },
@@ -448,9 +468,11 @@ class TelnyxExporter implements CallSystemExporter {
       // ── aiVoicebot ────────────────────────────────────────────────────────
       case CallNodeType.aiVoicebot:
         final goal = cfg['goal'] as String?;
-        notes.add('Bridges call audio to the Omni voicebot via Telnyx media '
-            'streaming; next/transfer/hangup are driven by control messages '
-            'from the voicebot.');
+        notes.add(
+          'Bridges call audio to the Omni voicebot via Telnyx media '
+          'streaming; next/transfer/hangup are driven by control messages '
+          'from the voicebot.',
+        );
         return _NodeCommand(
           command: {
             'command': 'streaming_start',
@@ -504,8 +526,10 @@ class TelnyxExporter implements CallSystemExporter {
             ? 'sip:${ext.sipUsername}'
             : (ext?.number ?? extId ?? '');
         if (ext == null) {
-          notes.add('transferToExtension references unknown extension id '
-              '"$extId"; using the raw value as the transfer target.');
+          notes.add(
+            'transferToExtension references unknown extension id '
+            '"$extId"; using the raw value as the transfer target.',
+          );
         }
         return _NodeCommand(
           command: {
@@ -532,22 +556,30 @@ class TelnyxExporter implements CallSystemExporter {
         final targets = <String>[];
         if (rg != null) {
           for (final exId in rg.extensionIds) {
-            final ex =
-                _firstWhereOrNull(project.extensions, (e) => e.id == exId);
+            final ex = _firstWhereOrNull(
+              project.extensions,
+              (e) => e.id == exId,
+            );
             if (ex == null) continue;
-            targets.add(ex.sipUsername != null && ex.sipUsername!.isNotEmpty
-                ? 'sip:${ex.sipUsername}'
-                : ex.number);
+            targets.add(
+              ex.sipUsername != null && ex.sipUsername!.isNotEmpty
+                  ? 'sip:${ex.sipUsername}'
+                  : ex.number,
+            );
           }
         }
         if (rg == null) {
-          notes.add('ringGroup references unknown group id "$rgId"; emitted '
-              'with empty member list.');
+          notes.add(
+            'ringGroup references unknown group id "$rgId"; emitted '
+            'with empty member list.',
+          );
         } else if (rg.strategy != RingStrategy.ringAll) {
-          notes.add('ringGroup "${rg.name}" uses strategy '
-              '"${rg.strategy.name}" — Call Control natively rings all at once; '
-              'sequential strategies must be sequenced by your webhook (strategy '
-              'recorded here).');
+          notes.add(
+            'ringGroup "${rg.name}" uses strategy '
+            '"${rg.strategy.name}" — Call Control natively rings all at once; '
+            'sequential strategies must be sequenced by your webhook (strategy '
+            'recorded here).',
+          );
         }
         return _NodeCommand(
           command: {
@@ -573,8 +605,10 @@ class TelnyxExporter implements CallSystemExporter {
             ? null
             : _firstWhereOrNull(project.queues, (x) => x.id == qId);
         if (q == null) {
-          notes.add('queue references unknown queue id "$qId"; emitted as a '
-              'generic enqueue.');
+          notes.add(
+            'queue references unknown queue id "$qId"; emitted as a '
+            'generic enqueue.',
+          );
         }
         final moh = q?.musicOnHoldPromptId;
         return _NodeCommand(
@@ -587,7 +621,8 @@ class TelnyxExporter implements CallSystemExporter {
               if (q != null) 'agents': q.agentExtensionIds,
               if (q != null) 'ring_strategy': q.strategy.name,
               if (moh != null)
-                'hold_audio_url': 'https://YOUR_ASSET_HOST/'
+                'hold_audio_url':
+                    'https://YOUR_ASSET_HOST/'
                     '${project.promptById(moh)?.audioAssetPath ?? "moh.wav"}',
             },
           },
@@ -600,16 +635,19 @@ class TelnyxExporter implements CallSystemExporter {
 
       // ── voicemail ─────────────────────────────────────────────────────────
       case CallNodeType.voicemail:
-        final vmId = cfg['voicemailBoxId'] as String? ?? cfg['target'] as String?;
+        final vmId =
+            cfg['voicemailBoxId'] as String? ?? cfg['target'] as String?;
         final vm = vmId == null
             ? null
             : _firstWhereOrNull(project.voicemailBoxes, (v) => v.id == vmId);
         final greeting = vm?.greetingPromptId;
         final greetingCmd = _speakOrPlay(project, greeting);
-        notes.add('Voicemail is composed from Call Control primitives: play the '
-            'greeting, then record_start with a beep; delivery '
-            '(${vm?.emailTo ?? "email"}) happens in your webhook on '
-            'call.record.saved.');
+        notes.add(
+          'Voicemail is composed from Call Control primitives: play the '
+          'greeting, then record_start with a beep; delivery '
+          '(${vm?.emailTo ?? "email"}) happens in your webhook on '
+          'call.record.saved.',
+        );
         return _NodeCommand(
           command: {
             'command': 'record_start',
@@ -621,9 +659,7 @@ class TelnyxExporter implements CallSystemExporter {
             },
           },
           // Greeting is played first (if any), then recording starts.
-          commands: [
-            if (greetingCmd != null) greetingCmd,
-          ],
+          commands: [if (greetingCmd != null) greetingCmd],
           events: const {'call.record.saved': 'done'},
         );
 
@@ -634,9 +670,11 @@ class TelnyxExporter implements CallSystemExporter {
         final tc = tcId == null
             ? null
             : _firstWhereOrNull(project.timeConditions, (t) => t.id == tcId);
-        notes.add('No Call Control command evaluates business hours. The '
-            'dispatcher must evaluate the embedded TimeCondition (timezone + '
-            'open ranges + holidays) and pick open/closed/holiday.');
+        notes.add(
+          'No Call Control command evaluates business hours. The '
+          'dispatcher must evaluate the embedded TimeCondition (timezone + '
+          'open ranges + holidays) and pick open/closed/holiday.',
+        );
         return _NodeCommand(
           // No command — pure decision the dispatcher makes.
           command: null,
@@ -654,10 +692,10 @@ class TelnyxExporter implements CallSystemExporter {
                           'days': r.days,
                           'startMinute': r.startMinute,
                           'endMinute': r.endMinute,
-                        }
+                        },
                     ],
                     'holidayDates': tc.holidayDates,
-                  }
+                  },
                 ],
           events: const {
             'schedule.open': 'open',
@@ -668,8 +706,10 @@ class TelnyxExporter implements CallSystemExporter {
 
       // ── condition (variable branch) ───────────────────────────────────────
       case CallNodeType.condition:
-        notes.add('condition is a dispatcher-side branch on a variable/'
-            'expression; no Call Control command is issued.');
+        notes.add(
+          'condition is a dispatcher-side branch on a variable/'
+          'expression; no Call Control command is issued.',
+        );
         return _NodeCommand(
           command: null,
           commands: [
@@ -678,33 +718,34 @@ class TelnyxExporter implements CallSystemExporter {
               if (cfg['variable'] != null) 'variable': cfg['variable'],
               if (cfg['operator'] != null) 'operator': cfg['operator'],
               if (cfg['value'] != null) 'value': cfg['value'],
-            }
+            },
           ],
-          events: const {
-            'condition.true': 'true',
-            'condition.false': 'false',
-          },
+          events: const {'condition.true': 'true', 'condition.false': 'false'},
         );
 
       // ── setVariable ───────────────────────────────────────────────────────
       case CallNodeType.setVariable:
-        notes.add('setVariable mutates dispatcher client_state; no Call Control '
-            'command is issued.');
+        notes.add(
+          'setVariable mutates dispatcher client_state; no Call Control '
+          'command is issued.',
+        );
         return _NodeCommand(
           command: null,
           commands: [
             {
               'set_variable': cfg['variable'],
               if (cfg.containsKey('value')) 'value': cfg['value'],
-            }
+            },
           ],
           events: const {'set_variable.done': 'next'},
         );
 
       // ── httpRequest ───────────────────────────────────────────────────────
       case CallNodeType.httpRequest:
-        notes.add('httpRequest is performed by your webhook (out-of-band of the '
-            'call media); not a Call Control command.');
+        notes.add(
+          'httpRequest is performed by your webhook (out-of-band of the '
+          'call media); not a Call Control command.',
+        );
         return _NodeCommand(
           command: null,
           commands: [
@@ -713,8 +754,8 @@ class TelnyxExporter implements CallSystemExporter {
                 'method': cfg['method'] ?? 'POST',
                 'url': cfg['url'] ?? '',
                 if (cfg['body'] != null) 'body': cfg['body'],
-              }
-            }
+              },
+            },
           ],
           events: const {
             'http_request.success': 'success',
@@ -727,24 +768,24 @@ class TelnyxExporter implements CallSystemExporter {
         return _NodeCommand(
           command: {
             'command': 'record_start',
-            'payload': {
-              'format': 'mp3',
-              'channels': 'dual',
-            },
+            'payload': {'format': 'mp3', 'channels': 'dual'},
           },
           events: const {'call.record.started': 'next'},
         );
 
       // ── playDirectory (dial-by-name) ──────────────────────────────────────
       case CallNodeType.playDirectory:
-        notes.add('Dial-by-name has no native command; emitted as a '
-            'gather_using_speak shell. Your webhook matches input to an '
-            'extension and bridges.');
+        notes.add(
+          'Dial-by-name has no native command; emitted as a '
+          'gather_using_speak shell. Your webhook matches input to an '
+          'extension and bridges.',
+        );
         return _NodeCommand(
           command: {
             'command': 'gather_using_speak',
             'payload': {
-              'payload': 'Please say or enter the name of the person you wish '
+              'payload':
+                  'Please say or enter the name of the person you wish '
                   'to reach.',
               'voice': 'female',
               'language': 'en-US',
@@ -759,23 +800,21 @@ class TelnyxExporter implements CallSystemExporter {
       // ── hangup ────────────────────────────────────────────────────────────
       case CallNodeType.hangup:
         return _NodeCommand(
-          command: {
-            'command': 'hangup',
-            'payload': const <String, dynamic>{},
-          },
+          command: {'command': 'hangup', 'payload': const <String, dynamic>{}},
         );
 
       // ── subFlow ───────────────────────────────────────────────────────────
       case CallNodeType.subFlow:
-        final targetFlowId = cfg['flowId'] as String? ?? cfg['target'] as String?;
-        notes.add('subFlow is a dispatcher push/pop into another flow, not a '
-            'Telnyx command; "returned" resumes here when the sub-flow ends.');
+        final targetFlowId =
+            cfg['flowId'] as String? ?? cfg['target'] as String?;
+        notes.add(
+          'subFlow is a dispatcher push/pop into another flow, not a '
+          'Telnyx command; "returned" resumes here when the sub-flow ends.',
+        );
         return _NodeCommand(
           command: null,
           commands: [
-            {
-              'call_flow': targetFlowId,
-            }
+            {'call_flow': targetFlowId},
           ],
           events: const {'subflow.returned': 'returned'},
         );

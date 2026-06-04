@@ -13,21 +13,24 @@ import 'model/call_node.dart';
 import 'model/call_system_project.dart';
 
 /// Reactive stored row (null until first saved).
-final callSystemRowProvider =
-    StreamProvider.family<CallSystem?, int>((ref, projectId) {
+final callSystemRowProvider = StreamProvider.family<CallSystem?, int>((
+  ref,
+  projectId,
+) {
   return ref.watch(nexusDatabaseProvider).watchCallSystem(projectId);
 });
 
 /// The decoded portable [CallSystemProject] for a project — the saved document,
 /// or a fresh starter when nothing's been saved yet.
-final callSystemProjectProvider =
-    Provider.family<CallSystemProject, int>((ref, projectId) {
+final callSystemProjectProvider = Provider.family<CallSystemProject, int>((
+  ref,
+  projectId,
+) {
   final row = ref.watch(callSystemRowProvider(projectId)).valueOrNull;
   final raw = row?.json.trim() ?? '';
   if (raw.isEmpty || raw == '{}') return starterCallSystem();
   try {
-    return CallSystemProject.fromJson(
-        jsonDecode(raw) as Map<String, dynamic>);
+    return CallSystemProject.fromJson(jsonDecode(raw) as Map<String, dynamic>);
   } catch (_) {
     return starterCallSystem();
   }
@@ -35,7 +38,10 @@ final callSystemProjectProvider =
 
 /// Persist a [CallSystemProject] for a project (whole-document upsert).
 Future<void> saveCallSystemProject(
-    Ref ref, int projectId, CallSystemProject project) {
+  Ref ref,
+  int projectId,
+  CallSystemProject project,
+) {
   return ref
       .read(nexusDatabaseProvider)
       .upsertCallSystem(projectId, jsonEncode(project.toJson()));
@@ -93,7 +99,8 @@ CallSystemProject starterCallSystem({
     prompts: const [
       Prompt(
         id: welcomePromptId,
-        text: 'Thank you for calling. Please listen carefully to the following options.',
+        text:
+            'Thank you for calling. Please listen carefully to the following options.',
         voice: 'af_heart',
       ),
     ],

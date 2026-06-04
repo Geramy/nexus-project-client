@@ -37,11 +37,14 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
     final projectId = ref.watch(currentProjectIdProvider);
     final fsAsync = ref.watch(workspaceFsProvider(projectId));
     ref.watch(workspaceRevisionProvider(projectId)); // re-walk on mutations
-    final git = ref.watch(gitStatusProvider(projectId)).valueOrNull ?? GitStatusSnapshot.noRepo;
+    final git =
+        ref.watch(gitStatusProvider(projectId)).valueOrNull ??
+        GitStatusSnapshot.noRepo;
     final selectedPath = ref.watch(selectedWorkspaceFileProvider(projectId));
 
     return fsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      loading: () =>
+          const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       error: (e, _) => Center(child: Text('Workspace error: $e')),
       data: (fs) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -68,24 +71,43 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
         children: [
           const Icon(Icons.folder_special_outlined, size: 18),
           const SizedBox(width: 8),
-          const Expanded(child: Text('Workspace', style: TextStyle(fontWeight: FontWeight.w600))),
+          const Expanded(
+            child: Text(
+              'Workspace',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.note_add_outlined, size: 18),
             tooltip: 'New file',
-            onPressed: () => _create(context, projectId, parent: '/', isFolder: false),
+            onPressed: () =>
+                _create(context, projectId, parent: '/', isFolder: false),
           ),
           IconButton(
             icon: const Icon(Icons.create_new_folder_outlined, size: 18),
             tooltip: 'New folder',
-            onPressed: () => _create(context, projectId, parent: '/', isFolder: true),
+            onPressed: () =>
+                _create(context, projectId, parent: '/', isFolder: true),
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, size: 18),
             tooltip: 'Workspace storage',
             itemBuilder: (_) => const [
-              PopupMenuItem(enabled: false, child: Text('Project disk (.nxtprj)', style: TextStyle(fontSize: 12))),
-              PopupMenuItem(value: 'export_zip', child: Text('Export all files (.zip)')),
-              PopupMenuItem(value: 'export_image', child: Text('Export as image… (soon)')),
+              PopupMenuItem(
+                enabled: false,
+                child: Text(
+                  'Project disk (.nxtprj)',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'export_zip',
+                child: Text('Export all files (.zip)'),
+              ),
+              PopupMenuItem(
+                value: 'export_image',
+                child: Text('Export as image… (soon)'),
+              ),
             ],
             onSelected: (value) => _onStorageMenu(context, projectId, value),
           ),
@@ -97,39 +119,50 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
   /// Workspace storage menu: export-all-files (zip) or the not-yet-built image
   /// export. The zip lands in Downloads; the snackbar reveals it in Finder/etc.
   Future<void> _onStorageMenu(
-      BuildContext context, int projectId, String value) async {
+    BuildContext context,
+    int projectId,
+    String value,
+  ) async {
     final messenger = ScaffoldMessenger.of(context);
     if (value == 'export_image') {
-      messenger.showSnackBar(const SnackBar(
-        content:
-            Text('Native image export (.dmg/.vhd/ext4) is the next phase.'),
-      ));
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Native image export (.dmg/.vhd/ext4) is the next phase.',
+          ),
+        ),
+      );
       return;
     }
     if (value != 'export_zip') return;
 
-    messenger.showSnackBar(const SnackBar(
-      content: Text('Exporting project files…'),
-      duration: Duration(seconds: 30),
-    ));
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Exporting project files…'),
+        duration: Duration(seconds: 30),
+      ),
+    );
     try {
       final fs = await ref.read(workspaceFsProvider(projectId).future);
-      final project =
-          await ref.read(nexusDatabaseProvider).getProjectById(projectId);
+      final project = await ref
+          .read(nexusDatabaseProvider)
+          .getProjectById(projectId);
       const exporter = WorkspaceExporter();
       final file = await exporter.exportZip(
         fs,
         projectName: project?.name ?? 'project',
       );
       messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(SnackBar(
-        content: Text('Exported to ${file.path}'),
-        duration: const Duration(seconds: 8),
-        action: SnackBarAction(
-          label: 'Show',
-          onPressed: () => exporter.revealInFileManager(file.path),
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Exported to ${file.path}'),
+          duration: const Duration(seconds: 8),
+          action: SnackBarAction(
+            label: 'Show',
+            onPressed: () => exporter.revealInFileManager(file.path),
+          ),
         ),
-      ));
+      );
     } catch (e) {
       messenger.hideCurrentSnackBar();
       messenger.showSnackBar(SnackBar(content: Text('Export failed: $e')));
@@ -144,7 +177,11 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
       child: Row(
         children: [
-          Icon(git.hasRepo ? Icons.call_split : Icons.source_outlined, size: 14, color: Colors.grey),
+          Icon(
+            git.hasRepo ? Icons.call_split : Icons.source_outlined,
+            size: 14,
+            color: Colors.grey,
+          ),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
@@ -156,7 +193,10 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
             ),
           ),
           if (git.hasRepo && (git.ahead > 0 || git.behind > 0))
-            Text('↑${git.ahead} ↓${git.behind}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+            Text(
+              '↑${git.ahead} ↓${git.behind}',
+              style: const TextStyle(fontSize: 10, color: Colors.grey),
+            ),
         ],
       ),
     );
@@ -164,7 +204,11 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
 
   // ── Git action toolbar (Commit / Push / Pull / Merge / History / Branch) ──
 
-  Widget _gitActions(BuildContext context, int projectId, GitStatusSnapshot git) {
+  Widget _gitActions(
+    BuildContext context,
+    int projectId,
+    GitStatusSnapshot git,
+  ) {
     final dirtyCount = git.byPath.values.where(gitStatusIsDirty).length;
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
@@ -210,13 +254,23 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
 
   void _remoteNotice(BuildContext context, String op) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$op needs a remote configured — the Remote (URL + credentials) layer lands next.')),
+      SnackBar(
+        content: Text(
+          '$op needs a remote configured — the Remote (URL + credentials) layer lands next.',
+        ),
+      ),
     );
   }
 
   // ── Tree ─────────────────────────────────────────────────────────
 
-  Widget _tree(BuildContext context, Workspace fs, int projectId, GitStatusSnapshot git, String? selectedPath) {
+  Widget _tree(
+    BuildContext context,
+    Workspace fs,
+    int projectId,
+    GitStatusSnapshot git,
+    String? selectedPath,
+  ) {
     return FutureBuilder<List<FileEntry>>(
       future: fs.walk(),
       builder: (context, snap) {
@@ -224,13 +278,22 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
           return const Center(child: CircularProgressIndicator(strokeWidth: 2));
         }
         if (snap.hasError) {
-          return Padding(padding: const EdgeInsets.all(12), child: Text('Error: ${snap.error}', style: const TextStyle(fontSize: 12)));
+          return Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(
+              'Error: ${snap.error}',
+              style: const TextStyle(fontSize: 12),
+            ),
+          );
         }
         final entries = snap.data ?? const <FileEntry>[];
         if (entries.isEmpty) {
           return const Padding(
             padding: EdgeInsets.all(16),
-            child: Text('Empty workspace.\nUse the + buttons to add files.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            child: Text(
+              'Empty workspace.\nUse the + buttons to add files.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
           );
         }
         final byParent = <String, List<FileEntry>>{};
@@ -239,47 +302,97 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
         }
         return ListView(
           padding: const EdgeInsets.symmetric(vertical: 4),
-          children: _level(context, byParent, '/', 0, projectId, git, selectedPath),
+          children: _level(
+            context,
+            byParent,
+            '/',
+            0,
+            projectId,
+            git,
+            selectedPath,
+          ),
         );
       },
     );
   }
 
-  List<Widget> _level(BuildContext context, Map<String, List<FileEntry>> byParent, String parent, int depth, int projectId, GitStatusSnapshot git, String? selectedPath) {
+  List<Widget> _level(
+    BuildContext context,
+    Map<String, List<FileEntry>> byParent,
+    String parent,
+    int depth,
+    int projectId,
+    GitStatusSnapshot git,
+    String? selectedPath,
+  ) {
     final children = byParent[parent] ?? const [];
     final widgets = <Widget>[];
     for (final e in children) {
       widgets.add(_row(context, e, depth, projectId, git, selectedPath));
       if (e.isDirectory && _expanded.contains(e.path)) {
-        widgets.addAll(_level(context, byParent, e.path, depth + 1, projectId, git, selectedPath));
+        widgets.addAll(
+          _level(
+            context,
+            byParent,
+            e.path,
+            depth + 1,
+            projectId,
+            git,
+            selectedPath,
+          ),
+        );
       }
     }
     return widgets;
   }
 
-  Widget _row(BuildContext context, FileEntry e, int depth, int projectId, GitStatusSnapshot git, String? selectedPath) {
+  Widget _row(
+    BuildContext context,
+    FileEntry e,
+    int depth,
+    int projectId,
+    GitStatusSnapshot git,
+    String? selectedPath,
+  ) {
     final isSelected = e.path == selectedPath;
     final isOpen = e.isDirectory && _expanded.contains(e.path);
     final deco = e.isDirectory ? null : gitDecorationFor(git.statusFor(e.path));
-    final folderDirty = e.isDirectory && git.hasRepo && git.folderHasChanges(e.path);
+    final folderDirty =
+        e.isDirectory && git.hasRepo && git.folderHasChanges(e.path);
     final defaultText = Theme.of(context).textTheme.bodyMedium?.color;
     final nameColor = deco?.color ?? defaultText;
 
     return InkWell(
       onTap: () {
         if (e.isDirectory) {
-          setState(() => _expanded.contains(e.path) ? _expanded.remove(e.path) : _expanded.add(e.path));
+          setState(
+            () => _expanded.contains(e.path)
+                ? _expanded.remove(e.path)
+                : _expanded.add(e.path),
+          );
         } else {
-          ref.read(selectedWorkspaceFileProvider(projectId).notifier).state = e.path;
+          ref.read(selectedWorkspaceFileProvider(projectId).notifier).state =
+              e.path;
         }
       },
       child: Container(
-        color: isSelected ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.35) : null,
-        padding: EdgeInsets.only(left: 8.0 + depth * 14, top: 5, bottom: 5, right: 4),
+        color: isSelected
+            ? Theme.of(
+                context,
+              ).colorScheme.primaryContainer.withValues(alpha: 0.35)
+            : null,
+        padding: EdgeInsets.only(
+          left: 8.0 + depth * 14,
+          top: 5,
+          bottom: 5,
+          right: 4,
+        ),
         child: Row(
           children: [
             Icon(
-              e.isDirectory ? (isOpen ? Icons.folder_open : Icons.folder) : _fileIcon(e.name),
+              e.isDirectory
+                  ? (isOpen ? Icons.folder_open : Icons.folder)
+                  : _fileIcon(e.name),
               size: 16,
               color: e.isDirectory ? Colors.amber.shade700 : Colors.blueGrey,
             ),
@@ -290,8 +403,12 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
                 style: TextStyle(
                   fontSize: 13,
                   color: (deco?.muted ?? false) ? Colors.grey : nameColor,
-                  fontStyle: (deco?.muted ?? false) ? FontStyle.italic : FontStyle.normal,
-                  decoration: (deco?.strike ?? false) ? TextDecoration.lineThrough : null,
+                  fontStyle: (deco?.muted ?? false)
+                      ? FontStyle.italic
+                      : FontStyle.normal,
+                  decoration: (deco?.strike ?? false)
+                      ? TextDecoration.lineThrough
+                      : null,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -306,7 +423,14 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
                 padding: const EdgeInsets.only(right: 2),
                 child: Tooltip(
                   message: deco.tooltip,
-                  child: Text(deco.badge, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: deco.color)),
+                  child: Text(
+                    deco.badge,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: deco.color,
+                    ),
+                  ),
                 ),
               ),
             _rowMenu(context, e, projectId),
@@ -322,8 +446,13 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
       padding: EdgeInsets.zero,
       tooltip: 'Actions',
       itemBuilder: (_) => [
-        if (e.isDirectory) const PopupMenuItem(value: 'newFile', child: Text('New file inside')),
-        if (e.isDirectory) const PopupMenuItem(value: 'newFolder', child: Text('New folder inside')),
+        if (e.isDirectory)
+          const PopupMenuItem(value: 'newFile', child: Text('New file inside')),
+        if (e.isDirectory)
+          const PopupMenuItem(
+            value: 'newFolder',
+            child: Text('New folder inside'),
+          ),
         const PopupMenuItem(value: 'rename', child: Text('Rename')),
         const PopupMenuItem(value: 'delete', child: Text('Delete')),
       ],
@@ -354,14 +483,22 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
     return FutureBuilder<({int bytes, int files})>(
       future: fs.usage(),
       builder: (context, snap) {
-        final txt = snap.hasData ? '${snap.data!.files} files · ${formatBytes(snap.data!.bytes)}' : '…';
+        final txt = snap.hasData
+            ? '${snap.data!.files} files · ${formatBytes(snap.data!.bytes)}'
+            : '…';
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: Row(
             children: [
               const Icon(Icons.lock_outline, size: 12, color: Colors.green),
               const SizedBox(width: 6),
-              Expanded(child: Text(txt, style: const TextStyle(fontSize: 11, color: Colors.grey), overflow: TextOverflow.ellipsis)),
+              Expanded(
+                child: Text(
+                  txt,
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
         );
@@ -371,8 +508,17 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
 
   // ── File mutations ───────────────────────────────────────────────
 
-  Future<void> _create(BuildContext context, int projectId, {required String parent, required bool isFolder}) async {
-    final name = await _prompt(context, isFolder ? 'New folder' : 'New file', 'Name');
+  Future<void> _create(
+    BuildContext context,
+    int projectId, {
+    required String parent,
+    required bool isFolder,
+  }) async {
+    final name = await _prompt(
+      context,
+      isFolder ? 'New folder' : 'New file',
+      'Name',
+    );
     if (name == null || name.trim().isEmpty) return;
     final fs = await ref.read(workspaceFsProvider(projectId).future);
     final path = parent == '/' ? '/${name.trim()}' : '$parent/${name.trim()}';
@@ -381,12 +527,16 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
         await fs.createDirectory(path);
       } else {
         await fs.createFile(path);
-        ref.read(selectedWorkspaceFileProvider(projectId).notifier).state = path;
+        ref.read(selectedWorkspaceFileProvider(projectId).notifier).state =
+            path;
       }
       ref.read(workspaceRevisionProvider(projectId).notifier).state++;
       ref.read(gitStatusRevisionProvider(projectId).notifier).state++;
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Create failed: $e')));
+      if (context.mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Create failed: $e')));
     }
   }
 
@@ -394,16 +544,22 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
     final name = await _prompt(context, 'Rename', 'New name', initial: e.name);
     if (name == null || name.trim().isEmpty || name.trim() == e.name) return;
     final fs = await ref.read(workspaceFsProvider(projectId).future);
-    final target = e.parent == '/' ? '/${name.trim()}' : '${e.parent}/${name.trim()}';
+    final target = e.parent == '/'
+        ? '/${name.trim()}'
+        : '${e.parent}/${name.trim()}';
     try {
       await fs.move(e.path, target);
       if (ref.read(selectedWorkspaceFileProvider(projectId)) == e.path) {
-        ref.read(selectedWorkspaceFileProvider(projectId).notifier).state = target;
+        ref.read(selectedWorkspaceFileProvider(projectId).notifier).state =
+            target;
       }
       ref.read(workspaceRevisionProvider(projectId).notifier).state++;
       ref.read(gitStatusRevisionProvider(projectId).notifier).state++;
     } catch (err) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Rename failed: $err')));
+      if (context.mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Rename failed: $err')));
     }
   }
 
@@ -412,10 +568,18 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Delete ${e.isDirectory ? 'folder' : 'file'}'),
-        content: Text('Delete "${e.name}"${e.isDirectory ? ' and everything inside it' : ''}? This cannot be undone.'),
+        content: Text(
+          'Delete "${e.name}"${e.isDirectory ? ' and everything inside it' : ''}? This cannot be undone.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
         ],
       ),
     );
@@ -424,12 +588,16 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
     try {
       await fs.delete(e.path);
       if (ref.read(selectedWorkspaceFileProvider(projectId)) == e.path) {
-        ref.read(selectedWorkspaceFileProvider(projectId).notifier).state = null;
+        ref.read(selectedWorkspaceFileProvider(projectId).notifier).state =
+            null;
       }
       ref.read(workspaceRevisionProvider(projectId).notifier).state++;
       ref.read(gitStatusRevisionProvider(projectId).notifier).state++;
     } catch (err) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Delete failed: $err')));
+      if (context.mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Delete failed: $err')));
     }
   }
 
@@ -445,11 +613,17 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
       ref.read(workspaceRevisionProvider(projectId).notifier).state++;
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Committed ${oid.substring(0, 7)}'), duration: const Duration(seconds: 2)),
+          SnackBar(
+            content: Text('Committed ${oid.substring(0, 7)}'),
+            duration: const Duration(seconds: 2),
+          ),
         );
       }
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Commit failed: $e')));
+      if (context.mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Commit failed: $e')));
     }
   }
 
@@ -466,7 +640,12 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
             width: 480,
             height: 400,
             child: commits.isEmpty
-                ? const Center(child: Text('No commits yet.', style: TextStyle(color: Colors.grey)))
+                ? const Center(
+                    child: Text(
+                      'No commits yet.',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  )
                 : ListView.separated(
                     itemCount: commits.length,
                     separatorBuilder: (_, __) => const Divider(height: 1),
@@ -475,24 +654,42 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
                       return ListTile(
                         dense: true,
                         leading: const Icon(Icons.commit, size: 16),
-                        title: Text(c.message.split('\n').first, maxLines: 1, overflow: TextOverflow.ellipsis),
-                        subtitle: Text('${c.oid.substring(0, 7)} · ${c.author} · ${c.when.toLocal().toString().substring(0, 16)}',
-                            style: const TextStyle(fontSize: 11)),
+                        title: Text(
+                          c.message.split('\n').first,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          '${c.oid.substring(0, 7)} · ${c.author} · ${c.when.toLocal().toString().substring(0, 16)}',
+                          style: const TextStyle(fontSize: 11),
+                        ),
                       );
                     },
                   ),
           ),
-          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close'),
+            ),
+          ],
         ),
       );
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('History failed: $e')));
+      if (context.mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('History failed: $e')));
     }
   }
 
   // ── Branches ─────────────────────────────────────────────────────
 
-  Future<void> _branches(BuildContext context, int projectId, GitStatusSnapshot git) async {
+  Future<void> _branches(
+    BuildContext context,
+    int projectId,
+    GitStatusSnapshot git,
+  ) async {
     try {
       final engine = await ref.read(gitEngineProvider(projectId).future);
       final branches = await engine.branches();
@@ -510,14 +707,21 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
                 if (branches.isEmpty)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 8),
-                    child: Text('No branches yet — make your first commit to create "main".',
-                        style: TextStyle(color: Colors.grey, fontSize: 13)),
+                    child: Text(
+                      'No branches yet — make your first commit to create "main".',
+                      style: TextStyle(color: Colors.grey, fontSize: 13),
+                    ),
                   ),
                 for (final b in branches)
                   ListTile(
                     dense: true,
-                    leading: Icon(b == git.branch ? Icons.check : Icons.account_tree_outlined,
-                        size: 18, color: b == git.branch ? Colors.green : null),
+                    leading: Icon(
+                      b == git.branch
+                          ? Icons.check
+                          : Icons.account_tree_outlined,
+                      size: 18,
+                      color: b == git.branch ? Colors.green : null,
+                    ),
                     title: Text(b),
                     onTap: b == git.branch
                         ? null
@@ -540,16 +744,28 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
               ],
             ),
           ),
-          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close'),
+            ),
+          ],
         ),
       );
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Branches failed: $e')));
+      if (context.mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Branches failed: $e')));
     }
   }
 
   Future<void> _createBranch(BuildContext context, int projectId) async {
-    final name = await _prompt(context, 'New branch', 'Branch name (e.g. feature/x)');
+    final name = await _prompt(
+      context,
+      'New branch',
+      'Branch name (e.g. feature/x)',
+    );
     if (name == null || name.trim().isEmpty) return;
     try {
       final engine = await ref.read(gitEngineProvider(projectId).future);
@@ -557,23 +773,41 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
       ref.read(gitStatusRevisionProvider(projectId).notifier).state++;
       ref.read(workspaceRevisionProvider(projectId).notifier).state++;
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Created & switched to "${name.trim()}"')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Created & switched to "${name.trim()}"')),
+      );
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Create branch failed: $e')));
+      if (context.mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Create branch failed: $e')));
     }
   }
 
-  Future<void> _checkout(BuildContext context, int projectId, String branch, GitStatusSnapshot git) async {
+  Future<void> _checkout(
+    BuildContext context,
+    int projectId,
+    String branch,
+    GitStatusSnapshot git,
+  ) async {
     final dirty = git.byPath.values.where(gitStatusIsDirty).isNotEmpty;
     if (dirty) {
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Switch branch with uncommitted changes?'),
-          content: Text('You have uncommitted changes that will be overwritten by switching to "$branch". Continue?'),
+          content: Text(
+            'You have uncommitted changes that will be overwritten by switching to "$branch". Continue?',
+          ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Switch', style: TextStyle(color: Colors.red))),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Switch', style: TextStyle(color: Colors.red)),
+            ),
           ],
         ),
       );
@@ -583,29 +817,49 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
       final engine = await ref.read(gitEngineProvider(projectId).future);
       await engine.checkoutBranch(branch);
       // The open editor may now point at a file that changed/vanished — reload.
-      ref.read(selectedWorkspaceFileProvider(projectId).notifier).state =
-          ref.read(selectedWorkspaceFileProvider(projectId));
+      ref.read(selectedWorkspaceFileProvider(projectId).notifier).state = ref
+          .read(selectedWorkspaceFileProvider(projectId));
       ref.read(gitStatusRevisionProvider(projectId).notifier).state++;
       ref.read(workspaceRevisionProvider(projectId).notifier).state++;
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Switched to "$branch"')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Switched to "$branch"')));
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Switch failed: $e')));
+      if (context.mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Switch failed: $e')));
     }
   }
 
   // ── Helpers ──────────────────────────────────────────────────────
 
-  Future<String?> _prompt(BuildContext context, String title, String label, {String? initial}) {
+  Future<String?> _prompt(
+    BuildContext context,
+    String title,
+    String label, {
+    String? initial,
+  }) {
     final ctrl = TextEditingController(text: initial ?? '');
     return showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(title),
-        content: TextField(controller: ctrl, autofocus: true, decoration: InputDecoration(labelText: label)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          decoration: InputDecoration(labelText: label),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text), child: const Text('OK')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text),
+            child: const Text('OK'),
+          ),
         ],
       ),
     );
@@ -615,8 +869,15 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
     final lower = name.toLowerCase();
     if (lower.endsWith('.dart')) return Icons.flutter_dash;
     if (lower.endsWith('.md')) return Icons.article_outlined;
-    if (lower.endsWith('.json') || lower.endsWith('.yaml') || lower.endsWith('.yml')) return Icons.data_object;
-    if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.gif')) return Icons.image_outlined;
+    if (lower.endsWith('.json') ||
+        lower.endsWith('.yaml') ||
+        lower.endsWith('.yml'))
+      return Icons.data_object;
+    if (lower.endsWith('.png') ||
+        lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.gif'))
+      return Icons.image_outlined;
     return Icons.insert_drive_file_outlined;
   }
 }
@@ -627,12 +888,19 @@ class _GitButton extends StatelessWidget {
   final String label;
   final VoidCallback? onTap;
   final Color? tint;
-  const _GitButton({required this.icon, required this.label, required this.onTap, this.tint});
+  const _GitButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.tint,
+  });
 
   @override
   Widget build(BuildContext context) {
     final enabled = onTap != null;
-    final color = tint ?? (enabled ? Theme.of(context).textTheme.bodyMedium?.color : Colors.grey);
+    final color =
+        tint ??
+        (enabled ? Theme.of(context).textTheme.bodyMedium?.color : Colors.grey);
     return TextButton.icon(
       onPressed: onTap,
       style: TextButton.styleFrom(
@@ -694,7 +962,8 @@ class _FileEditorPanelState extends ConsumerState<FileEditorPanel> {
     if ((pathChanged || revChanged) && fsAsync.hasValue) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        if (selectedPath != _loadedPath || revChanged) _open(fsAsync.value!, selectedPath);
+        if (selectedPath != _loadedPath || revChanged)
+          _open(fsAsync.value!, selectedPath);
       });
     }
 
@@ -712,31 +981,45 @@ class _FileEditorPanelState extends ConsumerState<FileEditorPanel> {
     }
 
     return fsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      loading: () =>
+          const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       error: (e, _) => Center(child: Text('Workspace error: $e')),
       data: (fs) => _editorUi(context, fs, projectId, selectedPath),
     );
   }
 
-  Widget _editorUi(BuildContext context, Workspace fs, int projectId, String path) {
+  Widget _editorUi(
+    BuildContext context,
+    Workspace fs,
+    int projectId,
+    String path,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
+            border: Border(
+              bottom: BorderSide(color: Theme.of(context).dividerColor),
+            ),
           ),
           child: Row(
             children: [
               const Icon(Icons.description_outlined, size: 16),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(path,
-                    style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                    overflow: TextOverflow.ellipsis),
+                child: Text(
+                  path,
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              if (_dirty) const Padding(padding: EdgeInsets.only(right: 8), child: Text('●', style: TextStyle(color: Colors.orange))),
+              if (_dirty)
+                const Padding(
+                  padding: EdgeInsets.only(right: 8),
+                  child: Text('●', style: TextStyle(color: Colors.orange)),
+                ),
               if (!_binaryView)
                 FilledButton.icon(
                   onPressed: _dirty ? () => _save(fs, projectId) : null,
@@ -750,8 +1033,13 @@ class _FileEditorPanelState extends ConsumerState<FileEditorPanel> {
           child: _loading
               ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
               : _binaryView
-                  ? const Center(child: Text('Binary file — preview not shown.', style: TextStyle(color: Colors.grey)))
-                  : _codeEditor(context),
+              ? const Center(
+                  child: Text(
+                    'Binary file — preview not shown.',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                )
+              : _codeEditor(context),
         ),
       ],
     );
@@ -768,7 +1056,11 @@ class _FileEditorPanelState extends ConsumerState<FileEditorPanel> {
           expands: true,
           wrap: false,
           background: highlightBackground(brightness),
-          textStyle: const TextStyle(fontFamily: 'monospace', fontSize: 13, height: 1.4),
+          textStyle: const TextStyle(
+            fontFamily: 'monospace',
+            fontSize: 13,
+            height: 1.4,
+          ),
           gutterStyle: const GutterStyle(
             showLineNumbers: true,
             showErrors: false,
@@ -799,8 +1091,14 @@ class _FileEditorPanelState extends ConsumerState<FileEditorPanel> {
           title: const Text('Discard unsaved changes?'),
           content: const Text('You have unsaved edits in the current file.'),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep editing')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Discard')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Keep editing'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Discard'),
+            ),
           ],
         ),
       );
@@ -834,7 +1132,9 @@ class _FileEditorPanelState extends ConsumerState<FileEditorPanel> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Open failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Open failed: $e')));
     }
   }
 
@@ -848,10 +1148,17 @@ class _FileEditorPanelState extends ConsumerState<FileEditorPanel> {
       ref.read(workspaceRevisionProvider(projectId).notifier).state++;
       setState(() => _dirty = false);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Saved $path'), duration: const Duration(seconds: 2)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Saved $path'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Save failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Save failed: $e')));
     }
   }
 }

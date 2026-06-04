@@ -47,12 +47,16 @@ class SummaryService {
       return empty;
     }
 
-    final resolved = await ref.read(projectInferenceProvider(
-      (projectId: projectId, clientId: clientId),
-    ).future);
+    final resolved = await ref.read(
+      projectInferenceProvider((
+        projectId: projectId,
+        clientId: clientId,
+      )).future,
+    );
     if (resolved == null) {
       throw StateError(
-          'No inference server configured — add one in Agents Hub to generate a summary.');
+        'No inference server configured — add one in Agents Hub to generate a summary.',
+      );
     }
 
     final resp = await resolved.backend.createChatCompletion(
@@ -62,17 +66,17 @@ class SummaryService {
           'role': 'system',
           'content':
               'You compile a project\'s planning documents into a clear, plain-'
-                  'language summary for a non-technical stakeholder. Use short '
-                  'sections and bullets. Cover: what the project is, who it serves, '
-                  'the architecture (client/server/db/etc.), the chosen stack, and '
-                  'the major work outlined. Do not invent details not in the plans. '
-                  'Output Markdown only.',
+              'language summary for a non-technical stakeholder. Use short '
+              'sections and bullets. Cover: what the project is, who it serves, '
+              'the architecture (client/server/db/etc.), the chosen stack, and '
+              'the major work outlined. Do not invent details not in the plans. '
+              'Output Markdown only.',
         },
         {
           'role': 'user',
           'content':
               'Here are the project plan files. Compile them into a project '
-                  'summary:\n\n${combined.toString()}',
+              'summary:\n\n${combined.toString()}',
         },
       ],
       temperature: 0.4,

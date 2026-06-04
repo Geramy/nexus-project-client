@@ -14,7 +14,8 @@ class LiveMicVisualizer extends StatefulWidget {
   final Color color;
   final double height;
   final int barCount;
-  final AudioRecorderService? recorder; // Pass the active recorder for real levels
+  final AudioRecorderService?
+  recorder; // Pass the active recorder for real levels
 
   const LiveMicVisualizer({
     super.key,

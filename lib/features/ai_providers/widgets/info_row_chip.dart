@@ -22,7 +22,10 @@ class InfoRowChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('$label:', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+          Text(
+            '$label:',
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+          ),
           const SizedBox(width: 4),
           Text(value, style: const TextStyle(fontSize: 11)),
         ],

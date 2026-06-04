@@ -48,10 +48,12 @@ class WorkspaceMaterializer {
   }) async {
     final base = await getTemporaryDirectory();
     final safeTag = tag.replaceAll(RegExp(r'[^A-Za-z0-9_.-]'), '_');
-    final root = Directory(p.join(
-      base.path,
-      'nexus_build_${safeTag}_${DateTime.now().microsecondsSinceEpoch}',
-    ));
+    final root = Directory(
+      p.join(
+        base.path,
+        'nexus_build_${safeTag}_${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    );
     await root.create(recursive: true);
 
     final entries = await ws.walk(from: from, maxEntries: maxEntries);

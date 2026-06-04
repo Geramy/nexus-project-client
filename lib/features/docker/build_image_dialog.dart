@@ -19,7 +19,11 @@ import 'package:nexus_projects_client/infrastructure/workspace/workspace_provide
 class BuildImageDialog extends ConsumerStatefulWidget {
   final int projectPk;
   final String projectName;
-  const BuildImageDialog({super.key, required this.projectPk, required this.projectName});
+  const BuildImageDialog({
+    super.key,
+    required this.projectPk,
+    required this.projectName,
+  });
 
   @override
   ConsumerState<BuildImageDialog> createState() => _BuildImageDialogState();
@@ -47,10 +51,17 @@ class _BuildImageDialogState extends ConsumerState<BuildImageDialog> {
 
   Future<void> _start() async {
     final tag = _tagCtrl.text.trim();
-    final dockerfile = _dockerfileCtrl.text.trim().isEmpty ? 'Dockerfile' : _dockerfileCtrl.text.trim();
+    final dockerfile = _dockerfileCtrl.text.trim().isEmpty
+        ? 'Dockerfile'
+        : _dockerfileCtrl.text.trim();
     if (tag.isEmpty) {
       setState(() {
-        _log.add(const DockerBuildEvent('Image tag is required (e.g. myapp:latest).', isError: true));
+        _log.add(
+          const DockerBuildEvent(
+            'Image tag is required (e.g. myapp:latest).',
+            isError: true,
+          ),
+        );
       });
       return;
     }
@@ -60,13 +71,24 @@ class _BuildImageDialogState extends ConsumerState<BuildImageDialog> {
       _done = false;
       _hadError = false;
       _log.clear();
-      _log.add(DockerBuildEvent('Packing "${widget.projectName}" workspace and building "$tag"…'));
+      _log.add(
+        DockerBuildEvent(
+          'Packing "${widget.projectName}" workspace and building "$tag"…',
+        ),
+      );
     });
 
     try {
       final ws = await ref.read(workspaceFsProvider(widget.projectPk).future);
-      if (!await ws.exists(dockerfile.startsWith('/') ? dockerfile : '/$dockerfile')) {
-        _append(DockerBuildEvent('No Dockerfile found at "$dockerfile" in this workspace.', isError: true));
+      if (!await ws.exists(
+        dockerfile.startsWith('/') ? dockerfile : '/$dockerfile',
+      )) {
+        _append(
+          DockerBuildEvent(
+            'No Dockerfile found at "$dockerfile" in this workspace.',
+            isError: true,
+          ),
+        );
         setState(() {
           _building = false;
           _done = true;
@@ -76,28 +98,30 @@ class _BuildImageDialogState extends ConsumerState<BuildImageDialog> {
       }
       final tar = await const DockerContextTar().fromWorkspace(ws);
       final client = ref.read(dockerEngineClientProvider);
-      final dfRel = dockerfile.startsWith('/') ? dockerfile.substring(1) : dockerfile;
+      final dfRel = dockerfile.startsWith('/')
+          ? dockerfile.substring(1)
+          : dockerfile;
 
       _sub = client
           .buildImage(contextTar: tar, imageTag: tag, dockerfile: dfRel)
           .listen(
-        _append,
-        onError: (e) {
-          _append(DockerBuildEvent('$e', isError: true));
-          setState(() {
-            _building = false;
-            _done = true;
-            _hadError = true;
-          });
-        },
-        onDone: () {
-          setState(() {
-            _building = false;
-            _done = true;
-          });
-          ref.invalidate(dockerImagesProvider);
-        },
-      );
+            _append,
+            onError: (e) {
+              _append(DockerBuildEvent('$e', isError: true));
+              setState(() {
+                _building = false;
+                _done = true;
+                _hadError = true;
+              });
+            },
+            onDone: () {
+              setState(() {
+                _building = false;
+                _done = true;
+              });
+              ref.invalidate(dockerImagesProvider);
+            },
+          );
     } catch (e) {
       _append(DockerBuildEvent('Build failed to start: $e', isError: true));
       setState(() {
@@ -173,8 +197,10 @@ class _BuildImageDialogState extends ConsumerState<BuildImageDialog> {
               ),
               child: _log.isEmpty
                   ? const Center(
-                      child: Text('Build output will appear here.',
-                          style: TextStyle(color: Colors.white38, fontSize: 12)),
+                      child: Text(
+                        'Build output will appear here.',
+                        style: TextStyle(color: Colors.white38, fontSize: 12),
+                      ),
                     )
                   : SelectionArea(
                       child: ListView.builder(
@@ -187,7 +213,9 @@ class _BuildImageDialogState extends ConsumerState<BuildImageDialog> {
                             style: TextStyle(
                               fontFamily: 'monospace',
                               fontSize: 12,
-                              color: e.isError ? const Color(0xFFFF6B6B) : const Color(0xFFD4D4D4),
+                              color: e.isError
+                                  ? const Color(0xFFFF6B6B)
+                                  : const Color(0xFFD4D4D4),
                             ),
                           );
                         },
@@ -205,7 +233,11 @@ class _BuildImageDialogState extends ConsumerState<BuildImageDialog> {
         FilledButton.icon(
           onPressed: _building ? null : _start,
           icon: _building
-              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
               : Icon(_done && !_hadError ? Icons.check : Icons.build),
           label: Text(_building ? 'Building…' : (_done ? 'Rebuild' : 'Build')),
         ),

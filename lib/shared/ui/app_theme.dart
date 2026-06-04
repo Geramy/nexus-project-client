@@ -23,17 +23,17 @@ enum AppThemeChoice {
 
   /// Human-readable label for pickers.
   String get label => switch (this) {
-        AppThemeChoice.nebula => 'Nebula',
-        AppThemeChoice.daylight => 'Daylight',
-        AppThemeChoice.midnight => 'Midnight',
-      };
+    AppThemeChoice.nebula => 'Nebula',
+    AppThemeChoice.daylight => 'Daylight',
+    AppThemeChoice.midnight => 'Midnight',
+  };
 
   /// Short description shown beside the label in the picker.
   String get description => switch (this) {
-        AppThemeChoice.nebula => 'Signature NexusRouter gradient (default)',
-        AppThemeChoice.daylight => 'Clean light theme',
-        AppThemeChoice.midnight => 'Neutral dark theme',
-      };
+    AppThemeChoice.nebula => 'Signature NexusRouter gradient (default)',
+    AppThemeChoice.daylight => 'Clean light theme',
+    AppThemeChoice.midnight => 'Neutral dark theme',
+  };
 
   /// The default theme on first launch — the website-style "Nebula".
   static const AppThemeChoice defaultChoice = AppThemeChoice.nebula;
@@ -78,26 +78,27 @@ class AppTheme {
 
   /// Resolve a [ThemeData] for the given [choice].
   static ThemeData of(AppThemeChoice choice) => switch (choice) {
-        AppThemeChoice.nebula => nebulaTheme,
-        AppThemeChoice.daylight => daylightTheme,
-        AppThemeChoice.midnight => midnightTheme,
-      };
+    AppThemeChoice.nebula => nebulaTheme,
+    AppThemeChoice.daylight => daylightTheme,
+    AppThemeChoice.midnight => midnightTheme,
+  };
 
   // ── Nebula: the website-style default ───────────────────────────────────
   static ThemeData get nebulaTheme {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: brandViolet,
-      brightness: Brightness.dark,
-    ).copyWith(
-      primary: brandViolet,
-      secondary: brandPink,
-      tertiary: brandCyan,
-      surface: _nebulaSurface,
-      onSurface: _nebulaText,
-      onSurfaceVariant: _nebulaTextMuted,
-      outline: const Color(0x33FFFFFF), // rgba(255,255,255,0.20)
-      outlineVariant: const Color(0x1AFFFFFF), // rgba(255,255,255,0.10)
-    );
+    final scheme =
+        ColorScheme.fromSeed(
+          seedColor: brandViolet,
+          brightness: Brightness.dark,
+        ).copyWith(
+          primary: brandViolet,
+          secondary: brandPink,
+          tertiary: brandCyan,
+          surface: _nebulaSurface,
+          onSurface: _nebulaText,
+          onSurfaceVariant: _nebulaTextMuted,
+          outline: const Color(0x33FFFFFF), // rgba(255,255,255,0.20)
+          outlineVariant: const Color(0x1AFFFFFF), // rgba(255,255,255,0.10)
+        );
     return _themed(
       scheme: scheme,
       scaffold: _nebulaBg,
@@ -154,15 +155,21 @@ class AppTheme {
     );
 
     // Pill button padding + label weight, shared by all button kinds.
-    const buttonPadding =
-        EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.md);
-    const buttonLabel =
-        TextStyle(fontWeight: FontWeight.w600, letterSpacing: 0.2);
+    const buttonPadding = EdgeInsets.symmetric(
+      horizontal: AppSpacing.xl,
+      vertical: AppSpacing.md,
+    );
+    const buttonLabel = TextStyle(
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0.2,
+    );
     const pill = StadiumBorder();
 
     return base.copyWith(
-      textTheme: base.textTheme
-          .apply(bodyColor: scheme.onSurface, displayColor: scheme.onSurface),
+      textTheme: base.textTheme.apply(
+        bodyColor: scheme.onSurface,
+        displayColor: scheme.onSurface,
+      ),
 
       appBarTheme: AppBarTheme(
         backgroundColor: scaffold,
@@ -234,7 +241,9 @@ class AppTheme {
         style: TextButton.styleFrom(
           foregroundColor: scheme.primary,
           padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.sm,
+          ),
           textStyle: buttonLabel,
           shape: pill,
         ),
@@ -245,9 +254,7 @@ class AppTheme {
       // (the "purple send icon on a purple button" bug). Letting each variant
       // resolve its own default keeps filled buttons at onPrimary contrast.
       iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(
-          shape: const CircleBorder(),
-        ),
+        style: IconButton.styleFrom(shape: const CircleBorder()),
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
         shape: StadiumBorder(),
@@ -261,7 +268,9 @@ class AppTheme {
             : Colors.black.withValues(alpha: 0.03),
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.md,
+        ),
         hintStyle: TextStyle(color: scheme.onSurfaceVariant),
         border: OutlineInputBorder(
           borderRadius: AppRadius.mdAll,
@@ -284,9 +293,14 @@ class AppTheme {
             : scheme.surfaceContainerHighest,
         side: BorderSide(color: hairline),
         labelStyle: TextStyle(
-            color: scheme.onSurface, fontSize: 12, fontWeight: FontWeight.w600),
+          color: scheme.onSurface,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
         padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.xs,
+        ),
         shape: const StadiumBorder(),
       ),
 
@@ -294,10 +308,11 @@ class AppTheme {
       tabBarTheme: TabBarThemeData(
         labelColor: scheme.onSurface,
         unselectedLabelColor: scheme.onSurfaceVariant,
-        labelStyle:
-            const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-        unselectedLabelStyle:
-            const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+        labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+        unselectedLabelStyle: const TextStyle(
+          fontWeight: FontWeight.w500,
+          fontSize: 13,
+        ),
         indicatorSize: TabBarIndicatorSize.label,
         dividerColor: Colors.transparent,
         indicator: UnderlineTabIndicator(
@@ -322,8 +337,9 @@ class AppTheme {
       ),
       menuTheme: MenuThemeData(
         style: MenuStyle(
-          backgroundColor:
-              WidgetStatePropertyAll(isDark ? scheme.surface : Colors.white),
+          backgroundColor: WidgetStatePropertyAll(
+            isDark ? scheme.surface : Colors.white,
+          ),
           surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
           shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(
@@ -335,7 +351,9 @@ class AppTheme {
       ),
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
-          color: isDark ? scheme.surfaceContainerHighest : scheme.inverseSurface,
+          color: isDark
+              ? scheme.surfaceContainerHighest
+              : scheme.inverseSurface,
           borderRadius: AppRadius.smAll,
         ),
       ),

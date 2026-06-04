@@ -88,10 +88,13 @@ class _PackCard extends StatelessWidget {
                 Row(
                   children: [
                     Flexible(
-                      child: Text(pack.name,
-                          style: theme.textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                          overflow: TextOverflow.ellipsis),
+                      child: Text(
+                        pack.name,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     const SizedBox(width: AppSpacing.sm),
                     if (pack.fullyWired) const _WiredBadge(),
@@ -102,8 +105,9 @@ class _PackCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   '${pack.agents.length} agent${pack.agents.length == 1 ? '' : 's'}',
-                  style: theme.textTheme.labelSmall
-                      ?.copyWith(color: context.nx.textMuted),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: context.nx.textMuted,
+                  ),
                 ),
               ],
             ),
@@ -126,9 +130,14 @@ class _WiredBadge extends StatelessWidget {
         color: color.withValues(alpha: 0.12),
         borderRadius: AppRadius.smAll,
       ),
-      child: Text('Ready',
-          style: TextStyle(
-              fontSize: 10, fontWeight: FontWeight.w700, color: color)),
+      child: Text(
+        'Ready',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+      ),
     );
   }
 }

@@ -49,10 +49,7 @@ class NexusAccountStore {
 
   /// Persist a compact JSON of the signed-in user + client for fast hydration.
   static Future<void> writeIdentity(NexusUser user, NexusClient client) {
-    final json = jsonEncode({
-      'user': user.toJson(),
-      'client': client.toJson(),
-    });
+    final json = jsonEncode({'user': user.toJson(), 'client': client.toJson()});
     return _store.write(key: _identityKey, value: json);
   }
 
@@ -64,9 +61,11 @@ class NexusAccountStore {
       final decoded = jsonDecode(raw);
       if (decoded is Map<String, dynamic>) {
         final user = NexusUser.fromJson(
-            Map<String, dynamic>.from(decoded['user'] as Map));
+          Map<String, dynamic>.from(decoded['user'] as Map),
+        );
         final client = NexusClient.fromJson(
-            Map<String, dynamic>.from(decoded['client'] as Map));
+          Map<String, dynamic>.from(decoded['client'] as Map),
+        );
         return (user: user, client: client);
       }
     } catch (_) {}

@@ -36,7 +36,8 @@ class SubmitOnEnter extends StatelessWidget {
       // repeats) so a held Enter sends once.
       onKeyEvent: (node, event) {
         if (!enabled) return KeyEventResult.ignored;
-        final isEnter = event.logicalKey == LogicalKeyboardKey.enter ||
+        final isEnter =
+            event.logicalKey == LogicalKeyboardKey.enter ||
             event.logicalKey == LogicalKeyboardKey.numpadEnter;
         if (event is KeyDownEvent &&
             isEnter &&

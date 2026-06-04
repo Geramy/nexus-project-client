@@ -32,12 +32,7 @@ class NexusAuthState {
   /// True while the initial hydrate / a login/register call is in flight.
   final bool busy;
 
-  const NexusAuthState({
-    this.token,
-    this.user,
-    this.client,
-    this.busy = false,
-  });
+  const NexusAuthState({this.token, this.user, this.client, this.busy = false});
 
   bool get isSignedIn => token != null && token!.isNotEmpty;
 

@@ -40,55 +40,54 @@ extension TagCategoryX on TagCategory {
   }
 
   String get label => switch (this) {
-        TagCategory.industries => 'Applicable Industries',
-        TagCategory.platforms => 'Platforms',
-        TagCategory.objectives => 'Objectives',
-        TagCategory.features => 'Features',
-        TagCategory.languages => 'Languages',
-        TagCategory.frameworks => 'Frameworks',
-        TagCategory.databases => 'Databases',
-        TagCategory.libraries => 'Libraries',
-        TagCategory.services => 'Services & Integrations',
-      };
+    TagCategory.industries => 'Applicable Industries',
+    TagCategory.platforms => 'Platforms',
+    TagCategory.objectives => 'Objectives',
+    TagCategory.features => 'Features',
+    TagCategory.languages => 'Languages',
+    TagCategory.frameworks => 'Frameworks',
+    TagCategory.databases => 'Databases',
+    TagCategory.libraries => 'Libraries',
+    TagCategory.services => 'Services & Integrations',
+  };
 
   /// Whether this category is part of the resolver-derived stack family.
   bool get isStack => switch (this) {
-        TagCategory.languages ||
-        TagCategory.frameworks ||
-        TagCategory.databases ||
-        TagCategory.libraries =>
-          true,
-        _ => false,
-      };
+    TagCategory.languages ||
+    TagCategory.frameworks ||
+    TagCategory.databases ||
+    TagCategory.libraries => true,
+    _ => false,
+  };
 
   VocabKind get vocab => switch (this) {
-        TagCategory.languages => VocabKind.closed,
-        TagCategory.platforms => VocabKind.closed,
-        TagCategory.industries => VocabKind.curated,
-        TagCategory.objectives => VocabKind.curated,
-        TagCategory.features => VocabKind.curated,
-        TagCategory.frameworks => VocabKind.curated,
-        // Curated, not closed: PostgreSQL/Redis/Stripe/Twilio etc. should always
-        // be taggable from the conversation even if not in the seed list.
-        TagCategory.databases => VocabKind.curated,
-        TagCategory.services => VocabKind.curated,
-        TagCategory.libraries => VocabKind.open,
-      };
+    TagCategory.languages => VocabKind.closed,
+    TagCategory.platforms => VocabKind.closed,
+    TagCategory.industries => VocabKind.curated,
+    TagCategory.objectives => VocabKind.curated,
+    TagCategory.features => VocabKind.curated,
+    TagCategory.frameworks => VocabKind.curated,
+    // Curated, not closed: PostgreSQL/Redis/Stripe/Twilio etc. should always
+    // be taggable from the conversation even if not in the seed list.
+    TagCategory.databases => VocabKind.curated,
+    TagCategory.services => VocabKind.curated,
+    TagCategory.libraries => VocabKind.open,
+  };
 
   /// Suggested/allowed values for the "+ Add" picker. For [VocabKind.closed]
   /// these are the only permitted values; for [VocabKind.curated] they seed the
   /// picker but free entry is allowed; [VocabKind.open] returns empty (search).
   List<String> get vocabulary => switch (this) {
-        TagCategory.languages => kLanguages,
-        TagCategory.platforms => kPlatforms,
-        TagCategory.industries => kIndustries,
-        TagCategory.objectives => kObjectives,
-        TagCategory.features => kFeatures,
-        TagCategory.frameworks => kFrameworks,
-        TagCategory.databases => kDatabases,
-        TagCategory.services => kServices,
-        TagCategory.libraries => const [],
-      };
+    TagCategory.languages => kLanguages,
+    TagCategory.platforms => kPlatforms,
+    TagCategory.industries => kIndustries,
+    TagCategory.objectives => kObjectives,
+    TagCategory.features => kFeatures,
+    TagCategory.frameworks => kFrameworks,
+    TagCategory.databases => kDatabases,
+    TagCategory.services => kServices,
+    TagCategory.libraries => const [],
+  };
 }
 
 /// Closed vocab — the only languages the resolver/UI will stamp.

@@ -30,7 +30,9 @@ Future<bool> openExternalUrl(String url) async {
       result = await Process.run('xdg-open', [url]);
     } else {
       // iOS/Android/web: no shell. url_launcher would be required here.
-      debugPrint('[Nexus] openExternalUrl unsupported on this platform; url=$url');
+      debugPrint(
+        '[Nexus] openExternalUrl unsupported on this platform; url=$url',
+      );
       return false;
     }
     return result.exitCode == 0;

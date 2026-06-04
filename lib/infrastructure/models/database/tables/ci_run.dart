@@ -15,7 +15,8 @@ import 'task.dart';
 class CiRuns extends Table {
   IntColumn get ci_run_pk => integer().autoIncrement()();
   IntColumn get client_fk => integer().references(Clients, #client_pk)();
-  IntColumn get project_fk => integer().nullable().references(Projects, #project_pk)();
+  IntColumn get project_fk =>
+      integer().nullable().references(Projects, #project_pk)();
 
   /// The task this run gates, if any. When set and the run succeeds the task is
   /// auto-approved (→ Done); when it fails the task returns to the board.

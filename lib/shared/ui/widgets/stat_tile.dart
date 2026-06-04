@@ -66,13 +66,16 @@ class StatTile extends StatelessWidget {
           const SizedBox(height: AppSpacing.sm),
           Text(
             value,
-            style: theme.textTheme.headlineSmall
-                ?.copyWith(fontWeight: FontWeight.w700),
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
           ),
           if (caption != null) ...[
             const SizedBox(height: 2),
-            Text(caption!,
-                style: theme.textTheme.bodySmall?.copyWith(color: nx.textFaint)),
+            Text(
+              caption!,
+              style: theme.textTheme.bodySmall?.copyWith(color: nx.textFaint),
+            ),
           ],
         ],
       ),

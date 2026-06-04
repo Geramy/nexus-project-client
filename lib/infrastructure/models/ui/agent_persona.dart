@@ -34,11 +34,11 @@ class AgentPersona {
 
   /// Individual modality overrides (used when no Omni collection is selected,
   /// or to override specific modalities from an Omni bundle).
-  final String? ttsModel;         // Text → Voice
-  final String? sttModel;         // Voice → Text
-  final String? imageGenModel;    // Image generation
-  final String? visionModel;      // Image reading / understanding
-  final String? llmModel;         // Text generation (primary LLM)
+  final String? ttsModel; // Text → Voice
+  final String? sttModel; // Voice → Text
+  final String? imageGenModel; // Image generation
+  final String? visionModel; // Image reading / understanding
+  final String? llmModel; // Text generation (primary LLM)
 
   const AgentPersona({
     required this.id,

@@ -17,6 +17,7 @@ import 'package:nexus_projects_client/infrastructure/workspace/workspace.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/workspace_provider.dart';
 import 'package:nexus_projects_client/features/projects/planning/planning_progress.dart';
 import 'package:nexus_projects_client/features/projects/planning/project_planning_run.dart';
+import 'package:nexus_projects_client/features/projects/task_workflow.dart';
 import 'package:nexus_projects_client/features/projects/project_working_hours.dart';
 
 /// Start / Pause / Stop control bar for a project's autonomous worker-spawn
@@ -197,6 +198,10 @@ class _ProjectOrchestrationControlsState
                   'paused' => 'Orchestration paused',
                   _ => 'Orchestration stopped',
                 }, style: const TextStyle(fontWeight: FontWeight.w600)),
+                if (running) ...[
+                  const SizedBox(width: 10),
+                  _ActiveAgentsChip(projectId: projectId),
+                ],
               ],
             ),
             const SizedBox(height: 4),
@@ -242,6 +247,52 @@ class _StateDot extends StatelessWidget {
       width: 10,
       height: 10,
       decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    );
+  }
+}
+
+/// Live count of agents working right now (tasks in an active execution phase),
+/// so the user can see parallelism actually happening.
+class _ActiveAgentsChip extends ConsumerWidget {
+  const _ActiveAgentsChip({required this.projectId});
+  final int projectId;
+
+  static const _active = {
+    TaskExecStatus.running,
+    TaskExecStatus.verifying,
+    TaskExecStatus.building,
+    TaskExecStatus.merging,
+  };
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tasks = ref.watch(allTasksForProjectProvider(projectId)).valueOrNull;
+    final n = tasks == null
+        ? 0
+        : tasks.where((t) => _active.contains(t.executionStatus)).length;
+    if (n == 0) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.bolt, size: 13, color: theme.colorScheme.primary),
+          const SizedBox(width: 3),
+          Text(
+            '$n agent${n == 1 ? '' : 's'} working',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onPrimaryContainer,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

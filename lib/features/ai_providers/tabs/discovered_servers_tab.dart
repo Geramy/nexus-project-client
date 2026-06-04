@@ -20,18 +20,21 @@ class DiscoveredServersTab extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Discovered Servers', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        const Text(
+          'Discovered Servers',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
         const SizedBox(height: 8),
         if (discovered.isEmpty)
           const EmptyState(
             icon: Icons.wifi_off_outlined,
-            message: 'No servers discovered. Make sure your Lemonade server is running.',
+            message:
+                'No servers discovered. Make sure your Lemonade server is running.',
           )
         else
-          ...discovered.map((server) => DiscoveredServerCard(
-                server: server,
-                isSelected: false,
-              )),
+          ...discovered.map(
+            (server) => DiscoveredServerCard(server: server, isSelected: false),
+          ),
       ],
     );
   }

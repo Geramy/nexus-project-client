@@ -30,10 +30,14 @@ void main() {
     expect(await db.scopedCatalogVersion(), 1);
 
     // Idempotent reconcile: re-seeding the same catalog must not duplicate.
-    final genresBefore = (await db.subAxesForIndustries(['Gaming'])).first.values.length;
+    final genresBefore = (await db.subAxesForIndustries([
+      'Gaming',
+    ])).first.values.length;
     await db.seedSetupScopes(packs, version: 1);
     expect(await db.hasSetupScopes(), isTrue);
-    final genresAfter = (await db.subAxesForIndustries(['Gaming'])).first.values.length;
+    final genresAfter = (await db.subAxesForIndustries([
+      'Gaming',
+    ])).first.values.length;
     expect(genresAfter, genresBefore, reason: 'no duplication on re-seed');
 
     // A bumped catalog updates the stored version.
@@ -58,8 +62,10 @@ void main() {
       category: 'frameworks',
       platform: 'Desktop',
     );
-    expect(desktop.any((f) => f.contains('Unity') || f.contains('Unreal')),
-        isTrue);
+    expect(
+      desktop.any((f) => f.contains('Unity') || f.contains('Unreal')),
+      isTrue,
+    );
 
     final mobileLangs = await db.scopeOptions(
       industries: ['Gaming'],
@@ -67,8 +73,11 @@ void main() {
       category: 'languages',
       platform: 'Mobile',
     );
-    expect(mobileLangs.any((l) => l == 'Dart'), isTrue,
-        reason: 'mobile gaming stack includes Flutter/Dart');
+    expect(
+      mobileLangs.any((l) => l == 'Dart'),
+      isTrue,
+      reason: 'mobile gaming stack includes Flutter/Dart',
+    );
 
     final desktopLangs = await db.scopeOptions(
       industries: ['Gaming'],

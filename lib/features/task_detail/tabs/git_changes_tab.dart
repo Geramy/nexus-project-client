@@ -35,11 +35,8 @@ class GitChangesTab extends ConsumerWidget {
     return engineAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => _ErrorState(message: 'Failed to open git engine: $e'),
-      data: (engine) => _GitView(
-        engine: engine,
-        revision: rev,
-        workBranch: workBranch,
-      ),
+      data: (engine) =>
+          _GitView(engine: engine, revision: rev, workBranch: workBranch),
     );
   }
 }
@@ -49,7 +46,7 @@ class GitChangesTab extends ConsumerWidget {
 class _GitData {
   final GitStatusSnapshot status;
   final List<({String oid, String message, DateTime when, String author})>
-      commits;
+  commits;
   const _GitData({required this.status, required this.commits});
 }
 
@@ -82,17 +79,15 @@ class _GitView extends StatelessWidget {
           return const Center(child: CircularProgressIndicator());
         }
         if (snap.hasError) {
-          return _ErrorState(message: 'Failed to read git state: ${snap.error}');
+          return _ErrorState(
+            message: 'Failed to read git state: ${snap.error}',
+          );
         }
         final data = snap.data;
         if (data == null) {
           return const _ErrorState(message: 'No git data available.');
         }
-        return _GitContent(
-          engine: engine,
-          data: data,
-          workBranch: workBranch,
-        );
+        return _GitContent(engine: engine, data: data, workBranch: workBranch);
       },
     );
   }
@@ -161,8 +156,10 @@ class _BranchHeader extends StatelessWidget {
           children: const [
             Icon(Icons.account_tree, size: 18),
             SizedBox(width: AppSpacing.sm),
-            Text('Current branch:',
-                style: TextStyle(fontWeight: FontWeight.w600)),
+            Text(
+              'Current branch:',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
           ],
         ),
         StatusChip(branch, intent: ChipIntent.info, dense: true),
@@ -171,11 +168,15 @@ class _BranchHeader extends StatelessWidget {
           StatusChip(workBranch!, intent: ChipIntent.accent, dense: true),
         ],
         if (status.ahead > 0)
-          Text('${status.ahead} ahead',
-              style: TextStyle(fontSize: 12, color: nx.success)),
+          Text(
+            '${status.ahead} ahead',
+            style: TextStyle(fontSize: 12, color: nx.success),
+          ),
         if (status.behind > 0)
-          Text('${status.behind} behind',
-              style: TextStyle(fontSize: 12, color: nx.warning)),
+          Text(
+            '${status.behind} behind',
+            style: TextStyle(fontSize: 12, color: nx.warning),
+          ),
       ],
     );
   }
@@ -184,16 +185,14 @@ class _BranchHeader extends StatelessWidget {
 class _CommitList extends StatelessWidget {
   final NxtprjGitEngine engine;
   final List<({String oid, String message, DateTime when, String author})>
-      commits;
+  commits;
 
   const _CommitList({required this.engine, required this.commits});
 
   @override
   Widget build(BuildContext context) {
     if (commits.isEmpty) {
-      return const NexusCard(
-        child: Text('No commits yet.'),
-      );
+      return const NexusCard(child: Text('No commits yet.'));
     }
     return NexusCard(
       padding: EdgeInsets.zero,
@@ -273,13 +272,17 @@ class _CommitTileState extends State<_CommitTile> {
                   );
                 }
                 if (snap.hasError) {
-                  return Text('Diff failed: ${snap.error}',
-                      style: TextStyle(fontSize: 12, color: context.nx.danger));
+                  return Text(
+                    'Diff failed: ${snap.error}',
+                    style: TextStyle(fontSize: 12, color: context.nx.danger),
+                  );
                 }
                 final changes = snap.data ?? const <CommitFileChange>[];
                 if (changes.isEmpty) {
-                  return const Text('No file changes.',
-                      style: TextStyle(fontSize: 12));
+                  return const Text(
+                    'No file changes.',
+                    style: TextStyle(fontSize: 12),
+                  );
                 }
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -295,7 +298,9 @@ class _CommitTileState extends State<_CommitTile> {
                               child: Text(
                                 ch.path,
                                 style: const TextStyle(
-                                    fontFamily: 'monospace', fontSize: 12),
+                                  fontFamily: 'monospace',
+                                  fontSize: 12,
+                                ),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -344,15 +349,12 @@ class _WorkingTree extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dirty = status.byPath.entries
-        .where((e) => gitStatusIsDirty(e.value))
-        .toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
+    final dirty =
+        status.byPath.entries.where((e) => gitStatusIsDirty(e.value)).toList()
+          ..sort((a, b) => a.key.compareTo(b.key));
 
     if (dirty.isEmpty) {
-      return const NexusCard(
-        child: Text('Working tree clean.'),
-      );
+      return const NexusCard(child: Text('Working tree clean.'));
     }
 
     return NexusCard(
@@ -421,7 +423,10 @@ class _Badge extends StatelessWidget {
       child: Text(
         letter.isEmpty ? '-' : letter,
         style: TextStyle(
-            color: color, fontSize: 12, fontWeight: FontWeight.w700),
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -442,9 +447,11 @@ class _ErrorState extends StatelessWidget {
           children: [
             Icon(Icons.error_outline, size: 40, color: color),
             Gap.md,
-            Text(message,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: color)),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: color),
+            ),
           ],
         ),
       ),

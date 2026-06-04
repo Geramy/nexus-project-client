@@ -36,6 +36,6 @@ class SetupScopeOptions extends Table {
 
   @override
   List<Set<Column>> get uniqueKeys => [
-        {setup_scope_fk, category, platform, value}
-      ];
+    {setup_scope_fk, category, platform, value},
+  ];
 }

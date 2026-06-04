@@ -128,4 +128,5 @@ String formatBytes(int bytes) {
 }
 
 /// UTF-8 decode bytes leniently (used by viewers).
-String decodeUtf8Lossy(List<int> bytes) => const Utf8Decoder(allowMalformed: true).convert(bytes);
+String decodeUtf8Lossy(List<int> bytes) =>
+    const Utf8Decoder(allowMalformed: true).convert(bytes);

@@ -39,7 +39,8 @@ class ResolvedModalityModels {
       'ResolvedModalityModels(llm: $llm, stt: $stt, tts: $tts, vision: $vision, imageGen: $imageGen)';
 }
 
-String? _emptyToNull(String? s) => (s != null && s.trim().isNotEmpty) ? s.trim() : null;
+String? _emptyToNull(String? s) =>
+    (s != null && s.trim().isNotEmpty) ? s.trim() : null;
 
 /// Coerce any candidate model id into a safe chat/LLM model id to send to
 /// `/v1/chat/completions`. If [candidate] is an Omni Collection, decompose it
@@ -52,7 +53,10 @@ String? resolveChatModelId(String? candidate, List<ApiModelInfo> models) {
   for (final m in models) {
     if (m.id != id) continue;
     if (m.isCollection) {
-      final llm = resolvePersonaModels(omniCollectionModel: id, models: models).llm;
+      final llm = resolvePersonaModels(
+        omniCollectionModel: id,
+        models: models,
+      ).llm;
       return (llm != null && llm != id) ? llm : firstChatModelId(models);
     }
     return id; // a plain, loadable model that exists on the server
@@ -117,9 +121,11 @@ bool _nameHasAny(String id, List<String> needles) {
 // Capability classification — label-first, then name heuristics, matching
 // lemonade_mobile's ModelUtils.detectCapabilities label conventions.
 bool _isAudio(ApiModelInfo m) =>
-    m.hasAnyLabel(const ['audio', 'transcription']) || _nameHasAny(m.id, const ['whisper', 'transcrib']);
+    m.hasAnyLabel(const ['audio', 'transcription']) ||
+    _nameHasAny(m.id, const ['whisper', 'transcrib']);
 bool _isTts(ApiModelInfo m) =>
-    m.hasAnyLabel(const ['tts', 'speech']) || _nameHasAny(m.id, const ['tts', 'kokoro']);
+    m.hasAnyLabel(const ['tts', 'speech']) ||
+    _nameHasAny(m.id, const ['tts', 'kokoro']);
 bool _isVision(ApiModelInfo m) =>
     m.hasAnyLabel(const ['vision']) ||
     _nameHasAny(m.id, const ['vision', 'llava', 'moondream', 'internvl']) ||

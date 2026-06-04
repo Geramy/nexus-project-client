@@ -22,7 +22,10 @@ class LaunchCenter extends StatelessWidget {
         children: [
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Text('Launch', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            child: Text(
+              'Launch',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
           ),
           const TabBar(
             isScrollable: true,
@@ -35,11 +38,7 @@ class LaunchCenter extends StatelessWidget {
           ),
           const Expanded(
             child: TabBarView(
-              children: [
-                BuildsCenter(),
-                DockerView(),
-                DeploymentsCenter(),
-              ],
+              children: [BuildsCenter(), DockerView(), DeploymentsCenter()],
             ),
           ),
         ],

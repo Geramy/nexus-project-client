@@ -99,8 +99,7 @@ class SetupVoiceSession {
   static const Duration _echoCooldown = Duration(milliseconds: 500);
   DateTime? _muteUntil;
   bool get _muted =>
-      _speaking ||
-      (_muteUntil != null && DateTime.now().isBefore(_muteUntil!));
+      _speaking || (_muteUntil != null && DateTime.now().isBefore(_muteUntil!));
 
   /// User-controlled mic mute (the mute button / "m" hotkey). Independent of the
   /// echo-suppression [_muted] above — when on, the user's mic is silenced to the
@@ -123,15 +122,18 @@ class SetupVoiceSession {
     _stateController.add(VoiceState.listening);
     await vad.startListeningWithStream(_gateForEcho(broadcast));
     _speechEndSub = vad.onSpeechEnd.listen(_handleUtterance);
-    debugPrint('[SetupVoice] call started. stt=${sttModel ?? "(server default)"}');
+    debugPrint(
+      '[SetupVoice] call started. stt=${sttModel ?? "(server default)"}',
+    );
   }
 
   /// Replaces mic frames with silence while we're speaking (or in the brief
   /// echo cooldown after), so the VAD never even sees — let alone accumulates —
   /// the AI's own TTS. This is what stops the AI transcribing itself and
   /// talking in a loop; the post-utterance [_muted] check is just a backstop.
-  Stream<Uint8List> _gateForEcho(Stream<Uint8List> pcm) =>
-      pcm.map((frame) => (_muted || _userMuted) ? Uint8List(frame.length) : frame);
+  Stream<Uint8List> _gateForEcho(Stream<Uint8List> pcm) => pcm.map(
+    (frame) => (_muted || _userMuted) ? Uint8List(frame.length) : frame,
+  );
 
   /// Speak [text] (e.g. a greeting or a spoken reply between questions),
   /// serialized behind any in-flight speech. Mic input is ignored while we talk.
@@ -178,7 +180,7 @@ class SetupVoiceSession {
     final spoken = options.isEmpty
         ? question
         : '$question Options are: ${options.join(', ')}.'
-            '${multi ? ' You can pick more than one.' : ''}';
+              '${multi ? ' You can pick more than one.' : ''}';
     await speak(spoken);
   }
 
@@ -232,7 +234,8 @@ class SetupVoiceSession {
         if (!armed.reprompted) {
           armed.reprompted = true;
           await speak(
-              "Sorry, I didn't catch that. Please choose: ${armed.options.join(', ')}.");
+            "Sorry, I didn't catch that. Please choose: ${armed.options.join(', ')}.",
+          );
         }
         return;
       }
@@ -260,20 +263,37 @@ class SetupVoiceSession {
   /// Maps a spoken answer onto [options]. Returns the matched option labels
   /// (empty list == an explicit skip), or null when nothing matched
   /// confidently. For single-select only the first match is kept.
-  List<String>? _matchOptions(String transcript, List<String> options, bool multi) {
+  List<String>? _matchOptions(
+    String transcript,
+    List<String> options,
+    bool multi,
+  ) {
     final lower = ' ${transcript.toLowerCase()} ';
-    if (RegExp(r'\b(skip|none|no thanks|pass|not sure|nothing)\b')
-        .hasMatch(lower)) {
+    if (RegExp(
+      r'\b(skip|none|no thanks|pass|not sure|nothing)\b',
+    ).hasMatch(lower)) {
       return const [];
     }
 
     const ordinals = {
-      'first': 0, 'one': 0, '1st': 0,
-      'second': 1, 'two': 1, '2nd': 1,
-      'third': 2, 'three': 2, '3rd': 2,
-      'fourth': 3, 'four': 3, '4th': 3,
-      'fifth': 4, 'five': 4, '5th': 4,
-      'sixth': 5, 'six': 5, '6th': 5,
+      'first': 0,
+      'one': 0,
+      '1st': 0,
+      'second': 1,
+      'two': 1,
+      '2nd': 1,
+      'third': 2,
+      'three': 2,
+      '3rd': 2,
+      'fourth': 3,
+      'four': 3,
+      '4th': 3,
+      'fifth': 4,
+      'five': 4,
+      '5th': 4,
+      'sixth': 5,
+      'six': 5,
+      '6th': 5,
     };
 
     final matched = <String>[];
@@ -300,8 +320,7 @@ class SetupVoiceSession {
 
     // Ordinal references ("the second one", "number three").
     ordinals.forEach((word, idx) {
-      if (idx < options.length &&
-          RegExp('\\b$word\\b').hasMatch(lower)) {
+      if (idx < options.length && RegExp('\\b$word\\b').hasMatch(lower)) {
         addOption(options[idx]);
       }
     });
@@ -323,7 +342,9 @@ class SetupVoiceSession {
     if (!_isActive) return;
     await _audioSession.ensureVoiceChatSession();
     final pcmStream = await recorder.startPcmStream();
-    await vad.startListeningWithStream(_gateForEcho(pcmStream.asBroadcastStream()));
+    await vad.startListeningWithStream(
+      _gateForEcho(pcmStream.asBroadcastStream()),
+    );
     _stateController.add(VoiceState.listening);
   }
 
@@ -355,7 +376,9 @@ class SetupVoiceSession {
     s = s.replaceAll('`', '');
     // Images / links: ![alt](url) / [label](url) → alt / label.
     s = s.replaceAllMapped(
-        RegExp(r'!?\[([^\]]*)\]\([^)]*\)'), (m) => m.group(1) ?? '');
+      RegExp(r'!?\[([^\]]*)\]\([^)]*\)'),
+      (m) => m.group(1) ?? '',
+    );
     // Bold / italic / strikethrough emphasis markers.
     s = s.replaceAll(RegExp(r'(\*\*\*|\*\*|\*|___|__|_|~~)'), '');
     // Leading heading hashes and blockquote / list markers per line.
@@ -386,8 +409,12 @@ class SetupVoiceSession {
 
     final builder = BytesBuilder();
     void writeStr(String s) => builder.add(s.codeUnits);
-    void writeU32(int v) =>
-        builder.add([v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >> 24) & 0xff]);
+    void writeU32(int v) => builder.add([
+      v & 0xff,
+      (v >> 8) & 0xff,
+      (v >> 16) & 0xff,
+      (v >> 24) & 0xff,
+    ]);
     void writeU16(int v) => builder.add([v & 0xff, (v >> 8) & 0xff]);
 
     writeStr('RIFF');

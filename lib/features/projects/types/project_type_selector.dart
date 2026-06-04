@@ -39,7 +39,10 @@ class ProjectTypeSelector extends StatelessWidget {
               onTypeChanged(type.key);
               // Reset sub-category to the new type's first option (or none).
               onSubChanged(
-                  type.subCategories.isEmpty ? null : type.subCategories.first.key);
+                type.subCategories.isEmpty
+                    ? null
+                    : type.subCategories.first.key,
+              );
             },
           ),
           Gap.sm,
@@ -65,10 +68,14 @@ class ProjectTypeSelector extends StatelessWidget {
             Gap.xs,
             Text(
               selected.subCategories
-                  .firstWhere((s) => s.key == selectedSubKey,
-                      orElse: () => selected.subCategories.first)
+                  .firstWhere(
+                    (s) => s.key == selectedSubKey,
+                    orElse: () => selected.subCategories.first,
+                  )
                   .description,
-              style: theme.textTheme.bodySmall?.copyWith(color: context.nx.textMuted),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: context.nx.textMuted,
+              ),
             ),
           ],
         ],
@@ -78,8 +85,11 @@ class ProjectTypeSelector extends StatelessWidget {
 }
 
 class _TypeCard extends StatelessWidget {
-  const _TypeCard(
-      {required this.type, required this.selected, required this.onTap});
+  const _TypeCard({
+    required this.type,
+    required this.selected,
+    required this.onTap,
+  });
 
   final ProjectType type;
   final bool selected;
@@ -107,9 +117,12 @@ class _TypeCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(type.name,
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w600)),
+                Text(
+                  type.name,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const SizedBox(height: 2),
                 Text(type.tagline, style: theme.textTheme.bodySmall),
               ],

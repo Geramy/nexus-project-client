@@ -16,20 +16,21 @@ import 'setup_flow_catalog.dart';
 /// category) → built-in catalog, reacting to the project's type changing.
 final setupFlowForProjectProvider =
     FutureProvider.family<SetupFlowDefinition, int>((ref, projectId) async {
-  final db = ref.watch(nexusDatabaseProvider);
-  // React to the project row (type/sub-category) changing.
-  final proj = await ref.watch(_projectRowProvider(projectId).future);
-  final type = proj?.projectType ?? 'application-development';
-  final sub = proj?.subCategory;
-  final json = await db.resolveSetupFlowJson(type, sub);
-  if (json != null) {
-    try {
-      return SetupFlowDefinition.fromJson(
-          jsonDecode(json) as Map<String, dynamic>);
-    } catch (_) {}
-  }
-  return resolveBuiltinSetupFlow(type, sub);
-});
+      final db = ref.watch(nexusDatabaseProvider);
+      // React to the project row (type/sub-category) changing.
+      final proj = await ref.watch(_projectRowProvider(projectId).future);
+      final type = proj?.projectType ?? 'application-development';
+      final sub = proj?.subCategory;
+      final json = await db.resolveSetupFlowJson(type, sub);
+      if (json != null) {
+        try {
+          return SetupFlowDefinition.fromJson(
+            jsonDecode(json) as Map<String, dynamic>,
+          );
+        } catch (_) {}
+      }
+      return resolveBuiltinSetupFlow(type, sub);
+    });
 
 final _projectRowProvider = StreamProvider.family((ref, int projectId) {
   return ref.watch(nexusDatabaseProvider).watchProject(projectId);

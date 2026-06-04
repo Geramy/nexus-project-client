@@ -14,28 +14,46 @@ class ApiContentPart {
   final String? audioBase64;
   final String? audioFormat;
 
-  const ApiContentPart._({required this.type, this.text, this.imageUrl, this.audioBase64, this.audioFormat});
+  const ApiContentPart._({
+    required this.type,
+    this.text,
+    this.imageUrl,
+    this.audioBase64,
+    this.audioFormat,
+  });
 
   const ApiContentPart.text(String t) : this._(type: 'text', text: t);
-  const ApiContentPart.imageUrl(String url) : this._(type: 'image_url', imageUrl: url);
+  const ApiContentPart.imageUrl(String url)
+    : this._(type: 'image_url', imageUrl: url);
   const ApiContentPart.audio(String base64, {required String format})
-      : this._(type: 'input_audio', audioBase64: base64, audioFormat: format);
+    : this._(type: 'input_audio', audioBase64: base64, audioFormat: format);
 
   Map<String, dynamic> toWireJson() {
     switch (type) {
       case 'text':
         return {'type': 'text', 'text': text ?? ''};
       case 'image_url':
-        return {'type': 'image_url', 'image_url': {'url': imageUrl ?? ''}};
+        return {
+          'type': 'image_url',
+          'image_url': {'url': imageUrl ?? ''},
+        };
       case 'input_audio':
-        return {'type': 'input_audio', 'input_audio': {'data': audioBase64 ?? '', 'format': audioFormat ?? 'wav'}};
+        return {
+          'type': 'input_audio',
+          'input_audio': {
+            'data': audioBase64 ?? '',
+            'format': audioFormat ?? 'wav',
+          },
+        };
       default:
         return {'type': type};
     }
   }
 
   @override
-  bool operator ==(Object other) => identical(this, other) || other is ApiContentPart && type == other.type && text == other.text;
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ApiContentPart && type == other.type && text == other.text;
   @override
   int get hashCode => type.hashCode ^ text.hashCode;
 }
@@ -48,18 +66,33 @@ class ApiChatMessage {
   final String? toolCallId;
   final String? name;
 
-  const ApiChatMessage({required this.role, this.content, this.contentParts, this.toolCalls, this.toolCallId, this.name});
+  const ApiChatMessage({
+    required this.role,
+    this.content,
+    this.contentParts,
+    this.toolCalls,
+    this.toolCallId,
+    this.name,
+  });
 
-  ApiChatMessage.system(String text) : this(role: WireRole.system, content: text);
+  ApiChatMessage.system(String text)
+    : this(role: WireRole.system, content: text);
   ApiChatMessage.user(String text) : this(role: WireRole.user, content: text);
-  ApiChatMessage.userParts(List<ApiContentPart> parts) : this(role: WireRole.user, contentParts: parts);
-  ApiChatMessage.assistant(String text) : this(role: WireRole.assistant, content: text);
+  ApiChatMessage.userParts(List<ApiContentPart> parts)
+    : this(role: WireRole.user, contentParts: parts);
+  ApiChatMessage.assistant(String text)
+    : this(role: WireRole.assistant, content: text);
 
   ApiChatMessage.assistantToolCalls(List<ToolCall> calls, {String? content})
-      : this(role: WireRole.assistant, content: content, toolCalls: calls);
+    : this(role: WireRole.assistant, content: content, toolCalls: calls);
 
   ApiChatMessage.tool(String result, {required String toolCallId, String? name})
-      : this(role: WireRole.tool, content: result, toolCallId: toolCallId, name: name);
+    : this(
+        role: WireRole.tool,
+        content: result,
+        toolCallId: toolCallId,
+        name: name,
+      );
 
   Map<String, dynamic> toWireJson() {
     final json = <String, dynamic>{'role': _roleString(role)};
@@ -115,9 +148,16 @@ class ApiChatMessage {
     }
 
     final calls = json['tool_calls'] is List
-        ? (json['tool_calls'] as List).whereType<Map<String, dynamic>>().map(ToolCall.fromJson).toList()
+        ? (json['tool_calls'] as List)
+              .whereType<Map<String, dynamic>>()
+              .map(ToolCall.fromJson)
+              .toList()
         : null;
 
-    return ApiChatMessage(role: role.role!, content: contentString, toolCalls: calls);
+    return ApiChatMessage(
+      role: role.role!,
+      content: contentString,
+      toolCalls: calls,
+    );
   }
 }

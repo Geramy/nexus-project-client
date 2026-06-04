@@ -41,8 +41,9 @@ class ProjectStep extends ConsumerStatefulWidget {
 }
 
 class _ProjectStepState extends ConsumerState<ProjectStep> {
-  late final TextEditingController _name =
-      TextEditingController(text: widget.defaultName);
+  late final TextEditingController _name = TextEditingController(
+    text: widget.defaultName,
+  );
   String _typeKey = kDefaultProjectTypeKey;
   String? _subKey;
   bool _creating = false;
@@ -72,7 +73,9 @@ class _ProjectStepState extends ConsumerState<ProjectStep> {
       // Provision the type's default agent pack(s) into the client (dedupes
       // against any already-seeded agents).
       await db.provisionAgentPack(
-          clientId, agentsForPackKeys(type.defaultAgentPackKeys));
+        clientId,
+        agentsForPackKeys(type.defaultAgentPackKeys),
+      );
       ref.read(currentProjectIdProvider.notifier).selectProject(projectId);
       if (mounted) widget.onCreated();
     } finally {
@@ -85,45 +88,53 @@ class _ProjectStepState extends ConsumerState<ProjectStep> {
     final theme = Theme.of(context);
     return SingleChildScrollView(
       child: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(widget.headline,
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            widget.headline,
             textAlign: TextAlign.center,
-            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-        Gap.xs,
-        Text(
-          widget.subhead,
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodyMedium?.copyWith(color: context.nx.textMuted),
-        ),
-        Gap.lg,
-        TextField(
-          controller: _name,
-          decoration: const InputDecoration(
-              labelText: 'Project name', border: OutlineInputBorder()),
-        ),
-        Gap.lg,
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Text('Project type', style: theme.textTheme.titleSmall),
-        ),
-        Gap.sm,
-        ProjectTypeSelector(
-          selectedTypeKey: _typeKey,
-          selectedSubKey: _subKey,
-          onTypeChanged: (k) => setState(() => _typeKey = k),
-          onSubChanged: (k) => setState(() => _subKey = k),
-        ),
-        Gap.lg,
-        GradientButton(
-          onPressed: _creating ? null : _create,
-          busy: _creating,
-          label: 'Create project',
-          icon: Icons.arrow_forward,
-          expand: true,
-        ),
-      ],
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Gap.xs,
+          Text(
+            widget.subhead,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: context.nx.textMuted,
+            ),
+          ),
+          Gap.lg,
+          TextField(
+            controller: _name,
+            decoration: const InputDecoration(
+              labelText: 'Project name',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          Gap.lg,
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text('Project type', style: theme.textTheme.titleSmall),
+          ),
+          Gap.sm,
+          ProjectTypeSelector(
+            selectedTypeKey: _typeKey,
+            selectedSubKey: _subKey,
+            onTypeChanged: (k) => setState(() => _typeKey = k),
+            onSubChanged: (k) => setState(() => _subKey = k),
+          ),
+          Gap.lg,
+          GradientButton(
+            onPressed: _creating ? null : _create,
+            busy: _creating,
+            label: 'Create project',
+            icon: Icons.arrow_forward,
+            expand: true,
+          ),
+        ],
       ),
     );
   }

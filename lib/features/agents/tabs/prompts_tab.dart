@@ -52,7 +52,9 @@ class _PromptsTabState extends ConsumerState<PromptsTab> {
     _loadedProjectId = projectId;
     final db = ref.read(nexusDatabaseProvider);
     final project = await db.getProjectById(projectId);
-    final prompts = OrchestratorPrompts.fromJson(project?.orchestratorPromptsJson);
+    final prompts = OrchestratorPrompts.fromJson(
+      project?.orchestratorPromptsJson,
+    );
     if (!mounted) return;
     for (final f in OrchestratorPromptField.values) {
       _ctrls[f]!.text = prompts.raw(f);
@@ -70,11 +72,15 @@ class _PromptsTabState extends ConsumerState<PromptsTab> {
       for (final f in OrchestratorPromptField.values) f: _ctrls[f]!.text,
     };
     final json = OrchestratorPrompts.toJson(overrides);
-    await ref.read(nexusDatabaseProvider).setProjectOrchestratorPrompts(projectId, json);
+    await ref
+        .read(nexusDatabaseProvider)
+        .setProjectOrchestratorPrompts(projectId, json);
     if (!mounted) return;
     setState(() => _dirty = false);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Orchestrator prompts saved for this project.')),
+      const SnackBar(
+        content: Text('Orchestrator prompts saved for this project.'),
+      ),
     );
   }
 
@@ -85,15 +91,25 @@ class _PromptsTabState extends ConsumerState<PromptsTab> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Reset all prompts'),
-        content: const Text('Reset every orchestrator prompt for this project back to the built-in defaults?'),
+        content: const Text(
+          'Reset every orchestrator prompt for this project back to the built-in defaults?',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Reset')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Reset'),
+          ),
         ],
       ),
     );
     if (confirmed != true) return;
-    await ref.read(nexusDatabaseProvider).setProjectOrchestratorPrompts(projectId, null);
+    await ref
+        .read(nexusDatabaseProvider)
+        .setProjectOrchestratorPrompts(projectId, null);
     for (final f in OrchestratorPromptField.values) {
       _ctrls[f]!.text = f.defaultValue;
     }
@@ -123,7 +139,11 @@ class _PromptsTabState extends ConsumerState<PromptsTab> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xs),
+            AppSpacing.lg,
+            AppSpacing.md,
+            AppSpacing.lg,
+            AppSpacing.xs,
+          ),
           child: Row(
             children: [
               Expanded(
@@ -149,15 +169,23 @@ class _PromptsTabState extends ConsumerState<PromptsTab> {
         Expanded(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.xl),
+              AppSpacing.lg,
+              AppSpacing.sm,
+              AppSpacing.lg,
+              AppSpacing.xl,
+            ),
             children: [
               for (final stage in stages) ...[
                 Padding(
                   padding: const EdgeInsets.only(
-                      top: AppSpacing.md, bottom: AppSpacing.xs),
+                    top: AppSpacing.md,
+                    bottom: AppSpacing.xs,
+                  ),
                   child: SectionHeader(title: stage, dense: true),
                 ),
-                for (final f in OrchestratorPromptField.values.where((f) => f.stage == stage))
+                for (final f in OrchestratorPromptField.values.where(
+                  (f) => f.stage == stage,
+                ))
                   _field(f),
               ],
             ],
@@ -176,14 +204,25 @@ class _PromptsTabState extends ConsumerState<PromptsTab> {
         children: [
           Row(
             children: [
-              Expanded(child: Text(f.label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+              Expanded(
+                child: Text(
+                  f.label,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
               if (!isDefault)
                 TextButton(
                   onPressed: () => setState(() {
                     _ctrls[f]!.text = f.defaultValue;
                     _dirty = true;
                   }),
-                  style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8), minimumSize: Size.zero),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: Size.zero,
+                  ),
                   child: const Text('Reset', style: TextStyle(fontSize: 12)),
                 ),
             ],
@@ -194,7 +233,10 @@ class _PromptsTabState extends ConsumerState<PromptsTab> {
             maxLines: f.isMultiline ? 10 : 2,
             minLines: f.isMultiline ? 4 : 1,
             style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-            decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
           ),
         ],
       ),

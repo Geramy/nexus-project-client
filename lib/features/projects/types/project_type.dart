@@ -71,7 +71,8 @@ const Set<ProjectCapability> _baseCaps = {
 const ProjectType applicationDevelopmentType = ProjectType(
   key: 'application-development',
   name: 'Application Development',
-  tagline: 'Build and ship software — plans, tasks, agents, git, builds, CI, deploy.',
+  tagline:
+      'Build and ship software — plans, tasks, agents, git, builds, CI, deploy.',
   icon: Icons.terminal,
   capabilities: {
     ..._baseCaps,
@@ -98,7 +99,8 @@ const ProjectType projectCoordinationType = ProjectType(
 const ProjectType ivrCallSystemsType = ProjectType(
   key: 'ivr-call-systems',
   name: 'IVR / Call Systems',
-  tagline: 'Design phone systems — call flows, menus, voicebots, prompts & audio.',
+  tagline:
+      'Design phone systems — call flows, menus, voicebots, prompts & audio.',
   icon: Icons.call_outlined,
   capabilities: {
     ..._baseCaps,
@@ -107,18 +109,36 @@ const ProjectType ivrCallSystemsType = ProjectType(
     ProjectCapability.audioPrompts,
   },
   subCategories: [
-    ProjectTypeSubCategory('inboundIvr', 'Inbound IVR / Auto-Attendant',
-        'Greet callers, route by menu, business hours, voicemail.'),
-    ProjectTypeSubCategory('outboundCampaign', 'Outbound Campaign',
-        'Reminders, notifications, and AI outbound calls (consent/TCPA aware).'),
-    ProjectTypeSubCategory('aiVoicebot', 'AI Voicebot',
-        'A conversational virtual agent that answers and handles calls.'),
-    ProjectTypeSubCategory('callCenter', 'Call Center / ACD',
-        'Queues, agents, and skills-based routing.'),
-    ProjectTypeSubCategory('appointmentReminder', 'Appointment Reminder',
-        'Automated reminders with confirm/reschedule (outbound).'),
-    ProjectTypeSubCategory('survey', 'Survey / Data Collection',
-        'Collect responses over the phone via DTMF or speech (outbound).'),
+    ProjectTypeSubCategory(
+      'inboundIvr',
+      'Inbound IVR / Auto-Attendant',
+      'Greet callers, route by menu, business hours, voicemail.',
+    ),
+    ProjectTypeSubCategory(
+      'outboundCampaign',
+      'Outbound Campaign',
+      'Reminders, notifications, and AI outbound calls (consent/TCPA aware).',
+    ),
+    ProjectTypeSubCategory(
+      'aiVoicebot',
+      'AI Voicebot',
+      'A conversational virtual agent that answers and handles calls.',
+    ),
+    ProjectTypeSubCategory(
+      'callCenter',
+      'Call Center / ACD',
+      'Queues, agents, and skills-based routing.',
+    ),
+    ProjectTypeSubCategory(
+      'appointmentReminder',
+      'Appointment Reminder',
+      'Automated reminders with confirm/reschedule (outbound).',
+    ),
+    ProjectTypeSubCategory(
+      'survey',
+      'Survey / Data Collection',
+      'Collect responses over the phone via DTMF or speech (outbound).',
+    ),
   ],
   defaultAgentPackKeys: ['project-coordination'],
 );
@@ -135,6 +155,6 @@ const String kDefaultProjectTypeKey = 'application-development';
 /// Look up a type by key, falling back to the default for unknown keys (so a
 /// legacy/blank `projectType` column resolves to application-development).
 ProjectType projectTypeByKey(String? key) => kProjectTypes.firstWhere(
-      (t) => t.key == key,
-      orElse: () => applicationDevelopmentType,
-    );
+  (t) => t.key == key,
+  orElse: () => applicationDevelopmentType,
+);

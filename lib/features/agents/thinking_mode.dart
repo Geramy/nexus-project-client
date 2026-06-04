@@ -28,24 +28,24 @@ enum ThinkingMode {
   }
 
   String get wire => switch (this) {
-        ThinkingMode.on => 'on',
-        ThinkingMode.off => 'off',
-        ThinkingMode.unset => 'unset',
-      };
+    ThinkingMode.on => 'on',
+    ThinkingMode.off => 'off',
+    ThinkingMode.unset => 'unset',
+  };
 
   String get label => switch (this) {
-        ThinkingMode.on => 'On',
-        ThinkingMode.off => 'Off',
-        ThinkingMode.unset => 'Unset',
-      };
+    ThinkingMode.on => 'On',
+    ThinkingMode.off => 'Off',
+    ThinkingMode.unset => 'Unset',
+  };
 
   /// The `enable_thinking` value this mode forces, or null when it inherits
   /// (i.e. the request omits the parameter entirely).
   bool? get enableThinking => switch (this) {
-        ThinkingMode.on => true,
-        ThinkingMode.off => false,
-        ThinkingMode.unset => null,
-      };
+    ThinkingMode.on => true,
+    ThinkingMode.off => false,
+    ThinkingMode.unset => null,
+  };
 }
 
 /// Resolves the effective `enable_thinking` flag.
@@ -55,8 +55,7 @@ enum ThinkingMode {
 bool? resolveEnableThinking({
   required ThinkingMode agent,
   ThinkingMode task = ThinkingMode.unset,
-}) =>
-    agent.enableThinking ?? task.enableThinking;
+}) => agent.enableThinking ?? task.enableThinking;
 
 /// Reads a persona's thinking mode from its `configJson`. When the persona
 /// hasn't set one, the default is Off for the **Project Manager** and Unset for

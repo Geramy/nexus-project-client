@@ -32,7 +32,9 @@ class CallFlowInspector extends ConsumerWidget {
     final project = ref.watch(callSystemProjectProvider(projectId));
     final selectedId = ref.watch(selectedCallNodeProvider(projectId));
     final flow = project.flows.isEmpty ? null : project.flows.first;
-    final node = (selectedId == null || flow == null) ? null : flow.nodeById(selectedId);
+    final node = (selectedId == null || flow == null)
+        ? null
+        : flow.nodeById(selectedId);
 
     if (node == null) {
       return const EmptyState(
@@ -73,12 +75,15 @@ class _NodeInspectorBody extends ConsumerStatefulWidget {
 }
 
 class _NodeInspectorBodyState extends ConsumerState<_NodeInspectorBody> {
-  late final TextEditingController _label =
-      TextEditingController(text: widget.node.label);
-  late final TextEditingController _message =
-      TextEditingController(text: _initialMessage());
-  late final TextEditingController _param =
-      TextEditingController(text: _initialParam());
+  late final TextEditingController _label = TextEditingController(
+    text: widget.node.label,
+  );
+  late final TextEditingController _message = TextEditingController(
+    text: _initialMessage(),
+  );
+  late final TextEditingController _param = TextEditingController(
+    text: _initialParam(),
+  );
 
   CallSystemEditor get _editor =>
       ref.read(callSystemEditorProvider(widget.projectId));
@@ -96,24 +101,21 @@ class _NodeInspectorBodyState extends ConsumerState<_NodeInspectorBody> {
   }
 
   String? get _paramLabel => switch (widget.node.type) {
-        CallNodeType.dial => 'Number to dial (E.164)',
-        CallNodeType.transferToExtension => 'Extension number',
-        CallNodeType.aiVoicebot => 'Voicebot goal / instructions',
-        CallNodeType.gatherDigits ||
-        CallNodeType.gatherSpeech =>
-          'Store answer in variable',
-        _ => null,
-      };
+    CallNodeType.dial => 'Number to dial (E.164)',
+    CallNodeType.transferToExtension => 'Extension number',
+    CallNodeType.aiVoicebot => 'Voicebot goal / instructions',
+    CallNodeType.gatherDigits ||
+    CallNodeType.gatherSpeech => 'Store answer in variable',
+    _ => null,
+  };
 
   String get _paramKey => switch (widget.node.type) {
-        CallNodeType.dial => 'number',
-        CallNodeType.transferToExtension => 'extension',
-        CallNodeType.aiVoicebot => 'goal',
-        CallNodeType.gatherDigits ||
-        CallNodeType.gatherSpeech =>
-          'variable',
-        _ => 'target',
-      };
+    CallNodeType.dial => 'number',
+    CallNodeType.transferToExtension => 'extension',
+    CallNodeType.aiVoicebot => 'goal',
+    CallNodeType.gatherDigits || CallNodeType.gatherSpeech => 'variable',
+    _ => 'target',
+  };
 
   @override
   void dispose() {
@@ -135,13 +137,15 @@ class _NodeInspectorBodyState extends ConsumerState<_NodeInspectorBody> {
     var pid = widget.node.config['promptId'] as String?;
     if (pid == null) {
       pid = 'prompt_${widget.node.id}';
-      await _editor.updateNode(widget.node
-          .copyWith(config: {...widget.node.config, 'promptId': pid}));
+      await _editor.updateNode(
+        widget.node.copyWith(config: {...widget.node.config, 'promptId': pid}),
+      );
     }
     final existing = widget.project.promptById(pid);
     await _editor.upsertPrompt(
-      (existing ?? Prompt(id: pid, voice: 'af_heart'))
-          .copyWith(text: _message.text.trim()),
+      (existing ?? Prompt(id: pid, voice: 'af_heart')).copyWith(
+        text: _message.text.trim(),
+      ),
     );
   }
 
@@ -150,7 +154,9 @@ class _NodeInspectorBodyState extends ConsumerState<_NodeInspectorBody> {
     final scheme = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
     final color = colorForNodeType(widget.node.type, scheme);
-    final showMessage = CallFlowInspector._promptBearing.contains(widget.node.type);
+    final showMessage = CallFlowInspector._promptBearing.contains(
+      widget.node.type,
+    );
     final paramLabel = _paramLabel;
 
     return ListView(
@@ -161,8 +167,10 @@ class _NodeInspectorBodyState extends ConsumerState<_NodeInspectorBody> {
             Icon(iconForNodeType(widget.node.type), color: color),
             const SizedBox(width: AppSpacing.sm),
             Expanded(
-              child: Text(titleForNodeType(widget.node.type),
-                  style: theme.textTheme.titleMedium),
+              child: Text(
+                titleForNodeType(widget.node.type),
+                style: theme.textTheme.titleMedium,
+              ),
             ),
           ],
         ),
@@ -170,7 +178,9 @@ class _NodeInspectorBodyState extends ConsumerState<_NodeInspectorBody> {
         TextField(
           controller: _label,
           decoration: const InputDecoration(
-              labelText: 'Label', border: OutlineInputBorder()),
+            labelText: 'Label',
+            border: OutlineInputBorder(),
+          ),
           onEditingComplete: _commitLabel,
           onTapOutside: (_) => _commitLabel(),
         ),
@@ -194,7 +204,9 @@ class _NodeInspectorBodyState extends ConsumerState<_NodeInspectorBody> {
           TextField(
             controller: _param,
             decoration: InputDecoration(
-                labelText: paramLabel, border: const OutlineInputBorder()),
+              labelText: paramLabel,
+              border: const OutlineInputBorder(),
+            ),
             onEditingComplete: _commitParam,
             onTapOutside: (_) => _commitParam(),
           ),
@@ -202,9 +214,12 @@ class _NodeInspectorBodyState extends ConsumerState<_NodeInspectorBody> {
         Gap.lg,
         Text('Routing', style: theme.textTheme.titleSmall),
         Gap.xs,
-        Text('Where the call goes from each exit:',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: context.nx.textMuted)),
+        Text(
+          'Where the call goes from each exit:',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: context.nx.textMuted,
+          ),
+        ),
         Gap.sm,
         for (final port in widget.node.type.basePorts) _portRow(port, scheme),
         if (!widget.isEntry) ...[
@@ -227,16 +242,20 @@ class _NodeInspectorBodyState extends ConsumerState<_NodeInspectorBody> {
         children: [
           SizedBox(
             width: 84,
-            child: Text(port,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            child: Text(
+              port,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
           ),
           Expanded(
             child: InputDecorator(
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
                 isDense: true,
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
               ),
               child: DropdownButton<String?>(
                 value: widget.otherNodes.any((n) => n.id == current)
@@ -245,14 +264,20 @@ class _NodeInspectorBodyState extends ConsumerState<_NodeInspectorBody> {
                 isExpanded: true,
                 isDense: true,
                 underline: const SizedBox.shrink(),
-                hint: const Text('— end / unset —', style: TextStyle(fontSize: 13)),
+                hint: const Text(
+                  '— end / unset —',
+                  style: TextStyle(fontSize: 13),
+                ),
                 items: [
                   const DropdownMenuItem<String?>(
-                      value: null, child: Text('— end / unset —')),
+                    value: null,
+                    child: Text('— end / unset —'),
+                  ),
                   for (final n in widget.otherNodes)
                     DropdownMenuItem<String?>(
-                        value: n.id,
-                        child: Text(n.label, overflow: TextOverflow.ellipsis)),
+                      value: n.id,
+                      child: Text(n.label, overflow: TextOverflow.ellipsis),
+                    ),
                 ],
                 onChanged: (v) => _editor.connect(widget.node.id, port, v),
               ),
