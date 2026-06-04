@@ -16,7 +16,11 @@ import 'summary_service.dart';
 /// `/PLANS` files (live from `Projects.projectSummaryMd`). The user regenerates
 /// it on demand; the coordinator also refreshes it during idle cycles.
 class SummaryTab extends ConsumerStatefulWidget {
-  const SummaryTab({super.key, required this.projectId, required this.clientId});
+  const SummaryTab({
+    super.key,
+    required this.projectId,
+    required this.clientId,
+  });
 
   final int projectId;
   final int clientId;
@@ -35,10 +39,9 @@ class _SummaryTabState extends ConsumerState<SummaryTab> {
       _error = null;
     });
     try {
-      await ref.read(summaryServiceProvider).generate(
-            projectId: widget.projectId,
-            clientId: widget.clientId,
-          );
+      await ref
+          .read(summaryServiceProvider)
+          .generate(projectId: widget.projectId, clientId: widget.clientId);
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     } finally {
@@ -61,9 +64,10 @@ class _SummaryTabState extends ConsumerState<SummaryTab> {
               const Icon(Icons.summarize_outlined, size: 18),
               const SizedBox(width: 8),
               const Expanded(
-                child: Text('Project Summary',
-                    style:
-                        TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                child: Text(
+                  'Project Summary',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
               ),
               FilledButton.icon(
                 onPressed: _busy ? null : _generate,
@@ -86,8 +90,10 @@ class _SummaryTabState extends ConsumerState<SummaryTab> {
             width: double.infinity,
             color: theme.colorScheme.errorContainer,
             padding: const EdgeInsets.all(10),
-            child: Text(_error!,
-                style: TextStyle(color: theme.colorScheme.onErrorContainer)),
+            child: Text(
+              _error!,
+              style: TextStyle(color: theme.colorScheme.onErrorContainer),
+            ),
           ),
         Expanded(
           child: StreamBuilder<Project?>(
@@ -117,8 +123,9 @@ class _SummaryTabState extends ConsumerState<SummaryTab> {
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Text(
                         'Updated ${updated.toLocal()}',
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: theme.colorScheme.outline),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.outline,
+                        ),
                       ),
                     ),
                   SelectableText(summary, style: theme.textTheme.bodyMedium),
@@ -144,10 +151,18 @@ class _SetupCard extends ConsumerWidget {
     final theme = Theme.of(context);
     final status =
         ref.watch(projectRowProvider(projectId)).valueOrNull?.setupStatus ??
-            'notStarted';
+        'notStarted';
     final (label, action, icon) = switch (status) {
-      'complete' => ('Setup complete', 'Review & edit', Icons.fact_check_outlined),
-      'inProgress' || 'refining' => ('Setup in progress', 'Resume setup', Icons.play_circle_outline),
+      'complete' => (
+        'Setup complete',
+        'Review & edit',
+        Icons.fact_check_outlined,
+      ),
+      'inProgress' || 'refining' => (
+        'Setup in progress',
+        'Resume setup',
+        Icons.play_circle_outline,
+      ),
       'skipped' => ('Setup skipped', 'Finish setup', Icons.checklist_rtl),
       _ => ('Setup not started', 'Start setup', Icons.checklist_rtl),
     };
@@ -161,7 +176,8 @@ class _SetupCard extends ConsumerWidget {
           const SizedBox(width: AppSpacing.sm),
           Expanded(child: Text(label, style: theme.textTheme.bodyMedium)),
           FilledButton.tonalIcon(
-            onPressed: () => showProjectSetupWizard(context, projectId, clientId),
+            onPressed: () =>
+                showProjectSetupWizard(context, projectId, clientId),
             icon: const Icon(Icons.open_in_full, size: 16),
             label: Text(action),
           ),

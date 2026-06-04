@@ -11,9 +11,11 @@ import 'project.dart';
 class ActivityLogs extends Table {
   IntColumn get activity_pk => integer().autoIncrement()();
   IntColumn get client_fk => integer().references(Clients, #client_pk)();
-  IntColumn get project_fk => integer().nullable().references(Projects, #project_pk)();
+  IntColumn get project_fk =>
+      integer().nullable().references(Projects, #project_pk)();
 
-  TextColumn get actorType => text().withDefault(const Constant('user'))(); // user, agent, system
+  TextColumn get actorType =>
+      text().withDefault(const Constant('user'))(); // user, agent, system
   TextColumn get actorId => text().nullable()(); // polymorphic actor reference
 
   TextColumn get action => text()(); // e.g. "task.created", "build.started"

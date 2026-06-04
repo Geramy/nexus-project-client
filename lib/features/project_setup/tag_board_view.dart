@@ -29,7 +29,8 @@ class TagBoardView extends ConsumerWidget {
     // scoped suggestions). Falls back to empty until it loads, so the board
     // renders immediately and fills in the moment an industry is chosen.
     final scoped =
-        ref.watch(scopedBoardProvider(projectPk)).valueOrNull ?? ScopedBoard.empty;
+        ref.watch(scopedBoardProvider(projectPk)).valueOrNull ??
+        ScopedBoard.empty;
 
     return flowAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -42,8 +43,13 @@ class TagBoardView extends ConsumerWidget {
     );
   }
 
-  Widget _board(BuildContext context, WidgetRef ref, SetupFlowDefinition flow,
-      List<ProjectTag> tags, ScopedBoard scoped) {
+  Widget _board(
+    BuildContext context,
+    WidgetRef ref,
+    SetupFlowDefinition flow,
+    List<ProjectTag> tags,
+    ScopedBoard scoped,
+  ) {
     final byCategory = <String, List<ProjectTag>>{
       for (final s in flow.stages) s.key: [],
       for (final a in scoped.subAxes) a.key: [],
@@ -56,8 +62,10 @@ class TagBoardView extends ConsumerWidget {
     // legacy software tag on a re-typed project) get shown last so nothing is
     // silently hidden. Sub-axis sections are rendered inline, so exclude them.
     final orphans = byCategory.keys
-        .where((k) =>
-            !flow.stages.any((s) => s.key == k) && !subAxisKeys.contains(k))
+        .where(
+          (k) =>
+              !flow.stages.any((s) => s.key == k) && !subAxisKeys.contains(k),
+        )
         .toList();
 
     // The deterministic Client↔Server↔DB resolver is software-only; show its bar
@@ -122,8 +130,9 @@ class TagBoardView extends ConsumerWidget {
   static String _prettify(String key) => key.isEmpty
       ? key
       : key[0].toUpperCase() +
-          key.substring(1).replaceAllMapped(
-              RegExp('([A-Z])'), (m) => ' ${m.group(1)}');
+            key
+                .substring(1)
+                .replaceAllMapped(RegExp('([A-Z])'), (m) => ' ${m.group(1)}');
 }
 
 /// Runs the deterministic resolver over the current intent tags and upserts the
@@ -164,8 +173,11 @@ class _ResolveBarState extends ConsumerState<_ResolveBar> {
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
-            Icon(Icons.account_tree_outlined,
-                size: 18, color: theme.colorScheme.primary),
+            Icon(
+              Icons.account_tree_outlined,
+              size: 18,
+              color: theme.colorScheme.primary,
+            ),
             const SizedBox(width: 8),
             const Expanded(
               child: Text(
@@ -218,13 +230,19 @@ class _TagSection extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Text(title,
-                  style: theme.textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w600)),
+              Text(
+                title,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               const SizedBox(width: 8),
-              Text('${tags.where((t) => !t.isRejected).length}',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.outline)),
+              Text(
+                '${tags.where((t) => !t.isRejected).length}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
+              ),
               const Spacer(),
               TextButton.icon(
                 onPressed: () => _showAddPicker(context, ref),
@@ -235,9 +253,12 @@ class _TagSection extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           if (tags.isEmpty)
-            Text('No tags yet.',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.outline))
+            Text(
+              'No tags yet.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.outline,
+              ),
+            )
           else
             Wrap(
               spacing: 8,
@@ -282,7 +303,10 @@ class _TagChip extends ConsumerWidget {
       TagStatus.proposed => Colors.transparent,
     };
     final border = tag.isProposed
-        ? Border.all(color: theme.colorScheme.outlineVariant, style: BorderStyle.solid)
+        ? Border.all(
+            color: theme.colorScheme.outlineVariant,
+            style: BorderStyle.solid,
+          )
         : null;
 
     return Tooltip(
@@ -304,8 +328,7 @@ class _TagChip extends ConsumerWidget {
             Text(
               tag.value,
               style: theme.textTheme.bodyMedium?.copyWith(
-                decoration:
-                    tag.isRejected ? TextDecoration.lineThrough : null,
+                decoration: tag.isRejected ? TextDecoration.lineThrough : null,
                 color: tag.isRejected ? theme.colorScheme.outline : null,
               ),
             ),
@@ -316,8 +339,9 @@ class _TagChip extends ConsumerWidget {
               const SizedBox(width: 6),
               Text(
                 tag.layerKey!,
-                style: theme.textTheme.labelSmall
-                    ?.copyWith(color: theme.colorScheme.outline),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
               ),
             ],
             const SizedBox(width: 4),
@@ -328,8 +352,12 @@ class _TagChip extends ConsumerWidget {
     );
   }
 
-  List<Widget> _actions(BuildContext context, TagController controller,
-      int pk, ThemeData theme) {
+  List<Widget> _actions(
+    BuildContext context,
+    TagController controller,
+    int pk,
+    ThemeData theme,
+  ) {
     return [
       _IconBtn(
         icon: Icons.check,
@@ -383,9 +411,11 @@ class _IconBtn extends StatelessWidget {
         radius: 16,
         child: Padding(
           padding: const EdgeInsets.all(3),
-          child: Icon(icon,
-              size: 16,
-              color: active ? color : Theme.of(context).colorScheme.outline),
+          child: Icon(
+            icon,
+            size: 16,
+            color: active ? color : Theme.of(context).colorScheme.outline,
+          ),
         ),
       ),
     );

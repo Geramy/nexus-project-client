@@ -18,12 +18,9 @@ class ChatMarkdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final base = DefaultTextStyle.of(context).style.copyWith(
-          fontSize: fontSize,
-          color: color,
-        );
-    return SelectionArea(
-      child: GptMarkdown(text, style: base),
-    );
+    final base = DefaultTextStyle.of(
+      context,
+    ).style.copyWith(fontSize: fontSize, color: color);
+    return SelectionArea(child: GptMarkdown(text, style: base));
   }
 }

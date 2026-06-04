@@ -17,7 +17,10 @@ void main() {
 
   test('fromName round-trips and falls back to the default', () {
     expect(AppThemeChoice.fromName('midnight'), AppThemeChoice.midnight);
-    expect(AppThemeChoice.fromName('does-not-exist'), AppThemeChoice.defaultChoice);
+    expect(
+      AppThemeChoice.fromName('does-not-exist'),
+      AppThemeChoice.defaultChoice,
+    );
   });
 
   testWidgets('a MaterialApp renders under the default theme', (tester) async {

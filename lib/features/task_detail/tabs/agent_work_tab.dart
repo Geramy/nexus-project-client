@@ -50,10 +50,7 @@ class AgentWorkTab extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _AgentHeaderCard(task: task),
-          if (task.submissionJson != null) ...[
-            Gap.md,
-            _SubmittedBanner(),
-          ],
+          if (task.submissionJson != null) ...[Gap.md, _SubmittedBanner()],
           const SizedBox(height: AppSpacing.xl),
           const SectionHeader(title: 'Activity Feed', dense: true),
           Gap.sm,
@@ -99,8 +96,10 @@ class _AgentHeaderCard extends ConsumerWidget {
                     if (agent?.title != null && agent!.title!.isNotEmpty)
                       Text(
                         agent.title!,
-                        style:
-                            TextStyle(fontSize: 12, color: context.nx.textMuted),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.nx.textMuted,
+                        ),
                       ),
                   ],
                 );
@@ -151,7 +150,9 @@ class _SubmittedBanner extends StatelessWidget {
     final warning = context.nx.warning;
     return Container(
       padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
       decoration: BoxDecoration(
         color: context.nx.tintOf(warning),
         borderRadius: AppRadius.smAll,
@@ -215,9 +216,7 @@ class _ActivityFeed extends ConsumerWidget {
         }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final m in messages) _FeedRow(message: m),
-          ],
+          children: [for (final m in messages) _FeedRow(message: m)],
         );
       },
     );
@@ -232,15 +231,27 @@ class _FeedRow extends StatelessWidget {
   ({IconData icon, ChipIntent intent, String label}) _roleStyle() {
     switch (message.role) {
       case 'assistant':
-        return (icon: Icons.smart_toy, intent: ChipIntent.info, label: 'assistant');
+        return (
+          icon: Icons.smart_toy,
+          intent: ChipIntent.info,
+          label: 'assistant',
+        );
       case 'system':
-        return (icon: Icons.settings, intent: ChipIntent.neutral, label: 'system');
+        return (
+          icon: Icons.settings,
+          intent: ChipIntent.neutral,
+          label: 'system',
+        );
       case 'tool':
         return (icon: Icons.build, intent: ChipIntent.accent, label: 'tool');
       case 'user':
         return (icon: Icons.person, intent: ChipIntent.success, label: 'user');
       default:
-        return (icon: Icons.chat_bubble_outline, intent: ChipIntent.neutral, label: message.role);
+        return (
+          icon: Icons.chat_bubble_outline,
+          intent: ChipIntent.neutral,
+          label: message.role,
+        );
     }
   }
 

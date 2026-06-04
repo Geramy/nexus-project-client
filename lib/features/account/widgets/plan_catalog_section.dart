@@ -55,10 +55,9 @@ class _PlanCatalogSectionState extends ConsumerState<PlanCatalogSection> {
   @override
   Widget build(BuildContext context) {
     final catalogAsync = ref.watch(nexusPlansProvider);
-    final currentPlanKey = ref.watch(nexusAccountSummaryProvider).maybeWhen(
-          data: (a) => a.subscription.planKey,
-          orElse: () => null,
-        );
+    final currentPlanKey = ref
+        .watch(nexusAccountSummaryProvider)
+        .maybeWhen(data: (a) => a.subscription.planKey, orElse: () => null);
 
     return catalogAsync.when(
       loading: () => const Center(
@@ -78,16 +77,18 @@ class _PlanCatalogSectionState extends ConsumerState<PlanCatalogSection> {
               spacing: 16,
               runSpacing: 16,
               children: catalog.plans
-                  .map((p) => SizedBox(
-                        width: 260,
-                        child: _PlanCard(
-                          plan: p,
-                          isCurrent: p.key == currentPlanKey,
-                          busy: _checkingOutPlan == p.key,
-                          anyBusy: _checkingOutPlan != null,
-                          onSubscribe: () => _subscribe(p),
-                        ),
-                      ))
+                  .map(
+                    (p) => SizedBox(
+                      width: 260,
+                      child: _PlanCard(
+                        plan: p,
+                        isCurrent: p.key == currentPlanKey,
+                        busy: _checkingOutPlan == p.key,
+                        anyBusy: _checkingOutPlan != null,
+                        onSubscribe: () => _subscribe(p),
+                      ),
+                    ),
+                  )
                   .toList(),
             ),
             if (catalog.addons.isNotEmpty) ...[
@@ -116,8 +117,10 @@ class _PlanCatalogSectionState extends ConsumerState<PlanCatalogSection> {
                       },
                       title: Text(a.name),
                       subtitle: Text(_addonSubtitle(a)),
-                      secondary: Text(_price(a.priceCents),
-                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                      secondary: Text(
+                        _price(a.priceCents),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                     ),
                   );
                 }).toList(),
@@ -136,8 +139,10 @@ class _PlanCatalogSectionState extends ConsumerState<PlanCatalogSection> {
         padding: const EdgeInsets.all(20),
         child: Row(
           children: [
-            Icon(Icons.error_outline,
-                color: Theme.of(context).colorScheme.error),
+            Icon(
+              Icons.error_outline,
+              color: Theme.of(context).colorScheme.error,
+            ),
             const SizedBox(width: 12),
             Expanded(child: Text('Could not load plans: $msg')),
             TextButton(
@@ -184,44 +189,63 @@ class _PlanCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text(plan.name,
-                      style: Theme.of(context).textTheme.titleMedium),
+                  child: Text(
+                    plan.name,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                 ),
                 if (isCurrent)
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: scheme.primaryContainer,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Text('Current',
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: scheme.onPrimaryContainer)),
+                    child: Text(
+                      'Current',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: scheme.onPrimaryContainer,
+                      ),
+                    ),
                   ),
               ],
             ),
             const SizedBox(height: 6),
-            Text(_price(plan.priceCents),
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              _price(plan.priceCents),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+            ),
             Text('/ month', style: Theme.of(context).textTheme.bodySmall),
             if (plan.description != null && plan.description!.isNotEmpty) ...[
               const SizedBox(height: 8),
-              Text(plan.description!,
-                  style: Theme.of(context).textTheme.bodySmall),
+              Text(
+                plan.description!,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ],
             const SizedBox(height: 12),
-            _feature(context, Icons.token_outlined,
-                '${_fmt(plan.monthlyTokens)} tokens / mo'),
-            _feature(context, Icons.image_outlined,
-                '${_fmt(plan.monthlyImages)} images / mo'),
-            _feature(context, Icons.groups_outlined,
-                '${plan.agentSessions} agent sessions'),
+            _feature(
+              context,
+              Icons.token_outlined,
+              '${_fmt(plan.monthlyTokens)} tokens / mo',
+            ),
+            _feature(
+              context,
+              Icons.image_outlined,
+              '${_fmt(plan.monthlyImages)} images / mo',
+            ),
+            _feature(
+              context,
+              Icons.groups_outlined,
+              '${plan.agentSessions} agent sessions',
+            ),
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
@@ -231,7 +255,8 @@ class _PlanCard extends StatelessWidget {
                     ? const SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2))
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : Text(isCurrent ? 'Change plan' : 'Subscribe'),
               ),
             ),
@@ -249,8 +274,8 @@ class _PlanCard extends StatelessWidget {
           Icon(icon, size: 16, color: Theme.of(context).colorScheme.primary),
           const SizedBox(width: 8),
           Expanded(
-              child: Text(text,
-                  style: Theme.of(context).textTheme.bodyMedium)),
+            child: Text(text, style: Theme.of(context).textTheme.bodyMedium),
+          ),
         ],
       ),
     );
@@ -271,7 +296,6 @@ String _addonSubtitle(AddOn a) {
   return bonuses;
 }
 
-String _price(int cents) =>
-    NumberFormat.simpleCurrency().format(cents / 100.0);
+String _price(int cents) => NumberFormat.simpleCurrency().format(cents / 100.0);
 
 String _fmt(int v) => NumberFormat.compact().format(v);

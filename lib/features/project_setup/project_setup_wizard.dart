@@ -16,7 +16,10 @@ import 'setup_tab.dart';
 /// section. Saving is automatic (setup status + transcript persist), so closing
 /// any time is safe.
 Future<void> showProjectSetupWizard(
-    BuildContext context, int projectId, int clientId) {
+  BuildContext context,
+  int projectId,
+  int clientId,
+) {
   return Navigator.of(context, rootNavigator: true).push(
     MaterialPageRoute(
       fullscreenDialog: true,
@@ -29,15 +32,17 @@ Future<void> showProjectSetupWizard(
 enum _Section { overview, interview }
 
 class ProjectSetupWizard extends ConsumerStatefulWidget {
-  const ProjectSetupWizard(
-      {super.key, required this.projectId, required this.clientId});
+  const ProjectSetupWizard({
+    super.key,
+    required this.projectId,
+    required this.clientId,
+  });
 
   final int projectId;
   final int clientId;
 
   @override
-  ConsumerState<ProjectSetupWizard> createState() =>
-      _ProjectSetupWizardState();
+  ConsumerState<ProjectSetupWizard> createState() => _ProjectSetupWizardState();
 }
 
 class _ProjectSetupWizardState extends ConsumerState<ProjectSetupWizard> {
@@ -46,7 +51,8 @@ class _ProjectSetupWizardState extends ConsumerState<ProjectSetupWizard> {
 
   @override
   Widget build(BuildContext context) {
-    final status = ref
+    final status =
+        ref
             .watch(projectRowProvider(widget.projectId))
             .valueOrNull
             ?.setupStatus ??
@@ -66,14 +72,14 @@ class _ProjectSetupWizardState extends ConsumerState<ProjectSetupWizard> {
       ),
       body: switch (_section) {
         _Section.overview => _Overview(
-            status: status,
-            onContinue: () => setState(() => _section = _Section.interview),
-          ),
+          status: status,
+          onContinue: () => setState(() => _section = _Section.interview),
+        ),
         _Section.interview => _Interview(
-            projectId: widget.projectId,
-            clientId: widget.clientId,
-            onBack: () => setState(() => _section = _Section.overview),
-          ),
+          projectId: widget.projectId,
+          clientId: widget.clientId,
+          onBack: () => setState(() => _section = _Section.overview),
+        ),
       },
     );
   }
@@ -90,25 +96,25 @@ class _Overview extends StatelessWidget {
     final theme = Theme.of(context);
     final (label, action, hint) = switch (status) {
       'complete' => (
-          'Setup complete',
-          'Review & edit',
-          'You can revisit your answers and adjust them any time.'
-        ),
+        'Setup complete',
+        'Review & edit',
+        'You can revisit your answers and adjust them any time.',
+      ),
       'inProgress' || 'refining' => (
-          'In progress',
-          'Resume setup',
-          'Pick up where you left off — your progress was saved.'
-        ),
+        'In progress',
+        'Resume setup',
+        'Pick up where you left off — your progress was saved.',
+      ),
       'skipped' => (
-          'Skipped',
-          'Finish setup',
-          'You skipped setup earlier — finish it whenever you like.'
-        ),
+        'Skipped',
+        'Finish setup',
+        'You skipped setup earlier — finish it whenever you like.',
+      ),
       _ => (
-          'Not started',
-          'Start setup',
-          'A short guided interview tailors the project to what you’re building.'
-        ),
+        'Not started',
+        'Start setup',
+        'A short guided interview tailors the project to what you’re building.',
+      ),
     };
     return Center(
       child: ConstrainedBox(
@@ -127,14 +133,20 @@ class _Overview extends StatelessWidget {
                   gradient: AppTheme.brandGradient,
                   borderRadius: AppRadius.mdAll,
                 ),
-                child: const Icon(Icons.checklist_rtl,
-                    color: Colors.white, size: 28),
+                child: const Icon(
+                  Icons.checklist_rtl,
+                  color: Colors.white,
+                  size: 28,
+                ),
               ),
               Gap.md,
-              Text('Set up your project',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.bold)),
+              Text(
+                'Set up your project',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               Gap.xs,
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -146,10 +158,13 @@ class _Overview extends StatelessWidget {
                 ],
               ),
               Gap.sm,
-              Text(hint,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(color: context.nx.textMuted)),
+              Text(
+                hint,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: context.nx.textMuted,
+                ),
+              ),
               Gap.xl,
               GradientButton(
                 onPressed: onContinue,
@@ -191,7 +206,11 @@ class _Interview extends StatelessWidget {
           alignment: Alignment.centerLeft,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(
-                AppSpacing.sm, AppSpacing.xs, 0, 0),
+              AppSpacing.sm,
+              AppSpacing.xs,
+              0,
+              0,
+            ),
             child: TextButton.icon(
               onPressed: onBack,
               icon: const Icon(Icons.arrow_back, size: 16),
@@ -206,7 +225,9 @@ class _Interview extends StatelessWidget {
               SizedBox(
                 width: 460,
                 child: SetupInterviewPanel(
-                    projectId: projectId, clientId: clientId),
+                  projectId: projectId,
+                  clientId: clientId,
+                ),
               ),
               const VerticalDivider(width: 1),
               Expanded(

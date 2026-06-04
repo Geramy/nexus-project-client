@@ -29,7 +29,8 @@ class AudioRecorderService {
     }
 
     final dir = await getTemporaryDirectory();
-    final path = '${dir.path}/coordinator_voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+    final path =
+        '${dir.path}/coordinator_voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
     await _recorder.start(
       const RecordConfig(
@@ -94,14 +95,16 @@ class AudioRecorderService {
     // → We therefore cannot use androidConfig while the override is active.
     //   Uncomment the androidConfig block below once you remove the override
     //   (or when targeting Android only).
-    final stream = await _recorder.startStream(const RecordConfig(
-      encoder: AudioEncoder.pcm16bits,
-      sampleRate: 16000,
-      numChannels: 1,
-      // androidConfig: const AndroidRecordConfig(
-      //   audioSource: AndroidAudioSource.voiceCommunication,
-      // ),
-    ));
+    final stream = await _recorder.startStream(
+      const RecordConfig(
+        encoder: AudioEncoder.pcm16bits,
+        sampleRate: 16000,
+        numChannels: 1,
+        // androidConfig: const AndroidRecordConfig(
+        //   audioSource: AndroidAudioSource.voiceCommunication,
+        // ),
+      ),
+    );
 
     _isRecording = true;
     return stream;

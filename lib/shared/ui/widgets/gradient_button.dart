@@ -48,11 +48,14 @@ class _GradientButtonState extends State<GradientButton> {
             width: 16,
             height: 16,
             child: CircularProgressIndicator(
-                strokeWidth: 2, color: Colors.white),
+              strokeWidth: 2,
+              color: Colors.white,
+            ),
           )
         else if (widget.icon != null)
           Icon(widget.icon, size: 18, color: Colors.white),
-        if ((widget.icon != null || widget.busy)) const SizedBox(width: AppSpacing.sm),
+        if ((widget.icon != null || widget.busy))
+          const SizedBox(width: AppSpacing.sm),
         Text(
           widget.label,
           style: const TextStyle(
@@ -77,7 +80,9 @@ class _GradientButtonState extends State<GradientButton> {
             duration: AppMotion.fast,
             curve: AppMotion.curve,
             padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.xl, vertical: AppSpacing.md),
+              horizontal: AppSpacing.xl,
+              vertical: AppSpacing.md,
+            ),
             decoration: BoxDecoration(
               gradient: AppTheme.brandGradient,
               borderRadius: radius,

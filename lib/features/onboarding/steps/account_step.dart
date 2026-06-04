@@ -41,8 +41,11 @@ class AccountStep extends ConsumerWidget {
             NexusCard(
               child: Row(
                 children: [
-                  Icon(Icons.check_circle,
-                      color: theme.colorScheme.primary, size: 28),
+                  Icon(
+                    Icons.check_circle,
+                    color: theme.colorScheme.primary,
+                    size: 28,
+                  ),
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: Column(
@@ -95,7 +98,9 @@ class AccountStep extends ConsumerWidget {
         Text(
           'Or run your own inference — skip sign-in and set up local LLM servers.',
           textAlign: TextAlign.center,
-          style: theme.textTheme.bodySmall?.copyWith(color: context.nx.textMuted),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: context.nx.textMuted,
+          ),
         ),
         TextButton(
           onPressed: onLocalServers,

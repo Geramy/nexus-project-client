@@ -17,9 +17,12 @@ import 'nxtprj_git_engine.dart';
 /// The engine and the [VhdWorkspace] it wraps share one SQLite handle on one
 /// isolate, as required by the synchronous `NativeCallable.isolateLocal`
 /// backend callbacks.
-final gitEngineProvider =
-    FutureProvider.family<NxtprjGitEngine, int>((ref, projectId) async {
-  final ws = await ref.watch(workspaceFsProvider(projectId).future) as VhdWorkspace;
+final gitEngineProvider = FutureProvider.family<NxtprjGitEngine, int>((
+  ref,
+  projectId,
+) async {
+  final ws =
+      await ref.watch(workspaceFsProvider(projectId).future) as VhdWorkspace;
   final engine = await NxtprjGitEngine.open(ws);
   ref.onDispose(engine.dispose);
   return engine;

@@ -9,13 +9,17 @@ class ToolCall {
   final String name;
   final String argumentsJson;
 
-  const ToolCall({required this.id, required this.name, required this.argumentsJson});
+  const ToolCall({
+    required this.id,
+    required this.name,
+    required this.argumentsJson,
+  });
 
   Map<String, dynamic> toWireJson() => {
-        'id': id,
-        'type': 'function',
-        'function': {'name': name, 'arguments': argumentsJson},
-      };
+    'id': id,
+    'type': 'function',
+    'function': {'name': name, 'arguments': argumentsJson},
+  };
 
   factory ToolCall.fromJson(Map<String, dynamic> json) {
     final fn = json['function'] as Map<String, dynamic>? ?? const {};
@@ -42,5 +46,10 @@ class PartialToolCall {
   final String? name;
   final String argumentsAccum;
 
-  const PartialToolCall({required this.index, this.id, this.name, required this.argumentsAccum});
+  const PartialToolCall({
+    required this.index,
+    this.id,
+    this.name,
+    required this.argumentsAccum,
+  });
 }

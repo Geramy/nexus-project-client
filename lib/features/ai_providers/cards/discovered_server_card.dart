@@ -5,11 +5,16 @@
 import 'package:flutter/material.dart';
 
 import 'package:nexus_projects_client/infrastructure/lemonade/models/discovered_server.dart';
+
 class DiscoveredServerCard extends StatelessWidget {
   final DiscoveredServer server;
   final bool isSelected;
 
-  const DiscoveredServerCard({super.key, required this.server, required this.isSelected});
+  const DiscoveredServerCard({
+    super.key,
+    required this.server,
+    required this.isSelected,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -23,11 +28,16 @@ class DiscoveredServerCard extends StatelessWidget {
         title: Text(server.hostname),
         subtitle: Text(server.url),
         trailing: isSelected
-            ? const Text('Configured', style: TextStyle(fontSize: 11, color: Colors.teal))
+            ? const Text(
+                'Configured',
+                style: TextStyle(fontSize: 11, color: Colors.teal),
+              )
             : const SizedBox.shrink(),
         onTap: () {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Server "${server.hostname}" at ${server.url}')),
+            SnackBar(
+              content: Text('Server "${server.hostname}" at ${server.url}'),
+            ),
           );
         },
       ),

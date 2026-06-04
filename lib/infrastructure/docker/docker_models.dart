@@ -19,11 +19,11 @@ class DockerVersion {
   });
 
   factory DockerVersion.fromJson(Map<String, dynamic> j) => DockerVersion(
-        version: '${j['Version'] ?? '?'}',
-        apiVersion: '${j['ApiVersion'] ?? '?'}',
-        os: '${j['Os'] ?? '?'}',
-        arch: '${j['Arch'] ?? '?'}',
-      );
+    version: '${j['Version'] ?? '?'}',
+    apiVersion: '${j['ApiVersion'] ?? '?'}',
+    os: '${j['Os'] ?? '?'}',
+    arch: '${j['Arch'] ?? '?'}',
+  );
 }
 
 class DockerImage {
@@ -47,7 +47,8 @@ class DockerImage {
   });
 
   factory DockerImage.fromJson(Map<String, dynamic> j) {
-    final tags = (j['RepoTags'] as List?)?.map((e) => '$e').toList() ?? const <String>[];
+    final tags =
+        (j['RepoTags'] as List?)?.map((e) => '$e').toList() ?? const <String>[];
     return DockerImage(
       id: '${j['Id'] ?? ''}',
       repoTags: tags.isEmpty ? const ['<none>:<none>'] : tags,
@@ -62,7 +63,8 @@ class DockerImage {
     return raw.length >= 12 ? raw.substring(0, 12) : raw;
   }
 
-  String get primaryTag => repoTags.isNotEmpty ? repoTags.first : '<none>:<none>';
+  String get primaryTag =>
+      repoTags.isNotEmpty ? repoTags.first : '<none>:<none>';
 }
 
 class DockerContainer {
@@ -85,7 +87,11 @@ class DockerContainer {
   });
 
   factory DockerContainer.fromJson(Map<String, dynamic> j) {
-    final names = (j['Names'] as List?)?.map((e) => '$e'.replaceFirst('/', '')).toList() ?? const <String>[];
+    final names =
+        (j['Names'] as List?)
+            ?.map((e) => '$e'.replaceFirst('/', ''))
+            .toList() ??
+        const <String>[];
     return DockerContainer(
       id: '${j['Id'] ?? ''}',
       names: names,

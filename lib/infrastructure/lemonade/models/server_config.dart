@@ -50,11 +50,7 @@ class ServerConfig {
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'baseUrl': baseUrl,
-      'apiKey': apiKey,
-      'name': name,
-    };
+    return {'baseUrl': baseUrl, 'apiKey': apiKey, 'name': name};
   }
 
   factory ServerConfig.fromJson(Map<String, dynamic> json) {

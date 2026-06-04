@@ -36,22 +36,22 @@ class Extension {
   });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'number': number,
-        'name': name,
-        'voicemailBoxId': voicemailBoxId,
-        'sipUsername': sipUsername,
-        'ringSeconds': ringSeconds,
-      };
+    'id': id,
+    'number': number,
+    'name': name,
+    'voicemailBoxId': voicemailBoxId,
+    'sipUsername': sipUsername,
+    'ringSeconds': ringSeconds,
+  };
 
   factory Extension.fromJson(Map<String, dynamic> j) => Extension(
-        id: j['id'] as String,
-        number: (j['number'] as String?) ?? '',
-        name: (j['name'] as String?) ?? '',
-        voicemailBoxId: j['voicemailBoxId'] as String?,
-        sipUsername: j['sipUsername'] as String?,
-        ringSeconds: (j['ringSeconds'] as num?)?.toInt() ?? 20,
-      );
+    id: j['id'] as String,
+    number: (j['number'] as String?) ?? '',
+    name: (j['name'] as String?) ?? '',
+    voicemailBoxId: j['voicemailBoxId'] as String?,
+    sipUsername: j['sipUsername'] as String?,
+    ringSeconds: (j['ringSeconds'] as num?)?.toInt() ?? 20,
+  );
 }
 
 /// How a [RingGroup] distributes a call across its members. A "hunt group" is a
@@ -66,9 +66,10 @@ enum RingStrategy {
   random,
 }
 
-RingStrategy ringStrategyFromKey(String k) =>
-    RingStrategy.values.firstWhere((s) => s.name == k,
-        orElse: () => RingStrategy.ringAll);
+RingStrategy ringStrategyFromKey(String k) => RingStrategy.values.firstWhere(
+  (s) => s.name == k,
+  orElse: () => RingStrategy.ringAll,
+);
 
 /// A group of extensions rung together by a [RingStrategy]. Falls back to
 /// [failoverVoicemailBoxId] (or a flow node) on no-answer.
@@ -92,26 +93,26 @@ class RingGroup {
   });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'number': number,
-        'extensionIds': extensionIds,
-        'strategy': strategy.name,
-        'ringSeconds': ringSeconds,
-        'failoverVoicemailBoxId': failoverVoicemailBoxId,
-      };
+    'id': id,
+    'name': name,
+    'number': number,
+    'extensionIds': extensionIds,
+    'strategy': strategy.name,
+    'ringSeconds': ringSeconds,
+    'failoverVoicemailBoxId': failoverVoicemailBoxId,
+  };
 
   factory RingGroup.fromJson(Map<String, dynamic> j) => RingGroup(
-        id: j['id'] as String,
-        name: (j['name'] as String?) ?? '',
-        number: j['number'] as String?,
-        extensionIds: ((j['extensionIds'] as List?) ?? const [])
-            .map((e) => e as String)
-            .toList(),
-        strategy: ringStrategyFromKey((j['strategy'] as String?) ?? 'ringAll'),
-        ringSeconds: (j['ringSeconds'] as num?)?.toInt() ?? 20,
-        failoverVoicemailBoxId: j['failoverVoicemailBoxId'] as String?,
-      );
+    id: j['id'] as String,
+    name: (j['name'] as String?) ?? '',
+    number: j['number'] as String?,
+    extensionIds: ((j['extensionIds'] as List?) ?? const [])
+        .map((e) => e as String)
+        .toList(),
+    strategy: ringStrategyFromKey((j['strategy'] as String?) ?? 'ringAll'),
+    ringSeconds: (j['ringSeconds'] as num?)?.toInt() ?? 20,
+    failoverVoicemailBoxId: j['failoverVoicemailBoxId'] as String?,
+  );
 }
 
 /// A call-pickup permission group: any member may answer another member's
@@ -128,18 +129,18 @@ class PickupGroup {
   });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'memberExtensionIds': memberExtensionIds,
-      };
+    'id': id,
+    'name': name,
+    'memberExtensionIds': memberExtensionIds,
+  };
 
   factory PickupGroup.fromJson(Map<String, dynamic> j) => PickupGroup(
-        id: j['id'] as String,
-        name: (j['name'] as String?) ?? '',
-        memberExtensionIds: ((j['memberExtensionIds'] as List?) ?? const [])
-            .map((e) => e as String)
-            .toList(),
-      );
+    id: j['id'] as String,
+    name: (j['name'] as String?) ?? '',
+    memberExtensionIds: ((j['memberExtensionIds'] as List?) ?? const [])
+        .map((e) => e as String)
+        .toList(),
+  );
 }
 
 /// Call park / hold orbit: a set of numbered slots a call can be parked in and
@@ -158,18 +159,18 @@ class ParkGroup {
   });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'slots': slots,
-        'timeoutSeconds': timeoutSeconds,
-      };
+    'id': id,
+    'name': name,
+    'slots': slots,
+    'timeoutSeconds': timeoutSeconds,
+  };
 
   factory ParkGroup.fromJson(Map<String, dynamic> j) => ParkGroup(
-        id: j['id'] as String,
-        name: (j['name'] as String?) ?? '',
-        slots: (j['slots'] as num?)?.toInt() ?? 10,
-        timeoutSeconds: (j['timeoutSeconds'] as num?)?.toInt() ?? 120,
-      );
+    id: j['id'] as String,
+    name: (j['name'] as String?) ?? '',
+    slots: (j['slots'] as num?)?.toInt() ?? 10,
+    timeoutSeconds: (j['timeoutSeconds'] as num?)?.toInt() ?? 120,
+  );
 }
 
 /// An ACD (automatic call distribution) queue: callers wait with music-on-hold
@@ -194,27 +195,26 @@ class CallQueue {
   });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'number': number,
-        'agentExtensionIds': agentExtensionIds,
-        'strategy': strategy.name,
-        'musicOnHoldPromptId': musicOnHoldPromptId,
-        'maxWaitSeconds': maxWaitSeconds,
-      };
+    'id': id,
+    'name': name,
+    'number': number,
+    'agentExtensionIds': agentExtensionIds,
+    'strategy': strategy.name,
+    'musicOnHoldPromptId': musicOnHoldPromptId,
+    'maxWaitSeconds': maxWaitSeconds,
+  };
 
   factory CallQueue.fromJson(Map<String, dynamic> j) => CallQueue(
-        id: j['id'] as String,
-        name: (j['name'] as String?) ?? '',
-        number: j['number'] as String?,
-        agentExtensionIds: ((j['agentExtensionIds'] as List?) ?? const [])
-            .map((e) => e as String)
-            .toList(),
-        strategy:
-            ringStrategyFromKey((j['strategy'] as String?) ?? 'fewestRecent'),
-        musicOnHoldPromptId: j['musicOnHoldPromptId'] as String?,
-        maxWaitSeconds: (j['maxWaitSeconds'] as num?)?.toInt() ?? 300,
-      );
+    id: j['id'] as String,
+    name: (j['name'] as String?) ?? '',
+    number: j['number'] as String?,
+    agentExtensionIds: ((j['agentExtensionIds'] as List?) ?? const [])
+        .map((e) => e as String)
+        .toList(),
+    strategy: ringStrategyFromKey((j['strategy'] as String?) ?? 'fewestRecent'),
+    musicOnHoldPromptId: j['musicOnHoldPromptId'] as String?,
+    maxWaitSeconds: (j['maxWaitSeconds'] as num?)?.toInt() ?? 300,
+  );
 }
 
 /// A voicemail mailbox with a greeting prompt and optional email delivery.
@@ -234,20 +234,20 @@ class VoicemailBox {
   });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'mailboxNumber': mailboxNumber,
-        'greetingPromptId': greetingPromptId,
-        'emailTo': emailTo,
-      };
+    'id': id,
+    'name': name,
+    'mailboxNumber': mailboxNumber,
+    'greetingPromptId': greetingPromptId,
+    'emailTo': emailTo,
+  };
 
   factory VoicemailBox.fromJson(Map<String, dynamic> j) => VoicemailBox(
-        id: j['id'] as String,
-        name: (j['name'] as String?) ?? '',
-        mailboxNumber: j['mailboxNumber'] as String?,
-        greetingPromptId: j['greetingPromptId'] as String?,
-        emailTo: j['emailTo'] as String?,
-      );
+    id: j['id'] as String,
+    name: (j['name'] as String?) ?? '',
+    mailboxNumber: j['mailboxNumber'] as String?,
+    greetingPromptId: j['greetingPromptId'] as String?,
+    emailTo: j['emailTo'] as String?,
+  );
 }
 
 /// One open-hours window within a [TimeCondition]. Days are 1=Mon..7=Sun;
@@ -263,16 +263,19 @@ class TimeRange {
     this.endMinute = 17 * 60,
   });
 
-  Map<String, dynamic> toJson() =>
-      {'days': days, 'startMinute': startMinute, 'endMinute': endMinute};
+  Map<String, dynamic> toJson() => {
+    'days': days,
+    'startMinute': startMinute,
+    'endMinute': endMinute,
+  };
 
   factory TimeRange.fromJson(Map<String, dynamic> j) => TimeRange(
-        days: ((j['days'] as List?) ?? const [])
-            .map((e) => (e as num).toInt())
-            .toList(),
-        startMinute: (j['startMinute'] as num?)?.toInt() ?? 540,
-        endMinute: (j['endMinute'] as num?)?.toInt() ?? 1020,
-      );
+    days: ((j['days'] as List?) ?? const [])
+        .map((e) => (e as num).toInt())
+        .toList(),
+    startMinute: (j['startMinute'] as num?)?.toInt() ?? 540,
+    endMinute: (j['endMinute'] as num?)?.toInt() ?? 1020,
+  );
 }
 
 /// Business-hours / holiday schedule the `schedule` node branches on.
@@ -292,24 +295,24 @@ class TimeCondition {
   });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'timezone': timezone,
-        'openRanges': openRanges.map((r) => r.toJson()).toList(),
-        'holidayDates': holidayDates,
-      };
+    'id': id,
+    'name': name,
+    'timezone': timezone,
+    'openRanges': openRanges.map((r) => r.toJson()).toList(),
+    'holidayDates': holidayDates,
+  };
 
   factory TimeCondition.fromJson(Map<String, dynamic> j) => TimeCondition(
-        id: j['id'] as String,
-        name: (j['name'] as String?) ?? '',
-        timezone: (j['timezone'] as String?) ?? 'America/New_York',
-        openRanges: ((j['openRanges'] as List?) ?? const [])
-            .map((e) => TimeRange.fromJson(Map<String, dynamic>.from(e as Map)))
-            .toList(),
-        holidayDates: ((j['holidayDates'] as List?) ?? const [])
-            .map((e) => e as String)
-            .toList(),
-      );
+    id: j['id'] as String,
+    name: (j['name'] as String?) ?? '',
+    timezone: (j['timezone'] as String?) ?? 'America/New_York',
+    openRanges: ((j['openRanges'] as List?) ?? const [])
+        .map((e) => TimeRange.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList(),
+    holidayDates: ((j['holidayDates'] as List?) ?? const [])
+        .map((e) => e as String)
+        .toList(),
+  );
 }
 
 /// An inbound phone number (DID). Routes incoming calls to a [flowId] (or a
@@ -331,18 +334,18 @@ class Did {
   });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'e164': e164,
-        'label': label,
-        'flowId': flowId,
-        'managed': managed,
-      };
+    'id': id,
+    'e164': e164,
+    'label': label,
+    'flowId': flowId,
+    'managed': managed,
+  };
 
   factory Did.fromJson(Map<String, dynamic> j) => Did(
-        id: j['id'] as String,
-        e164: (j['e164'] as String?) ?? '',
-        label: j['label'] as String?,
-        flowId: j['flowId'] as String?,
-        managed: (j['managed'] as bool?) ?? false,
-      );
+    id: j['id'] as String,
+    e164: (j['e164'] as String?) ?? '',
+    label: j['label'] as String?,
+    flowId: j['flowId'] as String?,
+    managed: (j['managed'] as bool?) ?? false,
+  );
 }

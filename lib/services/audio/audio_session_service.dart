@@ -24,23 +24,25 @@ class AudioSessionService {
     try {
       final session = await AudioSession.instance;
 
-      await session.configure(AudioSessionConfiguration(
-        avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
-        avAudioSessionCategoryOptions:
-            AVAudioSessionCategoryOptions.defaultToSpeaker |
-            AVAudioSessionCategoryOptions.allowBluetooth |
-            AVAudioSessionCategoryOptions.allowBluetoothA2dp,
-        avAudioSessionMode: AVAudioSessionMode.voiceChat,
-        avAudioSessionRouteSharingPolicy:
-            AVAudioSessionRouteSharingPolicy.defaultPolicy,
-        avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.none,
-        androidAudioAttributes: const AndroidAudioAttributes(
-          usage: AndroidAudioUsage.voiceCommunication,
-          contentType: AndroidAudioContentType.speech,
+      await session.configure(
+        AudioSessionConfiguration(
+          avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
+          avAudioSessionCategoryOptions:
+              AVAudioSessionCategoryOptions.defaultToSpeaker |
+              AVAudioSessionCategoryOptions.allowBluetooth |
+              AVAudioSessionCategoryOptions.allowBluetoothA2dp,
+          avAudioSessionMode: AVAudioSessionMode.voiceChat,
+          avAudioSessionRouteSharingPolicy:
+              AVAudioSessionRouteSharingPolicy.defaultPolicy,
+          avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.none,
+          androidAudioAttributes: const AndroidAudioAttributes(
+            usage: AndroidAudioUsage.voiceCommunication,
+            contentType: AndroidAudioContentType.speech,
+          ),
+          androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+          androidWillPauseWhenDucked: true,
         ),
-        androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
-        androidWillPauseWhenDucked: true,
-      ));
+      );
 
       await session.setActive(true);
 

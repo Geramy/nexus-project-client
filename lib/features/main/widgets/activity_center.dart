@@ -15,14 +15,19 @@ class ActivityCenter extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currentClientId = ref.watch(currentClientIdProvider);
-    final activitiesAsync = ref.watch(activityLogsForClientProvider(currentClientId));
+    final activitiesAsync = ref.watch(
+      activityLogsForClientProvider(currentClientId),
+    );
 
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Project Activity & Audit Feed', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          const Text(
+            'Project Activity & Audit Feed',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 16),
           Expanded(
             child: activitiesAsync.when(
@@ -32,10 +37,16 @@ class ActivityCenter extends ConsumerWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.history, size: 48, color: Colors.grey.shade400),
+                        Icon(
+                          Icons.history,
+                          size: 48,
+                          color: Colors.grey.shade400,
+                        ),
                         const SizedBox(height: 12),
-                        Text('No activity yet for this client.',
-                            style: TextStyle(color: Colors.grey.shade600)),
+                        Text(
+                          'No activity yet for this client.',
+                          style: TextStyle(color: Colors.grey.shade600),
+                        ),
                       ],
                     ),
                   );
@@ -55,13 +66,22 @@ class ActivityCenter extends ConsumerWidget {
                       margin: const EdgeInsets.only(bottom: 6),
                       child: ListTile(
                         leading: Icon(_actionIcon(log.action), size: 20),
-                        title: Text(log.action, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        title: Text(
+                          log.action,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (log.summary != null && log.summary!.isNotEmpty) Text(log.summary!),
-                            Text(meta.join(' • '),
-                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                            if (log.summary != null && log.summary!.isNotEmpty)
+                              Text(log.summary!),
+                            Text(
+                              meta.join(' • '),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -83,7 +103,8 @@ IconData _actionIcon(String action) {
   if (action.startsWith('task')) return Icons.task_alt;
   if (action.startsWith('build') || action.startsWith('ci')) return Icons.build;
   if (action.startsWith('deploy')) return Icons.rocket_launch;
-  if (action.startsWith('git') || action.startsWith('merge')) return Icons.merge_type;
+  if (action.startsWith('git') || action.startsWith('merge'))
+    return Icons.merge_type;
   if (action.startsWith('agent')) return Icons.smart_toy;
   return Icons.history;
 }

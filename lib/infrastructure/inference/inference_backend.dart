@@ -5,16 +5,16 @@
 import 'dart:typed_data';
 
 /// Clean interface for all inference backends.
-/// 
+///
 /// LemonadeApiClient (the rich ported client) implements this for local
 /// self-managed Lemonade servers (the ones with omni collections / full admin).
-/// 
+///
 /// Future implementations:
 ///   - GrokInferenceBackend
-///   - OpenAIInferenceBackend  
+///   - OpenAIInferenceBackend
 ///   - OpenRouterInferenceBackend
 ///   - RoutedNexusBackend (talks to nexus-projects-server, which synthesizes collections)
-/// 
+///
 /// "Collections" (curated bundles of models with specific capabilities) are
 /// synthesized differently by each implementation. The interface just needs
 /// to surface models + chat + tool calling + optional audio/image in a
@@ -192,7 +192,11 @@ class Usage {
   final int completionTokens;
   final int totalTokens;
 
-  Usage({required this.promptTokens, required this.completionTokens, required this.totalTokens});
+  Usage({
+    required this.promptTokens,
+    required this.completionTokens,
+    required this.totalTokens,
+  });
 
   factory Usage.fromJson(Map<String, dynamic> json) {
     return Usage(

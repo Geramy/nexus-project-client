@@ -39,12 +39,9 @@ class NexusAccountClient {
 
   final http.Client _http;
 
-  NexusAccountClient({
-    String? baseUrl,
-    this.token,
-    http.Client? client,
-  })  : baseUrl = baseUrl ?? defaultGatewayBaseUrl,
-        _http = client ?? http.Client();
+  NexusAccountClient({String? baseUrl, this.token, http.Client? client})
+    : baseUrl = baseUrl ?? defaultGatewayBaseUrl,
+      _http = client ?? http.Client();
 
   /// Returns a copy of this client bound to [token] (reuses the http client).
   NexusAccountClient withToken(String? token) =>
@@ -77,8 +74,11 @@ class NexusAccountClient {
     return {'Authorization': 'Bearer $t'};
   }
 
-  Map<String, String> get _jsonHeaders =>
-      {..._authHeaders, 'Content-Type': 'application/json', 'Accept': 'application/json'};
+  Map<String, String> get _jsonHeaders => {
+    ..._authHeaders,
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  };
 
   // ── Auth ────────────────────────────────────────────────────────────
 
@@ -163,7 +163,11 @@ class NexusAccountClient {
 
   Future<Map<String, dynamic>> _postJson(Uri uri, Map<String, dynamic> body) {
     return _withErrorMapping(uri.path, () async {
-      final resp = await _http.post(uri, headers: _jsonHeaders, body: jsonEncode(body));
+      final resp = await _http.post(
+        uri,
+        headers: _jsonHeaders,
+        body: jsonEncode(body),
+      );
       _logIfError(resp, uri);
       _ensureOk(resp.statusCode, resp.body, uri.path);
       return _decodeJsonObject(resp.body);
@@ -182,8 +186,10 @@ class NexusAccountClient {
   void _logIfError(http.Response resp, Uri uri) {
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       // Never log Authorization headers or the token; only status + body.
-      debugPrint('[Nexus] ${resp.statusCode} ${uri.path} — '
-          '${resp.body.isEmpty ? '(empty body)' : resp.body}');
+      debugPrint(
+        '[Nexus] ${resp.statusCode} ${uri.path} — '
+        '${resp.body.isEmpty ? '(empty body)' : resp.body}',
+      );
     }
   }
 
@@ -215,7 +221,8 @@ class NexusAccountClient {
         final parts = <String>[];
         final err = decoded['error'];
         if (err is String && err.isNotEmpty) parts.add(err);
-        if (err is Map && err['message'] is String) parts.add(err['message'] as String);
+        if (err is Map && err['message'] is String)
+          parts.add(err['message'] as String);
         final errors = decoded['errors'];
         if (errors is List && errors.isNotEmpty) {
           parts.add(errors.map((e) => e.toString()).join('; '));
@@ -228,9 +235,15 @@ class NexusAccountClient {
           if (detail is String) {
             parts.add(detail);
           } else if (detail is List && detail.isNotEmpty) {
-            parts.add(detail
-                .map((e) => e is Map ? (e['msg'] ?? e['message'] ?? e.toString()) : e.toString())
-                .join('; '));
+            parts.add(
+              detail
+                  .map(
+                    (e) => e is Map
+                        ? (e['msg'] ?? e['message'] ?? e.toString())
+                        : e.toString(),
+                  )
+                  .join('; '),
+            );
           }
         }
         if (parts.isNotEmpty) return parts.join(' ');
@@ -246,7 +259,10 @@ class NexusAccountClient {
     return {'data': decoded};
   }
 
-  Future<T> _withErrorMapping<T>(String endpoint, Future<T> Function() run) async {
+  Future<T> _withErrorMapping<T>(
+    String endpoint,
+    Future<T> Function() run,
+  ) async {
     try {
       return await run();
     } on LemonadeApiException {

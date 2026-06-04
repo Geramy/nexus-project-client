@@ -18,31 +18,39 @@ class DoneStep extends StatelessWidget {
     final theme = Theme.of(context);
     return SingleChildScrollView(
       child: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Icon(Icons.celebration_outlined,
-            size: 56, color: theme.colorScheme.primary),
-        Gap.md,
-        Text("You're all set",
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Icon(
+            Icons.celebration_outlined,
+            size: 56,
+            color: theme.colorScheme.primary,
+          ),
+          Gap.md,
+          Text(
+            "You're all set",
             textAlign: TextAlign.center,
-            style: theme.textTheme.headlineSmall
-                ?.copyWith(fontWeight: FontWeight.bold)),
-        Gap.xs,
-        Text(
-          'Your project and agents are ready. Open the workspace and start a '
-          'conversation with your Coordinator.',
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodyMedium?.copyWith(color: context.nx.textMuted),
-        ),
-        Gap.xl,
-        GradientButton(
-          onPressed: onFinish,
-          label: 'Enter workspace',
-          icon: Icons.arrow_forward,
-          expand: true,
-        ),
-      ],
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Gap.xs,
+          Text(
+            'Your project and agents are ready. Open the workspace and start a '
+            'conversation with your Coordinator.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: context.nx.textMuted,
+            ),
+          ),
+          Gap.xl,
+          GradientButton(
+            onPressed: onFinish,
+            label: 'Enter workspace',
+            icon: Icons.arrow_forward,
+            expand: true,
+          ),
+        ],
       ),
     );
   }

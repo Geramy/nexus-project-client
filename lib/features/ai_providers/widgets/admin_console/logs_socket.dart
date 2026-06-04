@@ -93,10 +93,12 @@ class LogsSocket {
       case 'logs.snapshot':
         final entries = msg['entries'];
         if (entries is List) {
-          _emit(LogsSnapshot([
-            for (final e in entries.whereType<Map<String, dynamic>>())
-              LogEntry.fromJson(e),
-          ]));
+          _emit(
+            LogsSnapshot([
+              for (final e in entries.whereType<Map<String, dynamic>>())
+                LogEntry.fromJson(e),
+            ]),
+          );
         }
         break;
       case 'logs.entry':
@@ -128,12 +130,12 @@ class LogEntry {
   });
 
   factory LogEntry.fromJson(Map<String, dynamic> json) => LogEntry(
-        seq: (json['seq'] as num?)?.toInt() ?? 0,
-        timestamp: json['timestamp'] as String? ?? '',
-        severity: json['severity'] as String? ?? '',
-        tag: json['tag'] as String? ?? '',
-        line: json['line'] as String? ?? '',
-      );
+    seq: (json['seq'] as num?)?.toInt() ?? 0,
+    timestamp: json['timestamp'] as String? ?? '',
+    severity: json['severity'] as String? ?? '',
+    tag: json['tag'] as String? ?? '',
+    line: json['line'] as String? ?? '',
+  );
 }
 
 sealed class LogsEvent {

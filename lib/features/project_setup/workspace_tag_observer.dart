@@ -35,15 +35,17 @@ class WorkspaceTagObserver {
     await _dockerfile(found);
 
     for (final o in found) {
-      await controller.upsert(ProjectTag(
-        category: o.category.wire,
-        value: o.value,
-        source: TagSource.workspace,
-        origin: 'workspace',
-        status: TagStatus.accepted,
-        layerKey: o.layerKey,
-        rationale: o.rationale,
-      ));
+      await controller.upsert(
+        ProjectTag(
+          category: o.category.wire,
+          value: o.value,
+          source: TagSource.workspace,
+          origin: 'workspace',
+          status: TagStatus.accepted,
+          layerKey: o.layerKey,
+          rationale: o.rationale,
+        ),
+      );
     }
     return found.length;
   }
@@ -61,7 +63,9 @@ class WorkspaceTagObserver {
     final content = await _read('/pubspec.yaml');
     if (content == null) return;
     out.add(const _Observed(TagCategory.languages, 'Dart', layerKey: 'client'));
-    out.add(const _Observed(TagCategory.frameworks, 'Flutter', layerKey: 'client'));
+    out.add(
+      const _Observed(TagCategory.frameworks, 'Flutter', layerKey: 'client'),
+    );
     try {
       final doc = loadYaml(content);
       final deps = doc is YamlMap ? doc['dependencies'] : null;
@@ -69,8 +73,14 @@ class WorkspaceTagObserver {
         for (final key in deps.keys) {
           final name = key.toString();
           if (name == 'flutter' || name == 'flutter_test') continue;
-          out.add(_Observed(TagCategory.libraries, name,
-              layerKey: 'client', rationale: 'In pubspec.yaml dependencies.'));
+          out.add(
+            _Observed(
+              TagCategory.libraries,
+              name,
+              layerKey: 'client',
+              rationale: 'In pubspec.yaml dependencies.',
+            ),
+          );
         }
       }
     } catch (_) {}
@@ -94,8 +104,14 @@ class WorkspaceTagObserver {
       if (eq <= 0) continue;
       final name = line.substring(0, eq).trim();
       if (name.isNotEmptyName) {
-        out.add(_Observed(TagCategory.libraries, name,
-            layerKey: 'module', rationale: 'In Cargo.toml [dependencies].'));
+        out.add(
+          _Observed(
+            TagCategory.libraries,
+            name,
+            layerKey: 'module',
+            rationale: 'In Cargo.toml [dependencies].',
+          ),
+        );
       }
     }
   }
@@ -103,7 +119,9 @@ class WorkspaceTagObserver {
   Future<void> _packageJson(Set<_Observed> out) async {
     final content = await _read('/package.json');
     if (content == null) return;
-    out.add(const _Observed(TagCategory.languages, 'TypeScript', layerKey: 'client'));
+    out.add(
+      const _Observed(TagCategory.languages, 'TypeScript', layerKey: 'client'),
+    );
   }
 
   Future<void> _csproj(Set<_Observed> out) async {
@@ -112,9 +130,16 @@ class WorkspaceTagObserver {
       final entries = await workspace.walk(from: '/', maxEntries: 2000);
       final hasCsproj = entries.any((e) => e.name.endsWith('.csproj'));
       if (hasCsproj) {
-        out.add(const _Observed(TagCategory.languages, 'C#', layerKey: 'server'));
-        out.add(const _Observed(TagCategory.frameworks, 'ASP.NET Core',
-            layerKey: 'server'));
+        out.add(
+          const _Observed(TagCategory.languages, 'C#', layerKey: 'server'),
+        );
+        out.add(
+          const _Observed(
+            TagCategory.frameworks,
+            'ASP.NET Core',
+            layerKey: 'server',
+          ),
+        );
       }
     } catch (_) {}
   }
@@ -122,8 +147,13 @@ class WorkspaceTagObserver {
   Future<void> _dockerfile(Set<_Observed> out) async {
     final content = await _read('/Dockerfile');
     if (content == null) return;
-    out.add(const _Observed(TagCategory.platforms, 'Cloud / Server',
-        rationale: 'Dockerfile present.'));
+    out.add(
+      const _Observed(
+        TagCategory.platforms,
+        'Cloud / Server',
+        rationale: 'Dockerfile present.',
+      ),
+    );
   }
 }
 
@@ -136,9 +166,7 @@ class _Observed {
 
   @override
   bool operator ==(Object other) =>
-      other is _Observed &&
-      other.category == category &&
-      other.value == value;
+      other is _Observed && other.category == category && other.value == value;
 
   @override
   int get hashCode => Object.hash(category, value);

@@ -98,12 +98,14 @@ class BeaconListenerService {
       final beaconUrl = json['url'] as String? ?? '';
       final resolvedUrl = _buildUrl(sourceIp, beaconUrl);
 
-      _discoveredController.add(DiscoveredServer(
-        hostname: json['hostname'] ?? 'Unknown',
-        url: resolvedUrl,
-        lastSeen: DateTime.now(),
-        address: sourceIp,
-      ));
+      _discoveredController.add(
+        DiscoveredServer(
+          hostname: json['hostname'] ?? 'Unknown',
+          url: resolvedUrl,
+          lastSeen: DateTime.now(),
+          address: sourceIp,
+        ),
+      );
     } catch (_) {
       // Bad packet — ignore.
     }

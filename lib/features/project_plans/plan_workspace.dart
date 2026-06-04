@@ -56,9 +56,14 @@ class PlanWorkspaceView extends ConsumerWidget {
                   const Icon(Icons.description_outlined, size: 18),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(pl.name,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                        overflow: TextOverflow.ellipsis),
+                    child: Text(
+                      pl.name,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
@@ -66,9 +71,10 @@ class PlanWorkspaceView extends ConsumerWidget {
             const Divider(height: 1),
             Expanded(
               child: _PlanEditor(
-                  key: ValueKey('plan-edit-${pl.path}-$revision'),
-                  projectId: projectId,
-                  path: pl.path),
+                key: ValueKey('plan-edit-${pl.path}-$revision'),
+                projectId: projectId,
+                path: pl.path,
+              ),
             ),
           ],
         );
@@ -85,12 +91,22 @@ class PlanWorkspaceView extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.folder_open_outlined, size: 44, color: Colors.grey.shade400),
+            Icon(
+              Icons.folder_open_outlined,
+              size: 44,
+              color: Colors.grey.shade400,
+            ),
             const SizedBox(height: 12),
-            const Text('No plan open', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            const Text(
+              'No plan open',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 6),
-            const Text('Pick a plan from the explorer on the right, or create one with the + button.',
-                textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.grey)),
+            const Text(
+              'Pick a plan from the explorer on the right, or create one with the + button.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
           ],
         ),
       ),
@@ -165,7 +181,9 @@ class _PlanEditorState extends ConsumerState<_PlanEditor> {
           _loaded = _editor.text;
           _dirty = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Plan saved.')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Plan saved.')));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -190,8 +208,16 @@ class _PlanEditorState extends ConsumerState<_PlanEditor> {
                 expands: true,
                 wrap: false,
                 background: highlightBackground(brightness),
-                textStyle: const TextStyle(fontFamily: 'monospace', fontSize: 13, height: 1.4),
-                gutterStyle: const GutterStyle(showLineNumbers: true, showErrors: false, showFoldingHandles: false),
+                textStyle: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+                gutterStyle: const GutterStyle(
+                  showLineNumbers: true,
+                  showErrors: false,
+                  showFoldingHandles: false,
+                ),
               ),
             ),
           ),
@@ -201,14 +227,24 @@ class _PlanEditorState extends ConsumerState<_PlanEditor> {
           child: Row(
             children: [
               if (_dirty)
-                const Text('Unsaved changes', style: TextStyle(fontSize: 12, color: Colors.orange))
+                const Text(
+                  'Unsaved changes',
+                  style: TextStyle(fontSize: 12, color: Colors.orange),
+                )
               else
-                const Text('Saved', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                const Text(
+                  'Saved',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
               const Spacer(),
               FilledButton.icon(
                 onPressed: (_dirty && !_saving) ? _save : null,
                 icon: _saving
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : const Icon(Icons.save, size: 18),
                 label: const Text('Save'),
               ),

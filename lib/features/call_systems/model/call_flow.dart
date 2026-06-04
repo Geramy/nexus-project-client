@@ -40,14 +40,13 @@ class CallFlow {
     String? description,
     String? entryNodeId,
     List<CallNode>? nodes,
-  }) =>
-      CallFlow(
-        id: id,
-        name: name ?? this.name,
-        description: description ?? this.description,
-        entryNodeId: entryNodeId ?? this.entryNodeId,
-        nodes: nodes ?? this.nodes,
-      );
+  }) => CallFlow(
+    id: id,
+    name: name ?? this.name,
+    description: description ?? this.description,
+    entryNodeId: entryNodeId ?? this.entryNodeId,
+    nodes: nodes ?? this.nodes,
+  );
 
   /// Replace (or insert) a node by id.
   CallFlow upsertNode(CallNode node) {
@@ -62,33 +61,37 @@ class CallFlow {
   }
 
   CallFlow removeNode(String nodeId) => copyWith(
-        nodes: nodes
-            .where((n) => n.id != nodeId)
-            .map((n) => n.outputs.containsValue(nodeId)
-                // Drop edges that pointed at the removed node.
-                ? n.copyWith(outputs: {
+    nodes: nodes
+        .where((n) => n.id != nodeId)
+        .map(
+          (n) => n.outputs.containsValue(nodeId)
+              // Drop edges that pointed at the removed node.
+              ? n.copyWith(
+                  outputs: {
                     for (final e in n.outputs.entries)
                       e.key: e.value == nodeId ? null : e.value,
-                  })
-                : n)
-            .toList(),
-      );
+                  },
+                )
+              : n,
+        )
+        .toList(),
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'description': description,
-        'entryNodeId': entryNodeId,
-        'nodes': nodes.map((n) => n.toJson()).toList(),
-      };
+    'id': id,
+    'name': name,
+    'description': description,
+    'entryNodeId': entryNodeId,
+    'nodes': nodes.map((n) => n.toJson()).toList(),
+  };
 
   factory CallFlow.fromJson(Map<String, dynamic> json) => CallFlow(
-        id: json['id'] as String,
-        name: (json['name'] as String?) ?? 'Flow',
-        description: json['description'] as String?,
-        entryNodeId: (json['entryNodeId'] as String?) ?? '',
-        nodes: ((json['nodes'] as List?) ?? const [])
-            .map((e) => CallNode.fromJson(Map<String, dynamic>.from(e as Map)))
-            .toList(),
-      );
+    id: json['id'] as String,
+    name: (json['name'] as String?) ?? 'Flow',
+    description: json['description'] as String?,
+    entryNodeId: (json['entryNodeId'] as String?) ?? '',
+    nodes: ((json['nodes'] as List?) ?? const [])
+        .map((e) => CallNode.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList(),
+  );
 }

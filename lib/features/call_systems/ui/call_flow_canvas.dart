@@ -85,9 +85,15 @@ class _CallFlowCanvasState extends ConsumerState<CallFlowCanvas> {
                     onReject: node.isProposed
                         ? () => editor.rejectNode(node.id)
                         : null,
-                    onTap: () => ref
-                        .read(selectedCallNodeProvider(widget.projectId).notifier)
-                        .state = node.id,
+                    onTap: () =>
+                        ref
+                                .read(
+                                  selectedCallNodeProvider(
+                                    widget.projectId,
+                                  ).notifier,
+                                )
+                                .state =
+                            node.id,
                     onPanStart: () => setState(() {
                       _dragId = node.id;
                       _dragPos = Offset(node.x, node.y);
@@ -99,8 +105,11 @@ class _CallFlowCanvasState extends ConsumerState<CallFlowCanvas> {
                     onPanEnd: () {
                       final p = _dragPos;
                       if (p != null) {
-                        editor.moveNode(node.id, p.dx.clamp(0, 2600 - kNodeWidth),
-                            p.dy.clamp(0, 1700 - kNodeHeight));
+                        editor.moveNode(
+                          node.id,
+                          p.dx.clamp(0, 2600 - kNodeWidth),
+                          p.dy.clamp(0, 1700 - kNodeHeight),
+                        );
                       }
                       setState(() {
                         _dragId = null;
@@ -179,7 +188,8 @@ class _NodeCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: color,
                       borderRadius: const BorderRadius.horizontal(
-                          left: Radius.circular(9)),
+                        left: Radius.circular(9),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -190,22 +200,28 @@ class _NodeCard extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(node.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontSize: 13, fontWeight: FontWeight.w600)),
                         Text(
-                            proposed
-                                ? 'Proposed · review'
-                                : titleForNodeType(node.type),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                fontSize: 10.5,
-                                color: proposed
-                                    ? const Color(0xFFD9920B)
-                                    : scheme.onSurfaceVariant)),
+                          node.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          proposed
+                              ? 'Proposed · review'
+                              : titleForNodeType(node.type),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            color: proposed
+                                ? const Color(0xFFD9920B)
+                                : scheme.onSurfaceVariant,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -236,11 +252,12 @@ class _NodeCard extends StatelessWidget {
 }
 
 class _MiniBtn extends StatelessWidget {
-  const _MiniBtn(
-      {required this.icon,
-      required this.color,
-      required this.tooltip,
-      required this.onTap});
+  const _MiniBtn({
+    required this.icon,
+    required this.color,
+    required this.tooltip,
+    required this.onTap,
+  });
   final IconData icon;
   final Color color;
   final String tooltip;
@@ -291,7 +308,14 @@ class _EdgesPainter extends CustomPainter {
         final dy = (end.dy - start.dy).abs().clamp(40, 240) / 2;
         final path = Path()
           ..moveTo(start.dx, start.dy)
-          ..cubicTo(start.dx, start.dy + dy, end.dx, end.dy - dy, end.dx, end.dy);
+          ..cubicTo(
+            start.dx,
+            start.dy + dy,
+            end.dx,
+            end.dy - dy,
+            end.dx,
+            end.dy,
+          );
         canvas.drawPath(path, paint);
         canvas.drawCircle(end, 3, dot);
       }

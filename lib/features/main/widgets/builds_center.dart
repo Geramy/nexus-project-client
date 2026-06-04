@@ -8,7 +8,8 @@ import 'package:nexus_projects_client/core/providers/app_shell_provider.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/features/builds/ci_run_tree.dart';
 import 'package:nexus_projects_client/infrastructure/build/build_service_provider.dart';
-import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart' show CiRun;
+import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart'
+    show CiRun;
 import 'package:nexus_projects_client/infrastructure/workspace/workspace_provider.dart';
 
 /// Builds & CI center: a client-scoped, live view of every CI run (Docker
@@ -51,7 +52,10 @@ class BuildsCenter extends ConsumerWidget {
                   ),
                 ],
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.primary,
                     borderRadius: BorderRadius.circular(20),
@@ -59,13 +63,20 @@ class BuildsCenter extends ConsumerWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.add, size: 16, color: Theme.of(context).colorScheme.onPrimary),
+                      Icon(
+                        Icons.add,
+                        size: 16,
+                        color: Theme.of(context).colorScheme.onPrimary,
+                      ),
                       const SizedBox(width: 6),
-                      Text('New run',
-                          style: TextStyle(
-                              color: Theme.of(context).colorScheme.onPrimary,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14)),
+                      Text(
+                        'New run',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onPrimary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -77,7 +88,8 @@ class BuildsCenter extends ConsumerWidget {
             child: StreamBuilder<List<CiRun>>(
               stream: db.watchCiRunsForClient(currentClientId),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+                if (snapshot.connectionState == ConnectionState.waiting &&
+                    !snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (snapshot.hasError) {
@@ -87,7 +99,8 @@ class BuildsCenter extends ConsumerWidget {
                 if (runs.isEmpty) {
                   return const CiRunsEmptyState(
                     icon: Icons.construction,
-                    message: 'No builds or CI runs yet. Use "New run" to start one.',
+                    message:
+                        'No builds or CI runs yet. Use "New run" to start one.',
                   );
                 }
                 return ListView.builder(
@@ -102,7 +115,11 @@ class BuildsCenter extends ConsumerWidget {
     );
   }
 
-  Future<void> _startRun(BuildContext context, WidgetRef ref, _NewRunKind kind) async {
+  Future<void> _startRun(
+    BuildContext context,
+    WidgetRef ref,
+    _NewRunKind kind,
+  ) async {
     final projectPk = ref.read(currentProjectIdProvider);
     final clientPk = ref.read(currentClientIdProvider);
     final db = ref.read(nexusDatabaseProvider);
@@ -110,7 +127,11 @@ class BuildsCenter extends ConsumerWidget {
     if (!context.mounted) return;
     if (project == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select a project first — its workspace provides the build context.')),
+        const SnackBar(
+          content: Text(
+            'Select a project first — its workspace provides the build context.',
+          ),
+        ),
       );
       return;
     }
@@ -145,10 +166,14 @@ class BuildsCenter extends ConsumerWidget {
           );
       }
       messenger.showSnackBar(
-        const SnackBar(content: Text('Run started — follow its progress in the list below.')),
+        const SnackBar(
+          content: Text('Run started — follow its progress in the list below.'),
+        ),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Failed to start run: $e')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed to start run: $e')),
+      );
     }
   }
 }
@@ -179,9 +204,12 @@ class _NewRunDialogState extends State<_NewRunDialog> {
   @override
   void initState() {
     super.initState();
-    _pathCtrl = TextEditingController(text: _isDocker ? 'Dockerfile' : '.github/workflows/ci.yml');
+    _pathCtrl = TextEditingController(
+      text: _isDocker ? 'Dockerfile' : '.github/workflows/ci.yml',
+    );
     _tagCtrl = TextEditingController(
-      text: '${widget.projectName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_.-]'), '-')}:latest',
+      text:
+          '${widget.projectName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_.-]'), '-')}:latest',
     );
   }
 
@@ -203,7 +231,9 @@ class _NewRunDialogState extends State<_NewRunDialog> {
           TextField(
             controller: _pathCtrl,
             decoration: InputDecoration(
-              labelText: _isDocker ? 'Dockerfile path (in workspace)' : 'Workflow YAML path (in workspace)',
+              labelText: _isDocker
+                  ? 'Dockerfile path (in workspace)'
+                  : 'Workflow YAML path (in workspace)',
             ),
           ),
           if (_isDocker) ...[
@@ -216,7 +246,10 @@ class _NewRunDialogState extends State<_NewRunDialog> {
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
           onPressed: () {
             final path = _pathCtrl.text.trim();

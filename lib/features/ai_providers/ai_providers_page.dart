@@ -10,7 +10,8 @@ import 'package:nexus_projects_client/infrastructure/lemonade/providers/beacon_p
 import 'package:nexus_projects_client/infrastructure/lemonade/providers/lemonade_servers_provider.dart';
 import 'package:nexus_projects_client/core/providers/app_shell_provider.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
-import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart' show InferenceServersCompanion, NexusDatabase;
+import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart'
+    show InferenceServersCompanion, NexusDatabase;
 import 'package:nexus_projects_client/infrastructure/lemonade/services/secure_key_store.dart';
 import 'package:nexus_projects_client/features/ai_providers/providers/ai_servers_cache_provider.dart';
 
@@ -38,9 +39,11 @@ class AiProvidersPage extends ConsumerWidget {
           Row(
             children: const [
               Flexible(
-                child: Text('AI Providers',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-                    overflow: TextOverflow.ellipsis),
+                child: Text(
+                  'AI Providers',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               SizedBox(width: 12),
               InfrastructureBadge(),
@@ -68,10 +71,14 @@ class AiProvidersPage extends ConsumerWidget {
   Future<void> _showAddServerDialog(BuildContext context, WidgetRef ref) async {
     final db = ref.read(nexusDatabaseProvider);
     final currentClientId = ref.read(currentClientIdProvider);
-    final existingServers = await db.getInferenceServersForClient(currentClientId);
+    final existingServers = await db.getInferenceServersForClient(
+      currentClientId,
+    );
 
     String suggestName(String type) {
-      final t = type.toLowerCase().trim().isEmpty ? 'custom' : type.toLowerCase().trim();
+      final t = type.toLowerCase().trim().isEmpty
+          ? 'custom'
+          : type.toLowerCase().trim();
       final prefix = 'provider-$t-';
       int maxN = 0;
       for (final s in existingServers) {
@@ -101,23 +108,35 @@ class AiProvidersPage extends ConsumerWidget {
               children: [
                 TextField(
                   controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: 'Server Name', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    labelText: 'Server Name',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
                 const SizedBox(height: 8),
                 TextField(
                   controller: urlCtrl,
-                  decoration: const InputDecoration(labelText: 'Base URL', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    labelText: 'Base URL',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
                 TextField(
                   controller: apiKeyCtrl,
-                  decoration: const InputDecoration(labelText: 'API Key (optional)', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    labelText: 'API Key (optional)',
+                    border: OutlineInputBorder(),
+                  ),
                   obscureText: true,
                 ),
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
             FilledButton(
               onPressed: () async {
                 final name = nameCtrl.text.trim();
@@ -145,7 +164,9 @@ class AiProvidersPage extends ConsumerWidget {
                     isEnabled: const Value(true),
                     availableModelsJson: const Value('[]'),
                     extraConfigJson: const Value('{}'),
-                    capabilitiesJson: const Value('{"isLemonade":true,"fullLemonadeManaged":true}'),
+                    capabilitiesJson: const Value(
+                      '{"isLemonade":true,"fullLemonadeManaged":true}',
+                    ),
                   ),
                 );
 

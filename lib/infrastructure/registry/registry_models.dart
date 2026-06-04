@@ -9,9 +9,9 @@ enum Verdict { fresh, aging, stale, dead, unknown }
 extension VerdictX on Verdict {
   String get wire => name;
   static Verdict fromWire(String? s) => Verdict.values.firstWhere(
-        (v) => v.name == s,
-        orElse: () => Verdict.unknown,
-      );
+    (v) => v.name == s,
+    orElse: () => Verdict.unknown,
+  );
 
   /// Computes the verdict from the inputs, per the project's hard rules:
   ///   archived           → dead
@@ -24,8 +24,12 @@ extension VerdictX on Verdict {
     DateTime? lastCommit,
   }) {
     if (archived) return Verdict.dead;
-    final newest = [lastRelease, lastCommit].whereType<DateTime>().fold<DateTime?>(
-        null, (acc, d) => acc == null || d.isAfter(acc) ? d : acc);
+    final newest = [lastRelease, lastCommit]
+        .whereType<DateTime>()
+        .fold<DateTime?>(
+          null,
+          (acc, d) => acc == null || d.isAfter(acc) ? d : acc,
+        );
     if (newest == null) return Verdict.unknown;
     final months = DateTime.now().difference(newest).inDays / 30.0;
     if (months > 24) return Verdict.stale;
@@ -36,8 +40,16 @@ extension VerdictX on Verdict {
 
 /// First-party / company-backed GitHub orgs, used for a trust signal on tags.
 const Set<String> trustedOrgs = {
-  'flutter', 'dart-lang', 'google', 'googleapis', 'grpc',
-  'facebook', 'meta', 'microsoft', 'dotnet', 'apple',
+  'flutter',
+  'dart-lang',
+  'google',
+  'googleapis',
+  'grpc',
+  'facebook',
+  'meta',
+  'microsoft',
+  'dotnet',
+  'apple',
 };
 
 /// The resolved freshness info for one package/repo.
@@ -66,5 +78,6 @@ class VerificationResult {
     this.owner,
   });
 
-  bool get isTrusted => owner != null && trustedOrgs.contains(owner!.toLowerCase());
+  bool get isTrusted =>
+      owner != null && trustedOrgs.contains(owner!.toLowerCase());
 }

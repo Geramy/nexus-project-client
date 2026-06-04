@@ -69,15 +69,15 @@ class _NexusCardState extends State<NexusCard> {
         gradient: widget.gradientBorder
             ? null
             : (widget.selected
-                ? LinearGradient(
-                    colors: [
-                      accent.withValues(alpha: nx.isDark ? 0.16 : 0.08),
-                      Colors.transparent,
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  )
-                : null),
+                  ? LinearGradient(
+                      colors: [
+                        accent.withValues(alpha: nx.isDark ? 0.16 : 0.08),
+                        Colors.transparent,
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    )
+                  : null),
       ),
       child: widget.child,
     );

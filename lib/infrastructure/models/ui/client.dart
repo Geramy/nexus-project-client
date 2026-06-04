@@ -8,9 +8,5 @@ class Client {
   final String name;
   final bool isDefault;
 
-  const Client({
-    required this.id,
-    required this.name,
-    this.isDefault = false,
-  });
+  const Client({required this.id, required this.name, this.isDefault = false});
 }

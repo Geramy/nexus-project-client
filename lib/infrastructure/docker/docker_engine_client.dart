@@ -37,16 +37,20 @@ class DockerEngineClient {
   final String _httpBase;
   final HttpClient _http;
 
-  DockerEngineClient({String baseUrl = 'http://localhost:2375', HttpClient? httpClient})
-      : endpoint = baseUrl,
-        _httpBase = _resolveHttpBase(baseUrl),
-        _http = httpClient ?? _buildClient(baseUrl);
+  DockerEngineClient({
+    String baseUrl = 'http://localhost:2375',
+    HttpClient? httpClient,
+  }) : endpoint = baseUrl,
+       _httpBase = _resolveHttpBase(baseUrl),
+       _http = httpClient ?? _buildClient(baseUrl);
 
   static String _resolveHttpBase(String baseUrl) {
     if (baseUrl.startsWith('unix://') || baseUrl.startsWith('npipe://')) {
       return 'http://localhost';
     }
-    return baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl;
+    return baseUrl.endsWith('/')
+        ? baseUrl.substring(0, baseUrl.length - 1)
+        : baseUrl;
   }
 
   static HttpClient _buildClient(String baseUrl) {
@@ -54,13 +58,17 @@ class DockerEngineClient {
     if (baseUrl.startsWith('unix://')) {
       final socketPath = baseUrl.substring('unix://'.length);
       client.connectionFactory = (uri, proxyHost, proxyPort) {
-        final addr = InternetAddress(socketPath, type: InternetAddressType.unix);
+        final addr = InternetAddress(
+          socketPath,
+          type: InternetAddressType.unix,
+        );
         return Socket.startConnect(addr, 0);
       };
     } else if (baseUrl.startsWith('npipe://')) {
       // npipe:////./pipe/docker_engine -> \\.\pipe\docker_engine
-      final pipePath =
-          baseUrl.substring('npipe://'.length).replaceAll('/', r'\');
+      final pipePath = baseUrl
+          .substring('npipe://'.length)
+          .replaceAll('/', r'\');
       final pipe = WindowsDockerPipe.forPath(pipePath);
       client.connectionFactory = (uri, proxyHost, proxyPort) async {
         final port = await pipe.port;
@@ -72,7 +80,9 @@ class DockerEngineClient {
 
   Uri _uri(String path, [Map<String, String>? query]) {
     final u = Uri.parse('$_httpBase$path');
-    return query == null ? u : u.replace(queryParameters: {...u.queryParameters, ...query});
+    return query == null
+        ? u
+        : u.replace(queryParameters: {...u.queryParameters, ...query});
   }
 
   /// Returns null if the daemon is reachable, otherwise a human-readable reason.
@@ -98,7 +108,8 @@ class DockerEngineClient {
 
   Future<List<DockerImage>> listImages() async {
     final json = await _getJson('/images/json');
-    if (json is! List) throw DockerEngineException('Unexpected /images/json response.');
+    if (json is! List)
+      throw DockerEngineException('Unexpected /images/json response.');
     return json
         .whereType<Map<String, dynamic>>()
         .map(DockerImage.fromJson)
@@ -107,7 +118,8 @@ class DockerEngineClient {
 
   Future<List<DockerContainer>> listContainers({bool all = true}) async {
     final json = await _getJson('/containers/json', {'all': all ? '1' : '0'});
-    if (json is! List) throw DockerEngineException('Unexpected /containers/json response.');
+    if (json is! List)
+      throw DockerEngineException('Unexpected /containers/json response.');
     return json
         .whereType<Map<String, dynamic>>()
         .map(DockerContainer.fromJson)
@@ -115,11 +127,15 @@ class DockerEngineClient {
   }
 
   Future<void> removeImage(String idOrTag, {bool force = false}) async {
-    await _delete('/images/${Uri.encodeComponent(idOrTag)}', {'force': force ? '1' : '0'});
+    await _delete('/images/${Uri.encodeComponent(idOrTag)}', {
+      'force': force ? '1' : '0',
+    });
   }
 
   Future<void> removeContainer(String id, {bool force = true}) async {
-    await _delete('/containers/${Uri.encodeComponent(id)}', {'force': force ? '1' : '0'});
+    await _delete('/containers/${Uri.encodeComponent(id)}', {
+      'force': force ? '1' : '0',
+    });
   }
 
   Future<void> startContainer(String id) async {
@@ -157,13 +173,19 @@ class DockerEngineClient {
       req.add(contextTar);
       resp = await req.close();
     } catch (e) {
-      yield DockerBuildEvent('Cannot reach Docker at $endpoint: $e', isError: true);
+      yield DockerBuildEvent(
+        'Cannot reach Docker at $endpoint: $e',
+        isError: true,
+      );
       return;
     }
 
     if (resp.statusCode >= 400) {
       final body = await resp.transform(utf8.decoder).join();
-      yield DockerBuildEvent('Build request failed (${resp.statusCode}): $body', isError: true);
+      yield DockerBuildEvent(
+        'Build request failed (${resp.statusCode}): $body',
+        isError: true,
+      );
       return;
     }
 
@@ -187,7 +209,9 @@ class DockerEngineClient {
         yield DockerBuildEvent('${obj['error']}', isError: true);
       } else if (obj['stream'] != null) {
         final text = '${obj['stream']}';
-        final clean = text.endsWith('\n') ? text.substring(0, text.length - 1) : text;
+        final clean = text.endsWith('\n')
+            ? text.substring(0, text.length - 1)
+            : text;
         if (clean.isNotEmpty) yield DockerBuildEvent(clean);
       } else if (obj['aux'] is Map && (obj['aux'] as Map)['ID'] != null) {
         yield DockerBuildEvent('Built image: ${(obj['aux'] as Map)['ID']}');

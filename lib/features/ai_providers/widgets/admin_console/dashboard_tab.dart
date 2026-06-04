@@ -138,7 +138,9 @@ class _LivenessCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Card(
-      color: live ? Colors.green.withValues(alpha: 0.15) : scheme.errorContainer,
+      color: live
+          ? Colors.green.withValues(alpha: 0.15)
+          : scheme.errorContainer,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
@@ -202,7 +204,10 @@ class _RowView extends StatelessWidget {
         children: [
           Expanded(
             flex: 2,
-            child: Text(row.label, style: Theme.of(context).textTheme.bodyMedium),
+            child: Text(
+              row.label,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
           ),
           Expanded(
             flex: 3,
@@ -227,10 +232,14 @@ class _StatsCard extends StatelessWidget {
     return _SectionCard(
       title: 'Last request stats',
       rows: [
-        _Row('Time to first token (s)',
-            (stats['time_to_first_token'] as num?)?.toStringAsFixed(2) ?? '—'),
-        _Row('Tokens / second',
-            (stats['tokens_per_second'] as num?)?.toStringAsFixed(1) ?? '—'),
+        _Row(
+          'Time to first token (s)',
+          (stats['time_to_first_token'] as num?)?.toStringAsFixed(2) ?? '—',
+        ),
+        _Row(
+          'Tokens / second',
+          (stats['tokens_per_second'] as num?)?.toStringAsFixed(1) ?? '—',
+        ),
         _Row('Input tokens', stats['input_tokens']?.toString() ?? '—'),
         _Row('Output tokens', stats['output_tokens']?.toString() ?? '—'),
         _Row('Prompt tokens', stats['prompt_tokens']?.toString() ?? '—'),

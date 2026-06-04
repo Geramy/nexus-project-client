@@ -14,7 +14,9 @@ class InferenceServers extends Table {
   TextColumn get name => text().withLength(min: 1, max: 100)();
   TextColumn get baseUrl => text()();
   TextColumn get apiKey => text().withDefault(const Constant(''))();
-  TextColumn get providerType => text().withDefault(const Constant('custom'))(); // lemonade, openai, ollama, etc.
+  TextColumn get providerType => text().withDefault(
+    const Constant('custom'),
+  )(); // lemonade, openai, ollama, etc.
 
   IntColumn get maxConcurrency => integer().withDefault(const Constant(4))();
   IntColumn get maxAgents => integer().withDefault(const Constant(8))();
@@ -23,7 +25,8 @@ class InferenceServers extends Table {
   TextColumn get selectedModel => text().nullable()();
 
   // Stored as JSON string for simplicity (availableModels + extraConfig + discovered API capabilities)
-  TextColumn get availableModelsJson => text().withDefault(const Constant('[]'))();
+  TextColumn get availableModelsJson =>
+      text().withDefault(const Constant('[]'))();
   TextColumn get extraConfigJson => text().withDefault(const Constant('{}'))();
   TextColumn get capabilitiesJson => text().withDefault(const Constant('{}'))();
 

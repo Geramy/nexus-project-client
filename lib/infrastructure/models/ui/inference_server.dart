@@ -5,9 +5,10 @@
 class InferenceServer {
   final String id;
   final String name;
-  final String baseUrl;           // e.g. http://localhost:13305/v1 or https://api.openai.com/v1
-  final String apiKey;            // Can be empty for local servers
-  final String providerType;      // 'lemonade', 'openai', 'ollama', 'custom', etc.
+  final String
+  baseUrl; // e.g. http://localhost:13305/v1 or https://api.openai.com/v1
+  final String apiKey; // Can be empty for local servers
+  final String providerType; // 'lemonade', 'openai', 'ollama', 'custom', etc.
 
   // Resource limits (user requirement)
   final int maxConcurrency;
@@ -16,8 +17,10 @@ class InferenceServer {
   final bool isEnabled;
   final String? selectedModel; // The model the user has chosen for this server
   final List<String> availableModels; // Cached list from last refresh
-  final Map<String, dynamic> extraConfig; // For future things like headers, timeouts, etc.
-  final Map<String, dynamic> capabilities; // Probed API capabilities e.g. {"models": true, "modelsSupportsShowAll": true, "isLemonade": true, "audioTranscription": true, ...}
+  final Map<String, dynamic>
+  extraConfig; // For future things like headers, timeouts, etc.
+  final Map<String, dynamic>
+  capabilities; // Probed API capabilities e.g. {"models": true, "modelsSupportsShowAll": true, "isLemonade": true, "audioTranscription": true, ...}
 
   const InferenceServer({
     required this.id,
@@ -64,21 +67,22 @@ class InferenceServer {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'baseUrl': baseUrl,
-        'apiKey': apiKey,
-        'providerType': providerType,
-        'maxConcurrency': maxConcurrency,
-        'maxAgents': maxAgents,
-        'isEnabled': isEnabled,
-        'selectedModel': selectedModel,
-        'availableModels': availableModels,
-        'extraConfig': extraConfig,
-        'capabilities': capabilities,
-      };
+    'id': id,
+    'name': name,
+    'baseUrl': baseUrl,
+    'apiKey': apiKey,
+    'providerType': providerType,
+    'maxConcurrency': maxConcurrency,
+    'maxAgents': maxAgents,
+    'isEnabled': isEnabled,
+    'selectedModel': selectedModel,
+    'availableModels': availableModels,
+    'extraConfig': extraConfig,
+    'capabilities': capabilities,
+  };
 
-  factory InferenceServer.fromJson(Map<String, dynamic> json) => InferenceServer(
+  factory InferenceServer.fromJson(Map<String, dynamic> json) =>
+      InferenceServer(
         id: json['id'],
         name: json['name'],
         baseUrl: json['baseUrl'],

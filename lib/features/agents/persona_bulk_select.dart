@@ -41,7 +41,7 @@ class PersonaBulkSelectionNotifier extends StateNotifier<PersonaBulkSelection> {
   }
 }
 
-final personaBulkSelectionProvider = StateNotifierProvider<
-    PersonaBulkSelectionNotifier, PersonaBulkSelection>(
-  (ref) => PersonaBulkSelectionNotifier(),
-);
+final personaBulkSelectionProvider =
+    StateNotifierProvider<PersonaBulkSelectionNotifier, PersonaBulkSelection>(
+      (ref) => PersonaBulkSelectionNotifier(),
+    );

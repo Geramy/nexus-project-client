@@ -37,13 +37,14 @@ class PortableJsonExporter implements CallSystemExporter {
 
   @override
   Map<String, String> export(CallSystemProject project) => {
-        'call_system.json':
-            const JsonEncoder.withIndent('  ').convert(project.toJson()),
-      };
+    'call_system.json': const JsonEncoder.withIndent(
+      '  ',
+    ).convert(project.toJson()),
+  };
 
   @override
   List<String> notes(CallSystemProject project) => const [
-        'This is the complete, lossless project. Pair it with the prompt audio '
-            'files to deploy anywhere, or deploy to Nexus for the managed runtime.',
-      ];
+    'This is the complete, lossless project. Pair it with the prompt audio '
+        'files to deploy anywhere, or deploy to Nexus for the managed runtime.',
+  ];
 }

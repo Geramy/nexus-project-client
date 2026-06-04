@@ -17,7 +17,7 @@ import 'github_token_store.dart';
 /// [GithubTokenStore] it is sent as a Bearer token (5000 req/hr).
 class RegistryClient {
   RegistryClient({required this.tokenStore, http.Client? httpClient})
-      : _http = httpClient ?? http.Client();
+    : _http = httpClient ?? http.Client();
 
   final GithubTokenStore tokenStore;
   final http.Client _http;
@@ -61,7 +61,9 @@ class RegistryClient {
 
   /// Score/popularity card: `likeCount`, `grantedPoints`, `popularityScore`.
   Future<Map<String, dynamic>?> pubDevScore(String name) async {
-    final json = await _getJson(Uri.parse('$_pubBase/api/packages/$name/score'));
+    final json = await _getJson(
+      Uri.parse('$_pubBase/api/packages/$name/score'),
+    );
     return json as Map<String, dynamic>?;
   }
 
@@ -143,7 +145,9 @@ class RegistryException implements Exception {
 }
 
 final registryClientProvider = Provider<RegistryClient>((ref) {
-  final client = RegistryClient(tokenStore: ref.watch(githubTokenStoreProvider));
+  final client = RegistryClient(
+    tokenStore: ref.watch(githubTokenStoreProvider),
+  );
   ref.onDispose(client.close);
   return client;
 });

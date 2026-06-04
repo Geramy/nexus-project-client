@@ -18,13 +18,14 @@ final beaconServiceProvider = Provider<BeaconListenerService>((ref) {
 
 /// Holds the most recent newly-discovered server for notification display.
 /// Set to null after the notification is shown.
-final pendingBeaconNotificationProvider =
-    StateProvider<DiscoveredServer?>((ref) => null);
+final pendingBeaconNotificationProvider = StateProvider<DiscoveredServer?>(
+  (ref) => null,
+);
 
 final discoveredServersProvider =
     StateNotifierProvider<DiscoveredServersNotifier, List<DiscoveredServer>>(
-  (ref) => DiscoveredServersNotifier(ref),
-);
+      (ref) => DiscoveredServersNotifier(ref),
+    );
 
 class DiscoveredServersNotifier extends StateNotifier<List<DiscoveredServer>> {
   static const _expirationSeconds = 15;

@@ -15,18 +15,21 @@ class Projects extends Table {
   TextColumn get description => text().nullable()();
 
   /// Optional reference to an Agent Persona used for this project's Coordinator.
-  IntColumn get agent_persona_fk => integer().nullable().references(AgentPersonas, #agent_pk)();
+  IntColumn get agent_persona_fk =>
+      integer().nullable().references(AgentPersonas, #agent_pk)();
 
   // ==================== Orchestration control ====================
   /// Whether the autonomous worker-spawn loop is running for this project:
   /// `stopped` (idle, no agents spawned), `running` (actively picking up
   /// assigned tasks), or `paused` (loop suspended, resumable). The Start/Pause
   /// controls on the project drive this.
-  TextColumn get orchestrationState => text().withDefault(const Constant('stopped'))();
+  TextColumn get orchestrationState =>
+      text().withDefault(const Constant('stopped'))();
 
   /// When true, the loop only spawns workers inside the configured working
   /// hours window; outside it the loop idles even while `running`.
-  BoolColumn get workHoursEnabled => boolean().withDefault(const Constant(false))();
+  BoolColumn get workHoursEnabled =>
+      boolean().withDefault(const Constant(false))();
 
   /// Working-hours window as minutes from midnight (local time), e.g. 540 = 09:00.
   /// Null when unset. If start > end the window wraps past midnight.
@@ -46,7 +49,8 @@ class Projects extends Table {
   /// Setup workflow state: notStarted | inProgress | skipped | complete. A new
   /// project starts at notStarted and is gated to the Setup tab until the user
   /// finishes or skips.
-  TextColumn get setupStatus => text().withDefault(const Constant('notStarted'))();
+  TextColumn get setupStatus =>
+      text().withDefault(const Constant('notStarted'))();
 
   /// The setup interview Q/A transcript (JSON) so decisions can be re-explained.
   TextColumn get setupTranscriptJson => text().nullable()();

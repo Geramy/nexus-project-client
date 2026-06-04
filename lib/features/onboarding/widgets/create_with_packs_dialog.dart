@@ -56,8 +56,9 @@ class _CreateWithPacksDialog extends StatefulWidget {
 }
 
 class _CreateWithPacksDialogState extends State<_CreateWithPacksDialog> {
-  late final TextEditingController _name =
-      TextEditingController(text: widget.defaultName);
+  late final TextEditingController _name = TextEditingController(
+    text: widget.defaultName,
+  );
   Set<String> _packs = {kDefaultAgentPackKey};
 
   @override
@@ -94,8 +95,10 @@ class _CreateWithPacksDialogState extends State<_CreateWithPacksDialog> {
               ),
               if (widget.showPacks) ...[
                 Gap.lg,
-                Text('Agent packs',
-                    style: Theme.of(context).textTheme.titleSmall),
+                Text(
+                  'Agent packs',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
                 Gap.xs,
                 Text(
                   'Choose the team of agents to set up. You can add more later.',
@@ -113,8 +116,9 @@ class _CreateWithPacksDialogState extends State<_CreateWithPacksDialog> {
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
         FilledButton(onPressed: _submit, child: const Text('Create')),
       ],
     );

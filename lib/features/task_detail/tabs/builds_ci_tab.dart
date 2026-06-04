@@ -6,7 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/features/builds/ci_run_tree.dart';
-import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart' show CiRun;
+import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart'
+    show CiRun;
 
 import '../../../shared/ui/nexus_ui.dart';
 
@@ -23,7 +24,8 @@ class BuildsCiTab extends ConsumerWidget {
     return StreamBuilder<List<CiRun>>(
       stream: db.watchCiRunsForProject(projectPk),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasError) {

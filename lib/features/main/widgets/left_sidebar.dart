@@ -17,26 +17,46 @@ import 'package:nexus_projects_client/shared/ui/nexus_ui.dart';
 /// The eight primary navigation destinations, shared by the full sidebar and
 /// the collapsed icon rail so the two never drift apart.
 const List<(MainView, IconData, IconData?, String)> _navDestinations = [
-  (MainView.projectPlans, Icons.space_dashboard_outlined, Icons.space_dashboard, 'Project Overview'),
+  (
+    MainView.projectPlans,
+    Icons.space_dashboard_outlined,
+    Icons.space_dashboard,
+    'Project Overview',
+  ),
   (MainView.tasks, Icons.fact_check_outlined, Icons.fact_check, 'Tasks'),
   (MainView.agents, Icons.smart_toy_outlined, Icons.smart_toy, 'Agents'),
   (MainView.aiProviders, Icons.dns_outlined, Icons.dns, 'AI Providers'),
-  (MainView.callFlow, Icons.account_tree_outlined, Icons.account_tree, 'Call Flow'),
+  (
+    MainView.callFlow,
+    Icons.account_tree_outlined,
+    Icons.account_tree,
+    'Call Flow',
+  ),
   (MainView.code, Icons.code_rounded, null, 'Code & Git'),
-  (MainView.launch, Icons.rocket_launch_outlined, Icons.rocket_launch, 'Launch'),
+  (
+    MainView.launch,
+    Icons.rocket_launch_outlined,
+    Icons.rocket_launch,
+    'Launch',
+  ),
   (MainView.activity, Icons.history_rounded, null, 'Activity'),
-  (MainView.account, Icons.account_circle_outlined, Icons.account_circle, 'Account'),
+  (
+    MainView.account,
+    Icons.account_circle_outlined,
+    Icons.account_circle,
+    'Account',
+  ),
 ];
 
 /// The capability a nav destination requires to be shown; null = always shown.
 /// Drives capability-gating so non-software project types hide Code/Launch and
 /// only call-systems projects show Call Flow.
 ProjectCapability? _navCapability(MainView view) => switch (view) {
-      MainView.code => ProjectCapability.git,
-      MainView.launch => ProjectCapability.deploy,
-      MainView.callFlow => ProjectCapability.callFlow,
-      _ => null,
-    };
+  MainView.code => ProjectCapability.git,
+  MainView.launch => ProjectCapability.deploy,
+  MainView.callFlow => ProjectCapability.callFlow,
+  _ => null,
+};
 
 /// Whether [view] should appear for the given project [type].
 bool _navVisible(MainView view, ProjectType type) {
@@ -79,181 +99,261 @@ class LeftSidebar extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-          // Collapse control — explicit toggle (replaces hover expand/collapse).
-          if (onToggleCollapsed != null)
-            Align(
-              alignment: Alignment.centerRight,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 6, right: 6),
-                child: IconButton(
-                  tooltip: 'Collapse sidebar',
-                  iconSize: 18,
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.chevron_left),
-                  onPressed: onToggleCollapsed,
-                ),
-              ),
-            ),
-          const SizedBox(height: 4),
-
-          // Clean Client + Projects hierarchy (B)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const _SectionLabel('CLIENTS'),
-                const SizedBox(height: 4),
-
-                clientsAsync.when(
-                  data: (clients) {
-                    final currentClientId = ref.watch(currentClientIdProvider);
-
-                    return Column(
-                      children: clients.map((client) {
-                        final isSelected = client.client_pk == currentClientId;
-                        return InkWell(
-                          onTap: () {
-                            ref.read(currentClientIdProvider.notifier).selectClient(client.client_pk);
-                            Future.microtask(() async {
-                              final db = ref.read(nexusDatabaseProvider);
-                              final projs = await db.getProjectsForClient(client.client_pk);
-                              if (projs.isNotEmpty) {
-                                ref.read(currentProjectIdProvider.notifier).selectProject(projs.first.project_pk);
-                              }
-                            });
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: isSelected ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.14) : null,
-                              borderRadius: AppRadius.smAll,
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    client.name + (client.isDefault ? ' (Default)' : ''),
-                                    style: TextStyle(fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                if (!client.isDefault)
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline, size: 16),
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(),
-                                    onPressed: () => _deleteClient(context, ref, client),
-                                    tooltip: 'Delete client',
-                                  ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    );
-                  },
-                  loading: () => const SizedBox(height: 20),
-                  error: (_, __) => const Text('Error'),
-                ),
-
-                TextButton.icon(
-                  onPressed: () async {
-                    final result = await showCreateWithPacksDialog(
-                      context,
-                      title: 'New Client',
-                      nameLabel: 'Client name',
-                      defaultName: 'New Client',
-                    );
-                    if (result != null) {
-                      final db = ref.read(nexusDatabaseProvider);
-                      final id = await db.createClientWithDefaults(
-                        name: result.name,
-                        packKeys: result.packKeys.toList(),
-                      );
-                      ref.read(currentClientIdProvider.notifier).selectClient(id);
-                    }
-                  },
-                  icon: const Icon(Icons.add, size: 14),
-                  label: const Text('New Client', style: TextStyle(fontSize: 11)),
-                  style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
-                ),
-
-                const SizedBox(height: 8),
-                const _SectionLabel('PROJECTS'),
-                const SizedBox(height: 4),
-
-                Consumer(
-                  builder: (context, ref, _) {
-                    final clientId = ref.watch(currentClientIdProvider);
-                    final projsAsync = ref.watch(projectsForClientProvider(clientId));
-                    final currProj = ref.watch(currentProjectIdProvider);
-
-                    return projsAsync.when(
-                      data: (projs) => Column(
-                        children: projs.map((p) {
-                          final sel = p.project_pk == currProj;
-                          return InkWell(
-                            onTap: () => ref.read(currentProjectIdProvider.notifier).selectProject(p.project_pk),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: sel ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.12) : null,
-                                borderRadius: AppRadius.smAll,
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(p.name, style: TextStyle(fontSize: 12, fontWeight: sel ? FontWeight.w600 : FontWeight.normal), overflow: TextOverflow.ellipsis),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline, size: 16),
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(),
-                                    onPressed: () => _deleteProject(context, ref, p),
-                                    tooltip: 'Delete project',
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }).toList(),
+                  // Collapse control — explicit toggle (replaces hover expand/collapse).
+                  if (onToggleCollapsed != null)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 6, right: 6),
+                        child: IconButton(
+                          tooltip: 'Collapse sidebar',
+                          iconSize: 18,
+                          visualDensity: VisualDensity.compact,
+                          icon: const Icon(Icons.chevron_left),
+                          onPressed: onToggleCollapsed,
+                        ),
                       ),
-                      loading: () => const SizedBox(),
-                      error: (_, __) => const Text('Error'),
-                    );
-                  },
-                ),
+                    ),
+                  const SizedBox(height: 4),
 
-                TextButton.icon(
-                  // Reuse the SAME project-setup screen + workflow as the
-                  // onboarding wizard (name + agent packs), instead of a
-                  // separate dialog.
-                  onPressed: () => showProjectSetupDialog(context),
-                  icon: const Icon(Icons.add, size: 14),
-                  label: const Text('New Project', style: TextStyle(fontSize: 11)),
-                  style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
-                ),
-              ],
-            ),
-          ),
+                  // Clean Client + Projects hierarchy (B)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const _SectionLabel('CLIENTS'),
+                        const SizedBox(height: 4),
 
-          const SizedBox(height: 12),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: _SectionLabel('NAVIGATION'),
-          ),
-          const SizedBox(height: 8),
+                        clientsAsync.when(
+                          data: (clients) {
+                            final currentClientId = ref.watch(
+                              currentClientIdProvider,
+                            );
 
-          for (final (view, icon, activeIcon, label) in _navDestinations)
-            if (_navVisible(view, projectType))
-              _NavItem(
-                icon: icon,
-                activeIcon: activeIcon,
-                label: label,
-                selected: currentView == view,
-                onTap: () => onViewChanged(view),
-              ),
+                            return Column(
+                              children: clients.map((client) {
+                                final isSelected =
+                                    client.client_pk == currentClientId;
+                                return InkWell(
+                                  onTap: () {
+                                    ref
+                                        .read(currentClientIdProvider.notifier)
+                                        .selectClient(client.client_pk);
+                                    Future.microtask(() async {
+                                      final db = ref.read(
+                                        nexusDatabaseProvider,
+                                      );
+                                      final projs = await db
+                                          .getProjectsForClient(
+                                            client.client_pk,
+                                          );
+                                      if (projs.isNotEmpty) {
+                                        ref
+                                            .read(
+                                              currentProjectIdProvider.notifier,
+                                            )
+                                            .selectProject(
+                                              projs.first.project_pk,
+                                            );
+                                      }
+                                    });
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: AppSpacing.sm,
+                                      vertical: 5,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? Theme.of(context)
+                                                .colorScheme
+                                                .primary
+                                                .withValues(alpha: 0.14)
+                                          : null,
+                                      borderRadius: AppRadius.smAll,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            client.name +
+                                                (client.isDefault
+                                                    ? ' (Default)'
+                                                    : ''),
+                                            style: TextStyle(
+                                              fontWeight: isSelected
+                                                  ? FontWeight.w600
+                                                  : FontWeight.w500,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        if (!client.isDefault)
+                                          IconButton(
+                                            icon: const Icon(
+                                              Icons.delete_outline,
+                                              size: 16,
+                                            ),
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                            onPressed: () => _deleteClient(
+                                              context,
+                                              ref,
+                                              client,
+                                            ),
+                                            tooltip: 'Delete client',
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            );
+                          },
+                          loading: () => const SizedBox(height: 20),
+                          error: (_, __) => const Text('Error'),
+                        ),
+
+                        TextButton.icon(
+                          onPressed: () async {
+                            final result = await showCreateWithPacksDialog(
+                              context,
+                              title: 'New Client',
+                              nameLabel: 'Client name',
+                              defaultName: 'New Client',
+                            );
+                            if (result != null) {
+                              final db = ref.read(nexusDatabaseProvider);
+                              final id = await db.createClientWithDefaults(
+                                name: result.name,
+                                packKeys: result.packKeys.toList(),
+                              );
+                              ref
+                                  .read(currentClientIdProvider.notifier)
+                                  .selectClient(id);
+                            }
+                          },
+                          icon: const Icon(Icons.add, size: 14),
+                          label: const Text(
+                            'New Client',
+                            style: TextStyle(fontSize: 11),
+                          ),
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: Size.zero,
+                          ),
+                        ),
+
+                        const SizedBox(height: 8),
+                        const _SectionLabel('PROJECTS'),
+                        const SizedBox(height: 4),
+
+                        Consumer(
+                          builder: (context, ref, _) {
+                            final clientId = ref.watch(currentClientIdProvider);
+                            final projsAsync = ref.watch(
+                              projectsForClientProvider(clientId),
+                            );
+                            final currProj = ref.watch(
+                              currentProjectIdProvider,
+                            );
+
+                            return projsAsync.when(
+                              data: (projs) => Column(
+                                children: projs.map((p) {
+                                  final sel = p.project_pk == currProj;
+                                  return InkWell(
+                                    onTap: () => ref
+                                        .read(currentProjectIdProvider.notifier)
+                                        .selectProject(p.project_pk),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: AppSpacing.sm,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: sel
+                                            ? Theme.of(context)
+                                                  .colorScheme
+                                                  .primary
+                                                  .withValues(alpha: 0.12)
+                                            : null,
+                                        borderRadius: AppRadius.smAll,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              p.name,
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: sel
+                                                    ? FontWeight.w600
+                                                    : FontWeight.normal,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(
+                                              Icons.delete_outline,
+                                              size: 16,
+                                            ),
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                            onPressed: () =>
+                                                _deleteProject(context, ref, p),
+                                            tooltip: 'Delete project',
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                              loading: () => const SizedBox(),
+                              error: (_, __) => const Text('Error'),
+                            );
+                          },
+                        ),
+
+                        TextButton.icon(
+                          // Reuse the SAME project-setup screen + workflow as the
+                          // onboarding wizard (name + agent packs), instead of a
+                          // separate dialog.
+                          onPressed: () => showProjectSetupDialog(context),
+                          icon: const Icon(Icons.add, size: 14),
+                          label: const Text(
+                            'New Project',
+                            style: TextStyle(fontSize: 11),
+                          ),
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: Size.zero,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: _SectionLabel('NAVIGATION'),
+                  ),
+                  const SizedBox(height: 8),
+
+                  for (final (view, icon, activeIcon, label)
+                      in _navDestinations)
+                    if (_navVisible(view, projectType))
+                      _NavItem(
+                        icon: icon,
+                        activeIcon: activeIcon,
+                        label: label,
+                        selected: currentView == view,
+                        onTap: () => onViewChanged(view),
+                      ),
 
                   const SizedBox(height: 12),
                 ],
@@ -275,7 +375,10 @@ class LeftSidebar extends ConsumerWidget {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     const Icon(Icons.circle, color: Colors.green, size: 10),
-                    const Text('Running • localhost:7420', style: TextStyle(fontSize: 11)),
+                    const Text(
+                      'Running • localhost:7420',
+                      style: TextStyle(fontSize: 11),
+                    ),
                   ],
                 ),
               ],
@@ -304,14 +407,14 @@ class LeftSidebar extends ConsumerWidget {
           const SizedBox(height: 8),
           for (final (view, icon, activeIcon, label) in _navDestinations)
             if (_navVisible(view, projectType))
-            _NavItem(
-              icon: icon,
-              activeIcon: activeIcon,
-              label: label,
-              selected: currentView == view,
-              onTap: () => onViewChanged(view),
-              iconOnly: true,
-            ),
+              _NavItem(
+                icon: icon,
+                activeIcon: activeIcon,
+                label: label,
+                selected: currentView == view,
+                onTap: () => onViewChanged(view),
+                iconOnly: true,
+              ),
           const Spacer(),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
@@ -381,13 +484,13 @@ class _NavItemState extends State<_NavItem> {
     final Color? bg = selected
         ? accent.withValues(alpha: 0.14)
         : _hover
-            ? nx.glass
-            : null;
+        ? nx.glass
+        : null;
     final fg = selected
         ? accent
         : _hover
-            ? theme.colorScheme.onSurface
-            : nx.textMuted;
+        ? theme.colorScheme.onSurface
+        : nx.textMuted;
     final icon = selected ? (widget.activeIcon ?? widget.icon) : widget.icon;
 
     if (widget.iconOnly) {
@@ -410,7 +513,9 @@ class _NavItemState extends State<_NavItem> {
                     width: 3,
                     height: 24,
                     decoration: BoxDecoration(
-                      gradient: selected ? AppGradients.accent(theme.colorScheme) : null,
+                      gradient: selected
+                          ? AppGradients.accent(theme.colorScheme)
+                          : null,
                       borderRadius: BorderRadius.circular(AppRadius.pill),
                     ),
                   ),
@@ -420,7 +525,9 @@ class _NavItemState extends State<_NavItem> {
                       curve: AppMotion.curve,
                       height: 40,
                       alignment: Alignment.center,
-                      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.sm,
+                      ),
                       decoration: BoxDecoration(
                         color: bg,
                         borderRadius: AppRadius.mdAll,
@@ -443,7 +550,10 @@ class _NavItemState extends State<_NavItem> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 1),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.sm,
+            vertical: 1,
+          ),
           child: Row(
             children: [
               // Left active-indicator bar — the signature activity-rail accent.
@@ -453,7 +563,9 @@ class _NavItemState extends State<_NavItem> {
                 width: 3,
                 height: 22,
                 decoration: BoxDecoration(
-                  gradient: selected ? AppGradients.accent(theme.colorScheme) : null,
+                  gradient: selected
+                      ? AppGradients.accent(theme.colorScheme)
+                      : null,
                   borderRadius: BorderRadius.circular(AppRadius.pill),
                 ),
               ),
@@ -463,7 +575,9 @@ class _NavItemState extends State<_NavItem> {
                   duration: AppMotion.fast,
                   curve: AppMotion.curve,
                   padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+                    horizontal: AppSpacing.md,
+                    vertical: AppSpacing.sm,
+                  ),
                   decoration: BoxDecoration(
                     color: bg,
                     borderRadius: AppRadius.mdAll,
@@ -479,7 +593,9 @@ class _NavItemState extends State<_NavItem> {
                           style: TextStyle(
                             fontSize: 13,
                             color: selected ? theme.colorScheme.onSurface : fg,
-                            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                            fontWeight: selected
+                                ? FontWeight.w600
+                                : FontWeight.w500,
                           ),
                         ),
                       ),
@@ -496,10 +612,17 @@ class _NavItemState extends State<_NavItem> {
 }
 
 /// Confirm and delete a client + all its data.
-Future<void> _deleteClient(BuildContext context, WidgetRef ref, Client client) async {
+Future<void> _deleteClient(
+  BuildContext context,
+  WidgetRef ref,
+  Client client,
+) async {
   if (client.isDefault) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Cannot delete the default client.'), backgroundColor: Colors.orange),
+      const SnackBar(
+        content: Text('Cannot delete the default client.'),
+        backgroundColor: Colors.orange,
+      ),
     );
     return;
   }
@@ -507,10 +630,18 @@ Future<void> _deleteClient(BuildContext context, WidgetRef ref, Client client) a
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('Delete Client'),
-      content: Text('Delete "${client.name}" and ALL its projects, tasks, agents, and data? This cannot be undone.'),
+      content: Text(
+        'Delete "${client.name}" and ALL its projects, tasks, agents, and data? This cannot be undone.',
+      ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Delete', style: TextStyle(color: Colors.red)),
+        ),
       ],
     ),
   );
@@ -524,10 +655,14 @@ Future<void> _deleteClient(BuildContext context, WidgetRef ref, Client client) a
   if (client.client_pk == currentClientId) {
     final defaultClient = await db.getDefaultClient();
     if (defaultClient != null) {
-      ref.read(currentClientIdProvider.notifier).selectClient(defaultClient.client_pk);
+      ref
+          .read(currentClientIdProvider.notifier)
+          .selectClient(defaultClient.client_pk);
       final projs = await db.getProjectsForClient(defaultClient.client_pk);
       if (projs.isNotEmpty) {
-        ref.read(currentProjectIdProvider.notifier).selectProject(projs.first.project_pk);
+        ref
+            .read(currentProjectIdProvider.notifier)
+            .selectProject(projs.first.project_pk);
       }
     }
   }
@@ -536,15 +671,27 @@ Future<void> _deleteClient(BuildContext context, WidgetRef ref, Client client) a
 }
 
 /// Confirm and delete a project + all its tasks.
-Future<void> _deleteProject(BuildContext context, WidgetRef ref, Project project) async {
+Future<void> _deleteProject(
+  BuildContext context,
+  WidgetRef ref,
+  Project project,
+) async {
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('Delete Project'),
-      content: Text('Delete "${project.name}" and ALL its tasks? This cannot be undone.'),
+      content: Text(
+        'Delete "${project.name}" and ALL its tasks? This cannot be undone.',
+      ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Delete', style: TextStyle(color: Colors.red)),
+        ),
       ],
     ),
   );
@@ -559,7 +706,9 @@ Future<void> _deleteProject(BuildContext context, WidgetRef ref, Project project
     final clientId = ref.read(currentClientIdProvider);
     final projs = await db.getProjectsForClient(clientId);
     if (projs.isNotEmpty) {
-      ref.read(currentProjectIdProvider.notifier).selectProject(projs.first.project_pk);
+      ref
+          .read(currentProjectIdProvider.notifier)
+          .selectProject(projs.first.project_pk);
     }
   }
 }

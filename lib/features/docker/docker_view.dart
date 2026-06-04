@@ -47,7 +47,10 @@ class DockerView extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 12),
-          _ConnectionBanner(versionAsync: versionAsync, onEditEndpoint: () => _editEndpoint(context, ref)),
+          _ConnectionBanner(
+            versionAsync: versionAsync,
+            onEditEndpoint: () => _editEndpoint(context, ref),
+          ),
           const SizedBox(height: 16),
           Expanded(
             child: versionAsync.hasError
@@ -72,13 +75,18 @@ class DockerView extends ConsumerWidget {
     if (!context.mounted) return;
     if (project == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select a project first — its workspace provides the build context.')),
+        const SnackBar(
+          content: Text(
+            'Select a project first — its workspace provides the build context.',
+          ),
+        ),
       );
       return;
     }
     showDialog(
       context: context,
-      builder: (_) => BuildImageDialog(projectPk: projectPk, projectName: project.name),
+      builder: (_) =>
+          BuildImageDialog(projectPk: projectPk, projectName: project.name),
     );
   }
 
@@ -112,8 +120,14 @@ class DockerView extends ConsumerWidget {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(c, ctrl.text.trim()), child: const Text('Save')),
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, ctrl.text.trim()),
+            child: const Text('Save'),
+          ),
         ],
       ),
     );
@@ -126,17 +140,24 @@ class DockerView extends ConsumerWidget {
 class _ConnectionBanner extends StatelessWidget {
   final AsyncValue<DockerVersion> versionAsync;
   final VoidCallback onEditEndpoint;
-  const _ConnectionBanner({required this.versionAsync, required this.onEditEndpoint});
+  const _ConnectionBanner({
+    required this.versionAsync,
+    required this.onEditEndpoint,
+  });
 
   @override
   Widget build(BuildContext context) {
     final (color, icon, text) = switch (versionAsync) {
       AsyncData(:final value) => (
-          Colors.green,
-          Icons.check_circle,
-          'Connected • Docker ${value.version} (API ${value.apiVersion}) • ${value.os}/${value.arch}',
-        ),
-      AsyncError() => (Colors.red, Icons.error_outline, 'Cannot reach the Docker daemon.'),
+        Colors.green,
+        Icons.check_circle,
+        'Connected • Docker ${value.version} (API ${value.apiVersion}) • ${value.os}/${value.arch}',
+      ),
+      AsyncError() => (
+        Colors.red,
+        Icons.error_outline,
+        'Cannot reach the Docker daemon.',
+      ),
       _ => (Colors.orange, Icons.hourglass_empty, 'Connecting…'),
     };
     return Container(
@@ -170,7 +191,10 @@ class _UnreachableHelp extends StatelessWidget {
         children: [
           Icon(Icons.cloud_off, size: 40, color: Colors.grey.shade400),
           const SizedBox(height: 12),
-          const Text('Docker daemon not reachable', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+          const Text(
+            'Docker daemon not reachable',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 8),
           SizedBox(
             width: 460,
@@ -199,7 +223,8 @@ class _ImagesSection extends ConsumerWidget {
       title: 'Images',
       child: imagesAsync.when(
         data: (images) {
-          if (images.isEmpty) return const _EmptyRow('No images on this daemon.');
+          if (images.isEmpty)
+            return const _EmptyRow('No images on this daemon.');
           return Column(
             children: images.map((img) => _ImageTile(image: img)).toList(),
           );
@@ -222,18 +247,30 @@ class _ImageTile extends ConsumerWidget {
       child: ListTile(
         dense: true,
         leading: const Icon(Icons.layers_outlined),
-        title: Text(image.primaryTag, style: const TextStyle(fontWeight: FontWeight.w600)),
+        title: Text(
+          image.primaryTag,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
         subtitle: Text('${image.shortId} • ${_fmtSize(image.size)}'),
         trailing: IconButton(
           tooltip: 'Remove image',
           icon: const Icon(Icons.delete_outline, size: 18),
           onPressed: () async {
             try {
-              await ref.read(dockerEngineClientProvider).removeImage(image.primaryTag.startsWith('<none>') ? image.id : image.primaryTag, force: true);
+              await ref
+                  .read(dockerEngineClientProvider)
+                  .removeImage(
+                    image.primaryTag.startsWith('<none>')
+                        ? image.id
+                        : image.primaryTag,
+                    force: true,
+                  );
               ref.invalidate(dockerImagesProvider);
             } catch (e) {
               if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Remove failed: $e')));
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('Remove failed: $e')));
               }
             }
           },
@@ -255,7 +292,9 @@ class _ContainersSection extends ConsumerWidget {
         data: (containers) {
           if (containers.isEmpty) return const _EmptyRow('No containers.');
           return Column(
-            children: containers.map((c) => _ContainerTile(container: c)).toList(),
+            children: containers
+                .map((c) => _ContainerTile(container: c))
+                .toList(),
           );
         },
         loading: () => const _LoadingRow(),
@@ -276,15 +315,26 @@ class _ContainerTile extends ConsumerWidget {
       margin: const EdgeInsets.symmetric(vertical: 3),
       child: ListTile(
         dense: true,
-        leading: Icon(Icons.inventory_2_outlined, color: running ? Colors.green : Colors.grey),
-        title: Text(container.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+        leading: Icon(
+          Icons.inventory_2_outlined,
+          color: running ? Colors.green : Colors.grey,
+        ),
+        title: Text(
+          container.name,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
         subtitle: Text('${container.image} • ${container.status}'),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             IconButton(
               tooltip: running ? 'Stop' : 'Start',
-              icon: Icon(running ? Icons.stop_circle_outlined : Icons.play_circle_outline, size: 18),
+              icon: Icon(
+                running
+                    ? Icons.stop_circle_outlined
+                    : Icons.play_circle_outline,
+                size: 18,
+              ),
               onPressed: () async {
                 final client = ref.read(dockerEngineClientProvider);
                 try {
@@ -296,7 +346,9 @@ class _ContainerTile extends ConsumerWidget {
                   ref.invalidate(dockerContainersProvider);
                 } catch (e) {
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Action failed: $e')));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Action failed: $e')),
+                    );
                   }
                 }
               },
@@ -306,11 +358,15 @@ class _ContainerTile extends ConsumerWidget {
               icon: const Icon(Icons.delete_outline, size: 18),
               onPressed: () async {
                 try {
-                  await ref.read(dockerEngineClientProvider).removeContainer(container.id, force: true);
+                  await ref
+                      .read(dockerEngineClientProvider)
+                      .removeContainer(container.id, force: true);
                   ref.invalidate(dockerContainersProvider);
                 } catch (e) {
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Remove failed: $e')));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Remove failed: $e')),
+                    );
                   }
                 }
               },
@@ -332,7 +388,14 @@ class _Section extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
+          ),
+        ),
         const SizedBox(height: 6),
         child,
       ],
@@ -344,17 +407,23 @@ class _EmptyRow extends StatelessWidget {
   final String text;
   const _EmptyRow(this.text);
   @override
-  Widget build(BuildContext context) =>
-      Padding(padding: const EdgeInsets.all(8), child: Text(text, style: const TextStyle(color: Colors.grey, fontSize: 12)));
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(8),
+    child: Text(text, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+  );
 }
 
 class _LoadingRow extends StatelessWidget {
   const _LoadingRow();
   @override
   Widget build(BuildContext context) => const Padding(
-        padding: EdgeInsets.all(12),
-        child: SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)),
-      );
+    padding: EdgeInsets.all(12),
+    child: SizedBox(
+      height: 18,
+      width: 18,
+      child: CircularProgressIndicator(strokeWidth: 2),
+    ),
+  );
 }
 
 String _fmtSize(int bytes) {

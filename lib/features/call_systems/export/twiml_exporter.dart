@@ -73,7 +73,8 @@ class TwimlExporter implements CallSystemExporter {
     // produce a stub so the export bundle is never empty and the user gets a
     // pointer to what's missing.
     if (files.isEmpty) {
-      files['empty.twiml.xml'] = '$_xmlDecl<Response>\n'
+      files['empty.twiml.xml'] =
+          '$_xmlDecl<Response>\n'
           '  <!-- This project has no call flows to export. Add a flow with an '
           'entry node, then re-export. -->\n'
           '  <Say>This call system has not been configured yet.</Say>\n'
@@ -106,40 +107,52 @@ class TwimlExporter implements CallSystemExporter {
     }
 
     if (usedTypes.contains(CallNodeType.aiVoicebot)) {
-      out.add('aiVoicebot nodes require Twilio Media Streams: emit '
-          '<Connect><ConversationRelay url="wss://.../omni"/></Connect> (or a '
-          '<Stream>) to bridge the call audio to the Omni voicebot. The export '
-          'stubs the <Connect> with a placeholder WebSocket URL you must fill '
-          'in and host.');
+      out.add(
+        'aiVoicebot nodes require Twilio Media Streams: emit '
+        '<Connect><ConversationRelay url="wss://.../omni"/></Connect> (or a '
+        '<Stream>) to bridge the call audio to the Omni voicebot. The export '
+        'stubs the <Connect> with a placeholder WebSocket URL you must fill '
+        'in and host.',
+      );
     }
     if (usedTypes.contains(CallNodeType.ringGroup) ||
         usedTypes.contains(CallNodeType.queue)) {
-      out.add('Ring groups and ACD queues are PBX concepts. Twilio has no '
-          'native FreePBX-style ring group; this export approximates them by '
-          'dialing the member extensions (ring groups) or using <Enqueue> '
-          '(queues), which needs a TaskRouter / queue webhook to fully realize '
-          'strategy and music-on-hold.');
+      out.add(
+        'Ring groups and ACD queues are PBX concepts. Twilio has no '
+        'native FreePBX-style ring group; this export approximates them by '
+        'dialing the member extensions (ring groups) or using <Enqueue> '
+        '(queues), which needs a TaskRouter / queue webhook to fully realize '
+        'strategy and music-on-hold.',
+      );
     }
     if (usedTypes.contains(CallNodeType.schedule)) {
-      out.add('schedule (business-hours) nodes are evaluated by your '
-          'application before/while serving TwiML — TwiML cannot test the clock '
-          'itself. The open/closed/holiday branches are emitted as comments.');
+      out.add(
+        'schedule (business-hours) nodes are evaluated by your '
+        'application before/while serving TwiML — TwiML cannot test the clock '
+        'itself. The open/closed/holiday branches are emitted as comments.',
+      );
     }
     if (usedTypes.contains(CallNodeType.condition) ||
         usedTypes.contains(CallNodeType.setVariable) ||
         usedTypes.contains(CallNodeType.httpRequest)) {
-      out.add('condition / setVariable / httpRequest are control-logic nodes '
-          'with no TwiML verb; they are emitted as comments and must run in '
-          'your application code (TwiML has no variables or branching).');
+      out.add(
+        'condition / setVariable / httpRequest are control-logic nodes '
+        'with no TwiML verb; they are emitted as comments and must run in '
+        'your application code (TwiML has no variables or branching).',
+      );
     }
     if (usedTypes.contains(CallNodeType.playDirectory)) {
-      out.add('playDirectory (dial-by-name) has no TwiML verb; emitted as a '
-          'comment for the application to implement.');
+      out.add(
+        'playDirectory (dial-by-name) has no TwiML verb; emitted as a '
+        'comment for the application to implement.',
+      );
     }
     if (usedTypes.contains(CallNodeType.subFlow)) {
-      out.add('subFlow nodes map to a <Redirect> at the sub-flow\'s document; '
-          'TwiML has no call/return, so control does not come back unless the '
-          'sub-flow redirects here.');
+      out.add(
+        'subFlow nodes map to a <Redirect> at the sub-flow\'s document; '
+        'TwiML has no call/return, so control does not come back unless the '
+        'sub-flow redirects here.',
+      );
     }
     return out;
   }
@@ -161,8 +174,10 @@ class TwimlExporter implements CallSystemExporter {
 
     final entry = flow.entryNode;
     if (entry == null) {
-      b.writeln('  <!-- No entry node found (entryNodeId='
-          '${_xmlEsc(flow.entryNodeId)}). -->');
+      b.writeln(
+        '  <!-- No entry node found (entryNodeId='
+        '${_xmlEsc(flow.entryNodeId)}). -->',
+      );
       b.writeln('  <Say>This flow is not configured.</Say>');
       b.writeln('  <Hangup/>');
       b.writeln('</Response>');
@@ -176,8 +191,10 @@ class TwimlExporter implements CallSystemExporter {
     CallNode? current = entry;
     while (current != null) {
       if (visited.contains(current.id)) {
-        b.writeln('  <!-- Loops back to ${_label(current)}; serve that '
-            'document again (TwiML has no in-document goto). -->');
+        b.writeln(
+          '  <!-- Loops back to ${_label(current)}; serve that '
+          'document again (TwiML has no in-document goto). -->',
+        );
         break;
       }
       visited.add(current.id);
@@ -240,30 +257,38 @@ class TwimlExporter implements CallSystemExporter {
       case CallNodeType.schedule:
         // TwiML can't read the clock; the app decides which branch's document
         // to serve. Comment all three outcomes and fall through `open`.
-        b.writeln('  <!-- schedule: ${_label(node)} — evaluate business hours '
-            'in your application. -->');
+        b.writeln(
+          '  <!-- schedule: ${_label(node)} — evaluate business hours '
+          'in your application. -->',
+        );
         _comment(b, node, 'open', flow, 'open hours');
         _comment(b, node, 'closed', flow, 'after hours');
         _comment(b, node, 'holiday', flow, 'holiday');
         return node.outputs['open'];
 
       case CallNodeType.condition:
-        b.writeln('  <!-- condition: ${_label(node)} — no TwiML primitive; '
-            'evaluate in application code. -->');
+        b.writeln(
+          '  <!-- condition: ${_label(node)} — no TwiML primitive; '
+          'evaluate in application code. -->',
+        );
         _comment(b, node, 'true', flow, 'true');
         _comment(b, node, 'false', flow, 'false');
         return node.outputs['true'];
 
       case CallNodeType.setVariable:
         final v = node.config['variable'];
-        b.writeln('  <!-- setVariable: ${_label(node)}'
-            '${v != null ? ' (${_xmlEsc('$v')})' : ''} — store in application '
-            'state; TwiML has no variables. -->');
+        b.writeln(
+          '  <!-- setVariable: ${_label(node)}'
+          '${v != null ? ' (${_xmlEsc('$v')})' : ''} — store in application '
+          'state; TwiML has no variables. -->',
+        );
         return node.outputs['next'];
 
       case CallNodeType.httpRequest:
-        b.writeln('  <!-- httpRequest: ${_label(node)} — perform in your '
-            'application; TwiML cannot call arbitrary APIs inline. -->');
+        b.writeln(
+          '  <!-- httpRequest: ${_label(node)} — perform in your '
+          'application; TwiML cannot call arbitrary APIs inline. -->',
+        );
         _comment(b, node, 'success', flow, 'success');
         _comment(b, node, 'failure', flow, 'failure');
         return node.outputs['success'];
@@ -272,16 +297,22 @@ class TwimlExporter implements CallSystemExporter {
         // A standalone recording leg. <Record> posts the recording to `action`
         // and continues there; we comment the continuation.
         final next = node.outputs['next'];
-        b.writeln('  <Record'
-            '${next != null ? ' action="${_actionUrl(flow, next)}"' : ''}'
-            ' playBeep="true" maxLength="3600"/>');
-        b.writeln('  <!-- record: ${_label(node)} — continues at '
-            '${_targetLabel(flow, next)} via the Record action URL. -->');
+        b.writeln(
+          '  <Record'
+          '${next != null ? ' action="${_actionUrl(flow, next)}"' : ''}'
+          ' playBeep="true" maxLength="3600"/>',
+        );
+        b.writeln(
+          '  <!-- record: ${_label(node)} — continues at '
+          '${_targetLabel(flow, next)} via the Record action URL. -->',
+        );
         return null; // continuation handled by the action URL document
 
       case CallNodeType.playDirectory:
-        b.writeln('  <!-- playDirectory: ${_label(node)} — dial-by-name has no '
-            'TwiML verb; implement in your application. -->');
+        b.writeln(
+          '  <!-- playDirectory: ${_label(node)} — dial-by-name has no '
+          'TwiML verb; implement in your application. -->',
+        );
         _comment(b, node, 'matched', flow, 'matched');
         _comment(b, node, 'nomatch', flow, 'no match');
         return node.outputs['matched'];
@@ -298,8 +329,10 @@ class TwimlExporter implements CallSystemExporter {
         final url = target != null
             ? '${_slug(target.name.isEmpty ? target.id : target.name)}.twiml.xml'
             : 'sub-flow.twiml.xml';
-        b.writeln('  <!-- subFlow: ${_label(node)} — jump to another flow\'s '
-            'document. TwiML has no return. -->');
+        b.writeln(
+          '  <!-- subFlow: ${_label(node)} — jump to another flow\'s '
+          'document. TwiML has no return. -->',
+        );
         b.writeln('  <Redirect>${_xmlEsc(url)}</Redirect>');
         return null; // <Redirect> ends this document
     }
@@ -316,11 +349,12 @@ class TwimlExporter implements CallSystemExporter {
     required String indent,
   }) {
     final promptId = node.config['promptId'];
-    final prompt =
-        promptId is String ? project.promptById(promptId) : null;
+    final prompt = promptId is String ? project.promptById(promptId) : null;
     if (prompt == null) {
-      b.writeln('$indent<!-- ${_label(node)}: prompt '
-          '${promptId == null ? 'unset' : _xmlEsc('$promptId')} not found. -->');
+      b.writeln(
+        '$indent<!-- ${_label(node)}: prompt '
+        '${promptId == null ? 'unset' : _xmlEsc('$promptId')} not found. -->',
+      );
       b.writeln('$indent<Say>(missing prompt)</Say>');
       return;
     }
@@ -334,9 +368,11 @@ class TwimlExporter implements CallSystemExporter {
       // voice id since they're different voice catalogs — leave Twilio's
       // default and note the source voice.
       if (prompt.voice != null && prompt.voice!.isNotEmpty) {
-        b.writeln('$indent<!-- authored with kokoro voice '
-            '${_xmlEsc(prompt.voice!)}; map to a Twilio <Say> voice if desired '
-            '-->');
+        b.writeln(
+          '$indent<!-- authored with kokoro voice '
+          '${_xmlEsc(prompt.voice!)}; map to a Twilio <Say> voice if desired '
+          '-->',
+        );
       }
       b.writeln('$indent<Say>${_xmlEsc(prompt.text)}</Say>');
     }
@@ -354,10 +390,14 @@ class TwimlExporter implements CallSystemExporter {
   ) {
     final numDigits = node.config['numDigits'] ?? node.config['digits'] ?? 1;
     final timeoutNode = node.outputs['timeout'];
-    b.writeln('  <!-- menu: ${_label(node)} — DTMF branch handled by your app '
-        'reading the gathered Digits at the action URL. -->');
-    b.writeln('  <Gather input="dtmf" numDigits="${_xmlEsc('$numDigits')}" '
-        'timeout="5" action="${_actionUrl(flow, node.id)}">');
+    b.writeln(
+      '  <!-- menu: ${_label(node)} — DTMF branch handled by your app '
+      'reading the gathered Digits at the action URL. -->',
+    );
+    b.writeln(
+      '  <Gather input="dtmf" numDigits="${_xmlEsc('$numDigits')}" '
+      'timeout="5" action="${_actionUrl(flow, node.id)}">',
+    );
     // Nested prompt = the menu greeting ("Press 1 for sales...").
     _writePrompt(project, node, b, indent: '    ');
     b.writeln('  </Gather>');
@@ -375,11 +415,15 @@ class TwimlExporter implements CallSystemExporter {
     // No digit pressed → <Gather> falls through here in the document. Continue
     // the linear spine down the `timeout` port if set.
     if (timeoutNode != null) {
-      b.writeln('  <!-- No input: continues to ${_targetLabel(flow, timeoutNode)} '
-          '(timeout). -->');
+      b.writeln(
+        '  <!-- No input: continues to ${_targetLabel(flow, timeoutNode)} '
+        '(timeout). -->',
+      );
     } else {
-      b.writeln('  <!-- No input and no timeout target: re-prompt or hang up in '
-          'your app. -->');
+      b.writeln(
+        '  <!-- No input and no timeout target: re-prompt or hang up in '
+        'your app. -->',
+      );
     }
     return timeoutNode;
   }
@@ -396,13 +440,18 @@ class TwimlExporter implements CallSystemExporter {
     final next = node.outputs['next'];
     final numDigits = node.config['numDigits'] ?? node.config['digits'];
     if (variable != null) {
-      b.writeln('  <!-- gatherDigits → variable '
-          '${_xmlEsc('$variable')} (read posted Digits at the action URL). -->');
+      b.writeln(
+        '  <!-- gatherDigits → variable '
+        '${_xmlEsc('$variable')} (read posted Digits at the action URL). -->',
+      );
     }
-    final numAttr =
-        numDigits != null ? ' numDigits="${_xmlEsc('$numDigits')}"' : '';
-    b.writeln('  <Gather input="dtmf"$numAttr finishOnKey="#" timeout="6" '
-        'action="${_actionUrl(flow, next ?? node.id)}">');
+    final numAttr = numDigits != null
+        ? ' numDigits="${_xmlEsc('$numDigits')}"'
+        : '';
+    b.writeln(
+      '  <Gather input="dtmf"$numAttr finishOnKey="#" timeout="6" '
+      'action="${_actionUrl(flow, next ?? node.id)}">',
+    );
     // A gatherDigits node may reuse a prompt to ask for the input.
     if (node.config['promptId'] != null) {
       _writePrompt(project, node, b, indent: '    ');
@@ -423,11 +472,15 @@ class TwimlExporter implements CallSystemExporter {
     final variable = node.config['variable'];
     final next = node.outputs['next'];
     if (variable != null) {
-      b.writeln('  <!-- gatherSpeech → variable '
-          '${_xmlEsc('$variable')} (read SpeechResult at the action URL). -->');
+      b.writeln(
+        '  <!-- gatherSpeech → variable '
+        '${_xmlEsc('$variable')} (read SpeechResult at the action URL). -->',
+      );
     }
-    b.writeln('  <Gather input="speech" speechTimeout="auto" '
-        'action="${_actionUrl(flow, next ?? node.id)}">');
+    b.writeln(
+      '  <Gather input="speech" speechTimeout="auto" '
+      'action="${_actionUrl(flow, next ?? node.id)}">',
+    );
     if (node.config['promptId'] != null) {
       _writePrompt(project, node, b, indent: '    ');
     }
@@ -442,20 +495,26 @@ class TwimlExporter implements CallSystemExporter {
   /// must host.
   String? _renderVoicebot(CallNode node, StringBuffer b) {
     final goal = node.config['goal'];
-    b.writeln('  <!-- aiVoicebot: ${_label(node)} — conversational AI over '
-        'Twilio Media Streams.'
-        '${goal != null ? ' Goal: ${_xmlEsc('$goal')}.' : ''} Bridges audio to '
-        'the Omni voicebot; fill in your hosted WebSocket URL. -->');
+    b.writeln(
+      '  <!-- aiVoicebot: ${_label(node)} — conversational AI over '
+      'Twilio Media Streams.'
+      '${goal != null ? ' Goal: ${_xmlEsc('$goal')}.' : ''} Bridges audio to '
+      'the Omni voicebot; fill in your hosted WebSocket URL. -->',
+    );
     b.writeln('  <Connect>');
-    b.writeln('    <ConversationRelay url="wss://example.invalid/omni" '
-        'welcomeGreeting=""/>');
+    b.writeln(
+      '    <ConversationRelay url="wss://example.invalid/omni" '
+      'welcomeGreeting=""/>',
+    );
     b.writeln('  </Connect>');
     // <Connect> takes over the call; the `transfer`/`hangup`/`next` ports are
     // driven by the voicebot session, not by this document.
     final transfer = node.outputs['transfer'];
     if (transfer != null) {
-      b.writeln('  <!-- On voicebot transfer: route to the document for the '
-          'transfer target in your relay handler. -->');
+      b.writeln(
+        '  <!-- On voicebot transfer: route to the document for the '
+        'transfer target in your relay handler. -->',
+      );
     }
     return null; // <Connect> is terminal for this document
   }
@@ -496,19 +555,27 @@ class TwimlExporter implements CallSystemExporter {
         break;
       }
     }
-    b.writeln('  <!-- transferToExtension: ${_label(node)}'
-        '${ext != null ? ' → ${_xmlEsc(ext.name)} (${_xmlEsc(ext.number)})' : ''}'
-        ' -->');
-    b.writeln('  <Dial action="${_actionUrl(flow, node.id)}" '
-        'timeout="${ext?.ringSeconds ?? 20}">');
+    b.writeln(
+      '  <!-- transferToExtension: ${_label(node)}'
+      '${ext != null ? ' → ${_xmlEsc(ext.name)} (${_xmlEsc(ext.number)})' : ''}'
+      ' -->',
+    );
+    b.writeln(
+      '  <Dial action="${_actionUrl(flow, node.id)}" '
+      'timeout="${ext?.ringSeconds ?? 20}">',
+    );
     if (ext != null && ext.sipUsername != null && ext.sipUsername!.isNotEmpty) {
       // SIP endpoint registered for this extension.
-      b.writeln('    <Sip>${_xmlEsc(ext.sipUsername!)}@your-sip-domain.example</Sip>');
+      b.writeln(
+        '    <Sip>${_xmlEsc(ext.sipUsername!)}@your-sip-domain.example</Sip>',
+      );
     } else if (ext != null) {
       b.writeln('    <Number>${_xmlEsc(ext.number)}</Number>');
     } else {
-      b.writeln('    <!-- Extension ${extId == null ? 'unset' : _xmlEsc('$extId')} '
-          'not found. -->');
+      b.writeln(
+        '    <!-- Extension ${extId == null ? 'unset' : _xmlEsc('$extId')} '
+        'not found. -->',
+      );
     }
     b.writeln('  </Dial>');
     _comment(b, node, 'answered', flow, 'answered');
@@ -534,19 +601,25 @@ class TwimlExporter implements CallSystemExporter {
         break;
       }
     }
-    b.writeln('  <!-- ringGroup: ${_label(node)}'
-        '${group != null ? ' (${_xmlEsc(group.name)}, strategy '
-            '${_xmlEsc(group.strategy.name)})' : ''} — '
-        'Twilio has no native ring group; dialing members. -->');
-    b.writeln('  <Dial action="${_actionUrl(flow, node.id)}" '
-        'timeout="${group?.ringSeconds ?? 20}">');
+    b.writeln(
+      '  <!-- ringGroup: ${_label(node)}'
+      '${group != null ? ' (${_xmlEsc(group.name)}, strategy '
+                '${_xmlEsc(group.strategy.name)})' : ''} — '
+      'Twilio has no native ring group; dialing members. -->',
+    );
+    b.writeln(
+      '  <Dial action="${_actionUrl(flow, node.id)}" '
+      'timeout="${group?.ringSeconds ?? 20}">',
+    );
     if (group != null && group.extensionIds.isNotEmpty) {
       // ringAll: all <Number>s ring in parallel. hunt/roundRobin/etc. would
       // require the app to dial members in sequence across action callbacks.
       if (group.strategy != RingStrategy.ringAll) {
-        b.writeln('    <!-- strategy ${_xmlEsc(group.strategy.name)} is '
-            'sequential; emit one member per leg from your app. Listing all '
-            'for reference. -->');
+        b.writeln(
+          '    <!-- strategy ${_xmlEsc(group.strategy.name)} is '
+          'sequential; emit one member per leg from your app. Listing all '
+          'for reference. -->',
+        );
       }
       for (final eid in group.extensionIds) {
         final ext = _extById(project, eid);
@@ -581,17 +654,21 @@ class TwimlExporter implements CallSystemExporter {
       }
     }
     final queueName = q?.name ?? 'support';
-    b.writeln('  <!-- queue: ${_label(node)} — ACD queue. Agents are rung by a '
-        'separate <Dial><Queue> document; strategy '
-        '(${_xmlEsc(q?.strategy.name ?? 'fewestRecent')}) is realized in '
-        'TaskRouter, not TwiML. -->');
+    b.writeln(
+      '  <!-- queue: ${_label(node)} — ACD queue. Agents are rung by a '
+      'separate <Dial><Queue> document; strategy '
+      '(${_xmlEsc(q?.strategy.name ?? 'fewestRecent')}) is realized in '
+      'TaskRouter, not TwiML. -->',
+    );
     // Music-on-hold prompt, if any, becomes the wait experience the app hosts.
     if (q?.musicOnHoldPromptId != null) {
       final moh = project.promptById(q!.musicOnHoldPromptId!);
       if (moh != null) {
-        b.writeln('  <!-- Music on hold: '
-            '${_xmlEsc(moh.audioAssetPath ?? moh.text)} (serve via the Enqueue '
-            'waitUrl). -->');
+        b.writeln(
+          '  <!-- Music on hold: '
+          '${_xmlEsc(moh.audioAssetPath ?? moh.text)} (serve via the Enqueue '
+          'waitUrl). -->',
+        );
       }
     }
     b.writeln('  <Enqueue>${_xmlEsc(queueName)}</Enqueue>');
@@ -618,8 +695,10 @@ class TwimlExporter implements CallSystemExporter {
         break;
       }
     }
-    b.writeln('  <!-- voicemail: ${_label(node)}'
-        '${box != null ? ' → ${_xmlEsc(box.name)}' : ''} -->');
+    b.writeln(
+      '  <!-- voicemail: ${_label(node)}'
+      '${box != null ? ' → ${_xmlEsc(box.name)}' : ''} -->',
+    );
     // Greeting first.
     final greetingId = box?.greetingPromptId;
     final greeting = greetingId != null ? project.promptById(greetingId) : null;
@@ -634,11 +713,15 @@ class TwimlExporter implements CallSystemExporter {
       b.writeln('  <Say>Please leave a message after the tone.</Say>');
     }
     if (box?.emailTo != null && box!.emailTo!.isNotEmpty) {
-      b.writeln('  <!-- Email the recording to ${_xmlEsc(box.emailTo!)} from '
-          'your recording-status webhook. -->');
+      b.writeln(
+        '  <!-- Email the recording to ${_xmlEsc(box.emailTo!)} from '
+        'your recording-status webhook. -->',
+      );
     }
-    b.writeln('  <Record maxLength="180" playBeep="true" '
-        'transcribe="false"/>');
+    b.writeln(
+      '  <Record maxLength="180" playBeep="true" '
+      'transcribe="false"/>',
+    );
     b.writeln('  <Hangup/>');
     return null; // voicemail terminates the call leg
   }
@@ -659,8 +742,10 @@ class TwimlExporter implements CallSystemExporter {
     if (target == null) {
       b.writeln('    <!-- on $human ($port): unconnected. -->');
     } else {
-      b.writeln('    <!-- on $human ($port): go to '
-          '${_targetLabel(flow, target)} — serve ${_actionUrl(flow, target)}. -->');
+      b.writeln(
+        '    <!-- on $human ($port): go to '
+        '${_targetLabel(flow, target)} — serve ${_actionUrl(flow, target)}. -->',
+      );
     }
   }
 

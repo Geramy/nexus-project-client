@@ -12,8 +12,11 @@ import '../../../infrastructure/workspace/workspace.dart';
 
 /// Result of zipping a project workspace to disk.
 class WorkspaceZip {
-  WorkspaceZip(
-      {required this.zipPath, required this.fileCount, required this.bytes});
+  WorkspaceZip({
+    required this.zipPath,
+    required this.fileCount,
+    required this.bytes,
+  });
   final String zipPath;
   final int fileCount;
   final int bytes;
@@ -25,7 +28,9 @@ class WorkspaceZip {
 /// is the one true export: walk every file, add it to a zip, write it to the
 /// user's Documents/NexusExports, and return the path to reveal.
 Future<WorkspaceZip> exportWorkspaceZip(
-    Workspace ws, String projectName) async {
+  Workspace ws,
+  String projectName,
+) async {
   final entries = await ws.walk(maxEntries: 50000);
   final archive = Archive();
   var count = 0;

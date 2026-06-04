@@ -12,10 +12,21 @@ class ToolDefinition {
   final List<String>? requiresLlmLabels;
   final bool isAppControl;
 
-  const ToolDefinition({required this.name, required this.description, required this.parameters, this.requiresLabels, this.requiresLlmLabels, this.isAppControl = false});
+  const ToolDefinition({
+    required this.name,
+    required this.description,
+    required this.parameters,
+    this.requiresLabels,
+    this.requiresLlmLabels,
+    this.isAppControl = false,
+  });
 
   Map<String, dynamic> toWireJson() => {
-        'type': 'function',
-        'function': {'name': name, 'description': description, 'parameters': parameters},
-      };
+    'type': 'function',
+    'function': {
+      'name': name,
+      'description': description,
+      'parameters': parameters,
+    },
+  };
 }

@@ -57,8 +57,7 @@ class VerificationService {
     final latest = pkg['latest'] as Map<String, dynamic>?;
     final published = _parseDate(latest?['published'] as String?);
     final pubspec = latest?['pubspec'] as Map<String, dynamic>?;
-    final repoUrl =
-        (pubspec?['repository'] ?? pubspec?['homepage']) as String?;
+    final repoUrl = (pubspec?['repository'] ?? pubspec?['homepage']) as String?;
 
     final score = await client.pubDevScore(name);
     final likes = (score?['likeCount'] as num?)?.toInt();
@@ -145,7 +144,10 @@ class VerificationService {
     );
   }
 
-  VerificationResult _unknown({required String ecosystem, required String name}) {
+  VerificationResult _unknown({
+    required String ecosystem,
+    required String name,
+  }) {
     return VerificationResult(
       ecosystem: ecosystem,
       name: name,
@@ -209,12 +211,12 @@ class _GithubFacts {
   }) : missing = false;
 
   const _GithubFacts.missing()
-      : archived = false,
-        lastCommit = null,
-        lastRelease = null,
-        popularity = null,
-        owner = null,
-        missing = true;
+    : archived = false,
+      lastCommit = null,
+      lastRelease = null,
+      popularity = null,
+      owner = null,
+      missing = true;
 
   final bool archived;
   final DateTime? lastCommit;

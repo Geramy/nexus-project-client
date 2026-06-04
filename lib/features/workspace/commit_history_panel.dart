@@ -32,7 +32,9 @@ class _CommitHistoryPanelState extends ConsumerState<CommitHistoryPanel> {
   @override
   Widget build(BuildContext context) {
     final projectId = ref.watch(currentProjectIdProvider);
-    ref.watch(gitStatusRevisionProvider(projectId)); // re-fetch after new commits
+    ref.watch(
+      gitStatusRevisionProvider(projectId),
+    ); // re-fetch after new commits
     final logFuture = _loadLog(projectId);
     return FutureBuilder<List<_Commit>>(
       future: logFuture,
@@ -43,7 +45,10 @@ class _CommitHistoryPanelState extends ConsumerState<CommitHistoryPanel> {
         if (snap.hasError) {
           return Padding(
             padding: const EdgeInsets.all(16),
-            child: Text('History failed: ${snap.error}', style: const TextStyle(fontSize: 12, color: Colors.red)),
+            child: Text(
+              'History failed: ${snap.error}',
+              style: const TextStyle(fontSize: 12, color: Colors.red),
+            ),
           );
         }
         final commits = snap.data ?? const <_Commit>[];
@@ -51,8 +56,11 @@ class _CommitHistoryPanelState extends ConsumerState<CommitHistoryPanel> {
           return const Center(
             child: Padding(
               padding: EdgeInsets.all(24),
-              child: Text('No commits yet.\nMake your first commit in Source Control.',
-                  style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+              child: Text(
+                'No commits yet.\nMake your first commit in Source Control.',
+                style: TextStyle(color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
             ),
           );
         }
@@ -65,8 +73,10 @@ class _CommitHistoryPanelState extends ConsumerState<CommitHistoryPanel> {
                 children: [
                   const Icon(Icons.history, size: 18),
                   const SizedBox(width: 8),
-                  Text('History (${commits.length})',
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  Text(
+                    'History (${commits.length})',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
                 ],
               ),
             ),
@@ -75,7 +85,8 @@ class _CommitHistoryPanelState extends ConsumerState<CommitHistoryPanel> {
               child: ListView.separated(
                 itemCount: commits.length,
                 separatorBuilder: (_, __) => const Divider(height: 1),
-                itemBuilder: (_, i) => _commitTile(context, projectId, commits[i]),
+                itemBuilder: (_, i) =>
+                    _commitTile(context, projectId, commits[i]),
               ),
             ),
           ],
@@ -104,7 +115,9 @@ class _CommitHistoryPanelState extends ConsumerState<CommitHistoryPanel> {
             setState(() => _expanded = expanded ? null : c.oid);
             if (!expanded && !_diffCache.containsKey(c.oid)) {
               try {
-                final engine = await ref.read(gitEngineProvider(projectId).future);
+                final engine = await ref.read(
+                  gitEngineProvider(projectId).future,
+                );
                 final diff = await engine.commitDiff(c.oid);
                 if (mounted) setState(() => _diffCache[c.oid] = diff);
               } catch (e, st) {
@@ -116,7 +129,11 @@ class _CommitHistoryPanelState extends ConsumerState<CommitHistoryPanel> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               children: [
-                Icon(expanded ? Icons.expand_more : Icons.chevron_right, size: 16, color: Colors.grey),
+                Icon(
+                  expanded ? Icons.expand_more : Icons.chevron_right,
+                  size: 16,
+                  color: Colors.grey,
+                ),
                 const SizedBox(width: 6),
                 const Icon(Icons.commit, size: 14, color: Colors.blueGrey),
                 const SizedBox(width: 8),
@@ -124,13 +141,22 @@ class _CommitHistoryPanelState extends ConsumerState<CommitHistoryPanel> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(c.message.split('\n').first,
-                          maxLines: 1, overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                      Text(
+                        c.message.split('\n').first,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                       const SizedBox(height: 2),
                       Text(
                         '${c.oid.substring(0, 7)} · ${c.author} · ${_relative(c.when)}',
-                        style: const TextStyle(fontSize: 11, color: Colors.grey),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey,
+                        ),
                       ),
                     ],
                   ),
@@ -149,13 +175,20 @@ class _CommitHistoryPanelState extends ConsumerState<CommitHistoryPanel> {
     if (diff == null) {
       return const Padding(
         padding: EdgeInsets.symmetric(horizontal: 32, vertical: 8),
-        child: SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+        child: SizedBox(
+          height: 16,
+          width: 16,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
       );
     }
     if (diff.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(horizontal: 32, vertical: 8),
-        child: Text('(empty commit)', style: TextStyle(fontSize: 11, color: Colors.grey)),
+        child: Text(
+          '(empty commit)',
+          style: TextStyle(fontSize: 11, color: Colors.grey),
+        ),
       );
     }
     return Padding(
@@ -172,13 +205,25 @@ class _CommitHistoryPanelState extends ConsumerState<CommitHistoryPanel> {
                   children: [
                     SizedBox(
                       width: 14,
-                      child: Text(_changeBadge(c.change),
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _changeColor(c.change))),
+                      child: Text(
+                        _changeBadge(c.change),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: _changeColor(c.change),
+                        ),
+                      ),
                     ),
                     Expanded(
-                      child: Text(c.path,
-                          style: TextStyle(fontSize: 12, color: _changeColor(c.change), fontFamily: 'monospace'),
-                          overflow: TextOverflow.ellipsis),
+                      child: Text(
+                        c.path,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: _changeColor(c.change),
+                          fontFamily: 'monospace',
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                 ),
@@ -195,7 +240,12 @@ class _CommitHistoryPanelState extends ConsumerState<CommitHistoryPanel> {
       final before = await engine.blobText(c.oldOid);
       final after = await engine.blobText(c.newOid);
       if (!mounted) return;
-      await showCommitFileDiff(context, path: c.path, before: before, after: after);
+      await showCommitFileDiff(
+        context,
+        path: c.path,
+        before: before,
+        after: after,
+      );
     } catch (e, st) {
       debugPrint('[git] open diff failed for ${c.path}: $e\n$st');
     }
@@ -203,17 +253,23 @@ class _CommitHistoryPanelState extends ConsumerState<CommitHistoryPanel> {
 
   String _changeBadge(CommitChangeKind k) {
     switch (k) {
-      case CommitChangeKind.added:    return 'A';
-      case CommitChangeKind.modified: return 'M';
-      case CommitChangeKind.deleted:  return 'D';
+      case CommitChangeKind.added:
+        return 'A';
+      case CommitChangeKind.modified:
+        return 'M';
+      case CommitChangeKind.deleted:
+        return 'D';
     }
   }
 
   Color _changeColor(CommitChangeKind k) {
     switch (k) {
-      case CommitChangeKind.added:    return const Color(0xFF4FA66A);
-      case CommitChangeKind.modified: return const Color(0xFFE2A03F);
-      case CommitChangeKind.deleted:  return const Color(0xFFD16969);
+      case CommitChangeKind.added:
+        return const Color(0xFF4FA66A);
+      case CommitChangeKind.modified:
+        return const Color(0xFFE2A03F);
+      case CommitChangeKind.deleted:
+        return const Color(0xFFD16969);
     }
   }
 

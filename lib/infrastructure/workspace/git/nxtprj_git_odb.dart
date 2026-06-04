@@ -49,18 +49,43 @@ class NxtprjGitOdb {
     final be = calloc<git_odb_backend>();
     be.ref.version = GIT_ODB_BACKEND_VERSION;
 
-    final readCb = NativeCallable<
-        Int Function(Pointer<Pointer<Void>>, Pointer<Size>, Pointer<Int>,
-            Pointer<git_odb_backend>, Pointer<git_oid>)>.isolateLocal(_read, exceptionalReturn: -1);
-    final readHeaderCb = NativeCallable<
-        Int Function(Pointer<Size>, Pointer<Int>, Pointer<git_odb_backend>,
-            Pointer<git_oid>)>.isolateLocal(_readHeader, exceptionalReturn: -1);
-    final existsCb = NativeCallable<
-        Int Function(Pointer<git_odb_backend>, Pointer<git_oid>)>.isolateLocal(_exists, exceptionalReturn: 0);
-    final writeCb = NativeCallable<
-        Int Function(Pointer<git_odb_backend>, Pointer<git_oid>, Pointer<Void>, Size,
-            Int)>.isolateLocal(_write, exceptionalReturn: -1);
-    final freeCb = NativeCallable<Void Function(Pointer<git_odb_backend>)>.isolateLocal(_free);
+    final readCb =
+        NativeCallable<
+          Int Function(
+            Pointer<Pointer<Void>>,
+            Pointer<Size>,
+            Pointer<Int>,
+            Pointer<git_odb_backend>,
+            Pointer<git_oid>,
+          )
+        >.isolateLocal(_read, exceptionalReturn: -1);
+    final readHeaderCb =
+        NativeCallable<
+          Int Function(
+            Pointer<Size>,
+            Pointer<Int>,
+            Pointer<git_odb_backend>,
+            Pointer<git_oid>,
+          )
+        >.isolateLocal(_readHeader, exceptionalReturn: -1);
+    final existsCb =
+        NativeCallable<
+          Int Function(Pointer<git_odb_backend>, Pointer<git_oid>)
+        >.isolateLocal(_exists, exceptionalReturn: 0);
+    final writeCb =
+        NativeCallable<
+          Int Function(
+            Pointer<git_odb_backend>,
+            Pointer<git_oid>,
+            Pointer<Void>,
+            Size,
+            Int,
+          )
+        >.isolateLocal(_write, exceptionalReturn: -1);
+    final freeCb =
+        NativeCallable<Void Function(Pointer<git_odb_backend>)>.isolateLocal(
+          _free,
+        );
 
     _callables.addAll([readCb, readHeaderCb, existsCb, writeCb, freeCb]);
     be.ref.read = readCb.nativeFunction;
@@ -106,9 +131,17 @@ class NxtprjGitOdb {
 
   // ── ODB callbacks (run synchronously from libgit2) ───────────────────
 
-  int _read(Pointer<Pointer<Void>> outBuf, Pointer<Size> outLen, Pointer<Int> outType,
-      Pointer<git_odb_backend> be, Pointer<git_oid> oid) {
-    final rows = db.select('SELECT otype, size, data FROM git_objects WHERE oid=?', [_hex(oid)]);
+  int _read(
+    Pointer<Pointer<Void>> outBuf,
+    Pointer<Size> outLen,
+    Pointer<Int> outType,
+    Pointer<git_odb_backend> be,
+    Pointer<git_oid> oid,
+  ) {
+    final rows = db.select(
+      'SELECT otype, size, data FROM git_objects WHERE oid=?',
+      [_hex(oid)],
+    );
     if (rows.isEmpty) return -3; // GIT_ENOTFOUND
     final data = rows.first['data'] as Uint8List;
     // Buffer MUST be allocated by libgit2 so it can free it later.
@@ -121,8 +154,15 @@ class NxtprjGitOdb {
     return 0;
   }
 
-  int _readHeader(Pointer<Size> outLen, Pointer<Int> outType, Pointer<git_odb_backend> be, Pointer<git_oid> oid) {
-    final rows = db.select('SELECT otype, size FROM git_objects WHERE oid=?', [_hex(oid)]);
+  int _readHeader(
+    Pointer<Size> outLen,
+    Pointer<Int> outType,
+    Pointer<git_odb_backend> be,
+    Pointer<git_oid> oid,
+  ) {
+    final rows = db.select('SELECT otype, size FROM git_objects WHERE oid=?', [
+      _hex(oid),
+    ]);
     if (rows.isEmpty) return -3;
     outLen.value = rows.first['size'] as int;
     outType.value = rows.first['otype'] as int;
@@ -130,13 +170,25 @@ class NxtprjGitOdb {
   }
 
   int _exists(Pointer<git_odb_backend> be, Pointer<git_oid> oid) {
-    return db.select('SELECT 1 FROM git_objects WHERE oid=?', [_hex(oid)]).isEmpty ? 0 : 1;
+    return db.select('SELECT 1 FROM git_objects WHERE oid=?', [
+          _hex(oid),
+        ]).isEmpty
+        ? 0
+        : 1;
   }
 
-  int _write(Pointer<git_odb_backend> be, Pointer<git_oid> oid, Pointer<Void> data, int len, int type) {
+  int _write(
+    Pointer<git_odb_backend> be,
+    Pointer<git_oid> oid,
+    Pointer<Void> data,
+    int len,
+    int type,
+  ) {
     final bytes = Uint8List.fromList(data.cast<Uint8>().asTypedList(len));
-    db.execute('INSERT OR REPLACE INTO git_objects(oid, otype, size, data) VALUES(?,?,?,?)',
-        [_hex(oid), type, len, bytes]);
+    db.execute(
+      'INSERT OR REPLACE INTO git_objects(oid, otype, size, data) VALUES(?,?,?,?)',
+      [_hex(oid), type, len, bytes],
+    );
     return 0;
   }
 

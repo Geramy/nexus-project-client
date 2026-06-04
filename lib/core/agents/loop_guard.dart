@@ -35,9 +35,9 @@ enum LoopAction {
 /// Reusable across harnesses: each session/turn holds its own instance.
 class LoopGuard {
   LoopGuard({this.warnAt = 2, this.blockAt = 3, this.window = 12})
-      : assert(warnAt >= 1, 'warnAt must be >= 1'),
-        assert(blockAt >= warnAt, 'blockAt must be >= warnAt'),
-        assert(window >= blockAt, 'window must be >= blockAt');
+    : assert(warnAt >= 1, 'warnAt must be >= 1'),
+      assert(blockAt >= warnAt, 'blockAt must be >= warnAt'),
+      assert(window >= blockAt, 'window must be >= blockAt');
 
   /// Repeat count (inclusive) at which a call earns a warning.
   final int warnAt;
@@ -65,16 +65,16 @@ class LoopGuard {
   /// A short note to feed back to the model (as a tool result) on [warn] or
   /// [block], explaining why so it changes course. Empty for [proceed].
   String feedback(String tool, LoopAction action) => switch (action) {
-        LoopAction.warn =>
-          'Loop guard: you already called `$tool` with these exact arguments and '
-              'got the same result. Do not repeat it — take a different action or '
-              'finish your reply.',
-        LoopAction.block =>
-          'Loop guard: `$tool` was called repeatedly with identical arguments and '
-              'is stuck in a loop, so this call was NOT executed. Choose a '
-              'different action or finalize now.',
-        LoopAction.proceed => '',
-      };
+    LoopAction.warn =>
+      'Loop guard: you already called `$tool` with these exact arguments and '
+          'got the same result. Do not repeat it — take a different action or '
+          'finish your reply.',
+    LoopAction.block =>
+      'Loop guard: `$tool` was called repeatedly with identical arguments and '
+          'is stuck in a loop, so this call was NOT executed. Choose a '
+          'different action or finalize now.',
+    LoopAction.proceed => '',
+  };
 
   /// Forget all history (e.g. when a session's conversation is cleared).
   void reset() => _recent.clear();

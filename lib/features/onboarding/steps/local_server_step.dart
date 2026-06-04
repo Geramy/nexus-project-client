@@ -71,8 +71,7 @@ class _LocalServerStepState extends ConsumerState<LocalServerStep> {
         apiKey: apiKey,
         providerType: 'lemonade',
       );
-      final models =
-          await backendForServer(probe).listModels(showAll: true);
+      final models = await backendForServer(probe).listModels(showAll: true);
 
       final clientId = ref.read(currentClientIdProvider);
       final db = ref.read(nexusDatabaseProvider);
@@ -88,8 +87,9 @@ class _LocalServerStepState extends ConsumerState<LocalServerStep> {
           isEnabled: const Value(true),
           availableModelsJson: const Value('[]'),
           extraConfigJson: const Value('{}'),
-          capabilitiesJson:
-              const Value('{"isLemonade":true,"fullLemonadeManaged":true}'),
+          capabilitiesJson: const Value(
+            '{"isLemonade":true,"fullLemonadeManaged":true}',
+          ),
         ),
       );
       if (apiKey.isNotEmpty) {
@@ -102,7 +102,8 @@ class _LocalServerStepState extends ConsumerState<LocalServerStep> {
 
       if (!mounted) return;
       setState(() {
-        _success = 'Connected — ${models.length} model${models.length == 1 ? '' : 's'} available. Added "$name".';
+        _success =
+            'Connected — ${models.length} model${models.length == 1 ? '' : 's'} available. Added "$name".';
         // Reset the form for the next server (add-another loop).
         _name.text = 'My Lemonade Server';
         _url.text = 'http://localhost:13305';
@@ -125,110 +126,144 @@ class _LocalServerStepState extends ConsumerState<LocalServerStep> {
 
     return SingleChildScrollView(
       child: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text('Connect a local server',
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Connect a local server',
             textAlign: TextAlign.center,
-            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-        Gap.xs,
-        Text(
-          'Point Nexus at your own Lemonade server(s). We test the connection '
-          'before saving.',
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodyMedium?.copyWith(color: context.nx.textMuted),
-        ),
-        Gap.lg,
-        if (servers.isNotEmpty) ...[
-          for (final s in servers)
-            Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-              child: NexusCard(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                child: Row(
-                  children: [
-                    Icon(Icons.dns_outlined, color: theme.colorScheme.primary, size: 20),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(s.name,
-                              style: theme.textTheme.titleSmall,
-                              overflow: TextOverflow.ellipsis),
-                          Text(s.baseUrl,
-                              style: theme.textTheme.bodySmall
-                                  ?.copyWith(color: context.nx.textMuted),
-                              overflow: TextOverflow.ellipsis),
-                        ],
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Gap.xs,
+          Text(
+            'Point Nexus at your own Lemonade server(s). We test the connection '
+            'before saving.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: context.nx.textMuted,
+            ),
+          ),
+          Gap.lg,
+          if (servers.isNotEmpty) ...[
+            for (final s in servers)
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: NexusCard(
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.dns_outlined,
+                        color: theme.colorScheme.primary,
+                        size: 20,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              s.name,
+                              style: theme.textTheme.titleSmall,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              s.baseUrl,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: context.nx.textMuted,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
+            Gap.sm,
+          ],
+          NexusCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Add a server', style: theme.textTheme.titleSmall),
+                Gap.md,
+                TextField(
+                  controller: _name,
+                  decoration: const InputDecoration(
+                    labelText: 'Server name',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                Gap.sm,
+                TextField(
+                  controller: _url,
+                  decoration: const InputDecoration(
+                    labelText: 'Base URL',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                Gap.sm,
+                TextField(
+                  controller: _apiKey,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'API key (optional)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                if (_error != null) ...[
+                  Gap.sm,
+                  _Hint(
+                    _error!,
+                    color: theme.colorScheme.error,
+                    icon: Icons.error_outline,
+                  ),
+                ],
+                if (_success != null) ...[
+                  Gap.sm,
+                  _Hint(
+                    _success!,
+                    color: theme.colorScheme.primary,
+                    icon: Icons.check_circle_outline,
+                  ),
+                ],
+                Gap.md,
+                OutlinedButton.icon(
+                  onPressed: _testing ? null : _testAndAdd,
+                  icon: _testing
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.add_link, size: 18),
+                  label: Text(_testing ? 'Testing…' : 'Test & add server'),
+                ),
+              ],
             ),
-          Gap.sm,
-        ],
-        NexusCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('Add a server', style: theme.textTheme.titleSmall),
-              Gap.md,
-              TextField(
-                controller: _name,
-                decoration: const InputDecoration(
-                    labelText: 'Server name', border: OutlineInputBorder()),
-              ),
-              Gap.sm,
-              TextField(
-                controller: _url,
-                decoration: const InputDecoration(
-                    labelText: 'Base URL', border: OutlineInputBorder()),
-              ),
-              Gap.sm,
-              TextField(
-                controller: _apiKey,
-                obscureText: true,
-                decoration: const InputDecoration(
-                    labelText: 'API key (optional)', border: OutlineInputBorder()),
-              ),
-              if (_error != null) ...[
-                Gap.sm,
-                _Hint(_error!, color: theme.colorScheme.error, icon: Icons.error_outline),
-              ],
-              if (_success != null) ...[
-                Gap.sm,
-                _Hint(_success!, color: theme.colorScheme.primary, icon: Icons.check_circle_outline),
-              ],
-              Gap.md,
-              OutlinedButton.icon(
-                onPressed: _testing ? null : _testAndAdd,
-                icon: _testing
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.add_link, size: 18),
-                label: Text(_testing ? 'Testing…' : 'Test & add server'),
-              ),
-            ],
           ),
-        ),
-        Gap.lg,
-        GradientButton(
-          onPressed: widget.onContinue,
-          label: servers.isEmpty ? 'Skip for now' : 'Continue',
-          icon: Icons.arrow_forward,
-          expand: true,
-        ),
-        if (servers.isEmpty) ...[
-          Gap.xs,
-          Text('Optional — you can add servers later from AI Providers.',
+          Gap.lg,
+          GradientButton(
+            onPressed: widget.onContinue,
+            label: servers.isEmpty ? 'Skip for now' : 'Continue',
+            icon: Icons.arrow_forward,
+            expand: true,
+          ),
+          if (servers.isEmpty) ...[
+            Gap.xs,
+            Text(
+              'Optional — you can add servers later from AI Providers.',
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(color: context.nx.textMuted)),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: context.nx.textMuted,
+              ),
+            ),
+          ],
         ],
-      ],
       ),
     );
   }
@@ -247,7 +282,9 @@ class _Hint extends StatelessWidget {
       children: [
         Icon(icon, size: 18, color: color),
         const SizedBox(width: 6),
-        Expanded(child: Text(message, style: TextStyle(color: color, fontSize: 13))),
+        Expanded(
+          child: Text(message, style: TextStyle(color: color, fontSize: 13)),
+        ),
       ],
     );
   }

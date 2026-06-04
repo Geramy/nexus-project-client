@@ -18,7 +18,11 @@ class InfrastructureBadge extends StatelessWidget {
       ),
       child: const Text(
         'Local Lemonade Infrastructure',
-        style: TextStyle(fontSize: 11, color: Colors.deepPurple, fontWeight: FontWeight.w600),
+        style: TextStyle(
+          fontSize: 11,
+          color: Colors.deepPurple,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

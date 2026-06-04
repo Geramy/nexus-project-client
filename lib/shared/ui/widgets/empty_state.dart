@@ -54,8 +54,9 @@ class EmptyState extends StatelessWidget {
             Text(
               title,
               textAlign: TextAlign.center,
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w700),
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
             ),
             if (message != null) ...[
               const SizedBox(height: AppSpacing.sm),
@@ -64,8 +65,9 @@ class EmptyState extends StatelessWidget {
                 child: Text(
                   message!,
                   textAlign: TextAlign.center,
-                  style:
-                      theme.textTheme.bodySmall?.copyWith(color: nx.textMuted),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: nx.textMuted,
+                  ),
                 ),
               ),
             ],

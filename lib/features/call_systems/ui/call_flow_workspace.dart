@@ -23,8 +23,9 @@ import 'export_dialog.dart';
 import 'node_visuals.dart';
 
 /// Builder's Regular(false)/Advanced(true) toggle — gates the node palette.
-final callBuilderAdvancedProvider =
-    StateProvider.family<bool, int>((ref, projectId) => false);
+final callBuilderAdvancedProvider = StateProvider.family<bool, int>(
+  (ref, projectId) => false,
+);
 
 /// Center-pane workspace for the IVR / Call Systems project type: a toolbar
 /// (add-node palette, Regular/Advanced toggle) over the visual call-flow canvas.
@@ -48,25 +49,41 @@ class CallFlowWorkspace extends ConsumerWidget {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
+            AppSpacing.lg,
+            AppSpacing.md,
+            AppSpacing.lg,
+            AppSpacing.sm,
+          ),
           child: Row(
             children: [
-              Icon(Icons.account_tree_outlined, color: theme.colorScheme.primary),
+              Icon(
+                Icons.account_tree_outlined,
+                color: theme.colorScheme.primary,
+              ),
               const SizedBox(width: AppSpacing.sm),
               Flexible(
-                child: Text('Call Flow · ${project.name}',
-                    style: theme.textTheme.titleMedium,
-                    overflow: TextOverflow.ellipsis),
+                child: Text(
+                  'Call Flow · ${project.name}',
+                  style: theme.textTheme.titleMedium,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               const Spacer(),
-              Text('Advanced',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: context.nx.textMuted)),
+              Text(
+                'Advanced',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: context.nx.textMuted,
+                ),
+              ),
               Switch(
                 value: advanced,
-                onChanged: (v) => ref
-                    .read(callBuilderAdvancedProvider(projectId).notifier)
-                    .state = v,
+                onChanged: (v) =>
+                    ref
+                            .read(
+                              callBuilderAdvancedProvider(projectId).notifier,
+                            )
+                            .state =
+                        v,
               ),
               const SizedBox(width: AppSpacing.sm),
               OutlinedButton.icon(
@@ -76,8 +93,8 @@ class CallFlowWorkspace extends ConsumerWidget {
               ),
               const SizedBox(width: AppSpacing.sm),
               OutlinedButton.icon(
-                onPressed: () => _downloadWorkspaceZip(
-                    context, ref, projectId, project),
+                onPressed: () =>
+                    _downloadWorkspaceZip(context, ref, projectId, project),
                 icon: const Icon(Icons.download, size: 18),
                 label: const Text('Download'),
               ),
@@ -91,7 +108,9 @@ class CallFlowWorkspace extends ConsumerWidget {
               PopupMenuButton<CallNodeType>(
                 tooltip: 'Add a step',
                 onSelected: (type) {
-                  final flow = project.flows.isEmpty ? null : project.flows.first;
+                  final flow = project.flows.isEmpty
+                      ? null
+                      : project.flows.first;
                   final n = (flow?.nodes.length ?? 0);
                   // Cascade new nodes so they don't stack exactly.
                   final x = 340.0 + (n % 4) * 36.0;
@@ -106,9 +125,11 @@ class CallFlowWorkspace extends ConsumerWidget {
                       value: t,
                       child: Row(
                         children: [
-                          Icon(iconForNodeType(t),
-                              size: 18,
-                              color: colorForNodeType(t, theme.colorScheme)),
+                          Icon(
+                            iconForNodeType(t),
+                            size: 18,
+                            color: colorForNodeType(t, theme.colorScheme),
+                          ),
                           const SizedBox(width: AppSpacing.sm),
                           Text(titleForNodeType(t)),
                         ],
@@ -148,9 +169,7 @@ Future<void> _downloadWorkspaceZip(
   CallSystemProject project,
 ) async {
   final messenger = ScaffoldMessenger.of(context);
-  messenger.showSnackBar(
-    const SnackBar(content: Text('Packaging project…')),
-  );
+  messenger.showSnackBar(const SnackBar(content: Text('Packaging project…')));
   try {
     final ws = await ref.read(workspaceFsProvider(projectId).future);
     // Drop any synthesized audio no prompt references anymore so the export is
@@ -166,10 +185,14 @@ Future<void> _downloadWorkspaceZip(
     final zip = await exportWorkspaceZip(ws, project.name);
     await revealInFileManager(zip.zipPath);
     messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(SnackBar(
-      content: Text('Exported ${zip.fileCount} file(s) '
-          '(${formatBytes(zip.bytes)}) → ${zip.zipPath}'),
-    ));
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Exported ${zip.fileCount} file(s) '
+          '(${formatBytes(zip.bytes)}) → ${zip.zipPath}',
+        ),
+      ),
+    );
   } catch (e) {
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(SnackBar(content: Text('Export failed: $e')));
@@ -193,11 +216,16 @@ class _ReviewBanner extends ConsumerWidget {
       width: double.infinity,
       color: const Color(0xFFD9920B).withValues(alpha: 0.12),
       padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.sm,
+      ),
       child: Row(
         children: [
-          const Icon(Icons.rate_review_outlined,
-              size: 18, color: Color(0xFFB47708)),
+          const Icon(
+            Icons.rate_review_outlined,
+            size: 18,
+            color: Color(0xFFB47708),
+          ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(

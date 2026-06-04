@@ -21,9 +21,17 @@ class PlaceholderCenter extends StatelessWidget {
           const SizedBox(height: 16),
           Text(title, style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 8),
-          Text(subtitle, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey)),
+          Text(
+            subtitle,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: Colors.grey),
+          ),
           const SizedBox(height: 24),
-          const Text('This area will be built in later phases per the spec.', style: TextStyle(color: Colors.grey)),
+          const Text(
+            'This area will be built in later phases per the spec.',
+            style: TextStyle(color: Colors.grey),
+          ),
         ],
       ),
     );

@@ -13,19 +13,19 @@ enum TagSource { user, ai, workspace }
 extension TagStatusX on TagStatus {
   String get wire => name;
   static TagStatus fromWire(String? s) => switch (s) {
-        'accepted' => TagStatus.accepted,
-        'rejected' => TagStatus.rejected,
-        _ => TagStatus.proposed,
-      };
+    'accepted' => TagStatus.accepted,
+    'rejected' => TagStatus.rejected,
+    _ => TagStatus.proposed,
+  };
 }
 
 extension TagSourceX on TagSource {
   String get wire => name;
   static TagSource fromWire(String? s) => switch (s) {
-        'user' => TagSource.user,
-        'workspace' => TagSource.workspace,
-        _ => TagSource.ai,
-      };
+    'user' => TagSource.user,
+    'workspace' => TagSource.workspace,
+    _ => TagSource.ai,
+  };
 }
 
 /// UI-facing view of a ProjectTags row. Decouples widgets/resolver from the
@@ -41,8 +41,10 @@ class ProjectTag {
   final TagSource source;
   final String origin; // setup|plan|agent|workspace
   final TagStatus status;
-  final String? layerKey; // client|server|db|worker|module ; null = project-wide
-  final String? forLanguage; // libraries only: the language this lib is used with
+  final String?
+  layerKey; // client|server|db|worker|module ; null = project-wide
+  final String?
+  forLanguage; // libraries only: the language this lib is used with
   final String? rationale;
   final String? sourceUrl;
   final String? verdict; // fresh|aging|stale|dead (library/framework only)

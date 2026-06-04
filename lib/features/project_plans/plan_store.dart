@@ -24,7 +24,12 @@ class PlanNode {
   /// Parent directory's workspace path (`/PLANS` for top-level plans).
   final String parent;
   final bool isFolder;
-  const PlanNode({required this.path, required this.name, required this.parent, required this.isFolder});
+  const PlanNode({
+    required this.path,
+    required this.name,
+    required this.parent,
+    required this.isFolder,
+  });
 }
 
 /// Path-addressed plan CRUD backed by the project [Workspace]. Files are the
@@ -43,17 +48,29 @@ class PlanStore {
     final entries = await _ws.walk(from: plansRoot);
     return [
       for (final e in entries)
-        PlanNode(path: e.path, name: e.name, parent: e.parent, isFolder: e.isDirectory),
+        PlanNode(
+          path: e.path,
+          name: e.name,
+          parent: e.parent,
+          isFolder: e.isDirectory,
+        ),
     ];
   }
 
-  Future<bool> isFolder(String path) async => (await _ws.stat(path)).isDirectory;
+  Future<bool> isFolder(String path) async =>
+      (await _ws.stat(path)).isDirectory;
   Future<String> read(String path) => _ws.readString(path);
-  Future<void> write(String path, String content) async => _ws.writeString(path, content);
+  Future<void> write(String path, String content) async =>
+      _ws.writeString(path, content);
 
   /// Creates a plan document or folder under [parent] (defaults to `/PLANS`).
   /// Returns the new node's workspace path.
-  Future<String> create({String? parent, required String name, required bool isFolder, String content = ''}) async {
+  Future<String> create({
+    String? parent,
+    required String name,
+    required bool isFolder,
+    String content = '',
+  }) async {
     await ensureRoot();
     final target = _join(parent ?? plansRoot, name);
     if (isFolder) {
@@ -76,7 +93,9 @@ class PlanStore {
 
   static String _join(String parent, String name) {
     final clean = name.trim().replaceAll('/', '-');
-    final base = parent.endsWith('/') ? parent.substring(0, parent.length - 1) : parent;
+    final base = parent.endsWith('/')
+        ? parent.substring(0, parent.length - 1)
+        : parent;
     return '$base/$clean';
   }
 
@@ -87,13 +106,19 @@ class PlanStore {
 }
 
 /// A [PlanStore] bound to a project's workspace.
-final planStoreProvider = FutureProvider.family<PlanStore, int>((ref, projectId) async {
+final planStoreProvider = FutureProvider.family<PlanStore, int>((
+  ref,
+  projectId,
+) async {
   final ws = await ref.watch(workspaceFsProvider(projectId).future);
   return PlanStore(ws);
 });
 
 /// Reactive plan tree for a project. Re-walks when the workspace mutates.
-final plansForProjectProvider = FutureProvider.family<List<PlanNode>, int>((ref, projectId) async {
+final plansForProjectProvider = FutureProvider.family<List<PlanNode>, int>((
+  ref,
+  projectId,
+) async {
   ref.watch(workspaceRevisionProvider(projectId));
   final store = await ref.watch(planStoreProvider(projectId).future);
   return store.list();

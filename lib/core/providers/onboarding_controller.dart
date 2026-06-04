@@ -59,5 +59,5 @@ class OnboardingController extends StateNotifier<OnboardingStatus> {
 
 final onboardingControllerProvider =
     StateNotifierProvider<OnboardingController, OnboardingStatus>(
-  (ref) => OnboardingController(ref),
-);
+      (ref) => OnboardingController(ref),
+    );

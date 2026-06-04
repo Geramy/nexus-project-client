@@ -7,7 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:nexus_projects_client/core/providers/app_shell_provider.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
-import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart' show NexusDatabase, AgentPersonasCompanion;
+import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart'
+    show NexusDatabase, AgentPersonasCompanion;
 
 import 'tabs/personas_tab.dart';
 import 'tabs/cost_usage_tab.dart';
@@ -30,7 +31,11 @@ class AgentsHubView extends ConsumerWidget {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0),
+              AppSpacing.lg,
+              AppSpacing.md,
+              AppSpacing.lg,
+              0,
+            ),
             child: SectionHeader(
               title: 'Agents / Personas',
               trailing: GradientButton(
@@ -55,7 +60,7 @@ class AgentsHubView extends ConsumerWidget {
                 const CostUsageTab(),
               ],
             ),
-          )
+          ),
         ],
       ),
     );
@@ -75,8 +80,14 @@ class AgentsHubView extends ConsumerWidget {
           decoration: const InputDecoration(labelText: 'Persona Name'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, nameCtrl.text.trim()), child: const Text('Create')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, nameCtrl.text.trim()),
+            child: const Text('Create'),
+          ),
         ],
       ),
     );

@@ -45,12 +45,22 @@ class _AdminBackendsTabState extends ConsumerState<AdminBackendsTab> {
     }
   }
 
-  Future<void> _install(String recipe, String backend, {bool force = false}) async {
+  Future<void> _install(
+    String recipe,
+    String backend, {
+    bool force = false,
+  }) async {
     final client = ref.read(adminConsoleClientProvider);
     if (client == null) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Installing $recipe:$backend…')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Installing $recipe:$backend…')));
     try {
-      await client.admin.install(recipe: recipe, backend: backend, force: force);
+      await client.admin.install(
+        recipe: recipe,
+        backend: backend,
+        force: force,
+      );
     } catch (e) {
       _showError('Install failed: $e');
     } finally {
@@ -61,9 +71,9 @@ class _AdminBackendsTabState extends ConsumerState<AdminBackendsTab> {
   Future<void> _uninstall(String recipe, String backend) async {
     final client = ref.read(adminConsoleClientProvider);
     if (client == null) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Uninstalling $recipe:$backend…')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Uninstalling $recipe:$backend…')));
     try {
       await client.admin.uninstall(recipe: recipe, backend: backend);
     } catch (e) {
@@ -135,7 +145,8 @@ class _RecipeCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(recipe, style: Theme.of(context).textTheme.titleMedium),
                 const Spacer(),
-                if (defaultBackend != null) Chip(label: Text('default: $defaultBackend')),
+                if (defaultBackend != null)
+                  Chip(label: Text('default: $defaultBackend')),
               ],
             ),
             const SizedBox(height: 8),
@@ -202,7 +213,8 @@ class _BackendRow extends StatelessWidget {
                   '$backend${version == null ? "" : "  ·  v$version"}',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
-                if (message.isNotEmpty) Text(message, style: Theme.of(context).textTheme.bodySmall),
+                if (message.isNotEmpty)
+                  Text(message, style: Theme.of(context).textTheme.bodySmall),
               ],
             ),
           ),

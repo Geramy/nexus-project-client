@@ -39,12 +39,12 @@ class _OnboardingWizardState extends ConsumerState<OnboardingWizard> {
 
   /// The ordered steps for the current path (server step only on the BYO path).
   List<OnboardingStep> get _sequence => [
-        OnboardingStep.welcome,
-        OnboardingStep.account,
-        if (_byoServers) OnboardingStep.localServer,
-        OnboardingStep.project,
-        OnboardingStep.done,
-      ];
+    OnboardingStep.welcome,
+    OnboardingStep.account,
+    if (_byoServers) OnboardingStep.localServer,
+    OnboardingStep.project,
+    OnboardingStep.done,
+  ];
 
   void _go(OnboardingStep step) => setState(() => _step = step);
 
@@ -102,8 +102,9 @@ class _OnboardingWizardState extends ConsumerState<OnboardingWizard> {
                   // lower half fell below the fold.
                   Expanded(
                     child: Padding(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.xl,
+                      ),
                       child: AnimatedSwitcher(
                         duration: AppMotion.base,
                         child: KeyedSubtree(
@@ -136,10 +137,7 @@ class _OnboardingWizardState extends ConsumerState<OnboardingWizard> {
       case OnboardingStep.welcome:
         return WelcomeStep(onStart: _next);
       case OnboardingStep.account:
-        return AccountStep(
-          onContinue: _next,
-          onLocalServers: _goToServers,
-        );
+        return AccountStep(onContinue: _next, onLocalServers: _goToServers);
       case OnboardingStep.localServer:
         return LocalServerStep(onContinue: _next);
       case OnboardingStep.project:
@@ -172,9 +170,12 @@ class _Header extends StatelessWidget {
           child: const Icon(Icons.hub, color: Colors.white, size: 30),
         ),
         Gap.sm,
-        Text('Nexus Projects',
-            style:
-                theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+        Text(
+          'Nexus Projects',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         Gap.md,
         Row(
           mainAxisSize: MainAxisSize.min,

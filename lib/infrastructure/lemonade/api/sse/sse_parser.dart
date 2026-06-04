@@ -17,7 +17,10 @@ class SseEvent {
 
 /// Parse an HTTP body byte stream into [SseEvent]s.
 Stream<SseEvent> parseSseStream(Stream<List<int>> bytes) {
-  return bytes.transform(utf8.decoder).transform(const LineSplitter()).transform(
+  return bytes
+      .transform(utf8.decoder)
+      .transform(const LineSplitter())
+      .transform(
         StreamTransformer<String, SseEvent>.fromHandlers(
           handleData: _SseLineHandler().handle,
           handleDone: (sink) => sink.close(),

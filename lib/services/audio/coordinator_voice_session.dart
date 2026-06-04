@@ -156,10 +156,4 @@ class CoordinatorVoiceSession {
   }
 }
 
-enum VoiceState {
-  idle,
-  listening,
-  processing,
-  speaking,
-  error,
-}
+enum VoiceState { idle, listening, processing, speaking, error }

@@ -21,7 +21,11 @@ class ServerCountChip extends StatelessWidget {
       ),
       child: Text(
         '$count',
-        style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
+        style: TextStyle(
+          fontSize: 11,
+          color: color,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

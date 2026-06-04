@@ -24,14 +24,18 @@ class LemonadeCredit extends StatelessWidget {
         onTap: () => openExternalUrl(lemonadeGithubUrl),
         child: Padding(
           padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+            horizontal: AppSpacing.sm,
+            vertical: AppSpacing.xs,
+          ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text('🍋', style: TextStyle(fontSize: 13, color: muted)),
               const SizedBox(width: 6),
-              Text('Backend powered by Lemonade',
-                  style: TextStyle(fontSize: 12, color: muted)),
+              Text(
+                'Backend powered by Lemonade',
+                style: TextStyle(fontSize: 12, color: muted),
+              ),
               const SizedBox(width: 4),
               Icon(Icons.open_in_new, size: 12, color: muted),
             ],

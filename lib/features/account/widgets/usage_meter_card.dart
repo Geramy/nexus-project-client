@@ -25,8 +25,10 @@ class UsageMeterCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Text('Usage this period',
-                    style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  'Usage this period',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 const SizedBox(width: 10),
                 if (usage.throttled) _ThrottledBadge(tps: usage.throttleTps),
               ],
@@ -107,9 +109,14 @@ class _ThrottledBadge extends StatelessWidget {
         children: [
           Icon(Icons.speed, size: 13, color: color),
           const SizedBox(width: 4),
-          Text(label,
-              style: TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w600, color: color)),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
         ],
       ),
     );

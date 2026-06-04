@@ -25,7 +25,11 @@ Future<String> projectDiskPath(int projectId) async {
 Future<String> taskDiskPath(int projectId, int taskPk) async {
   final base = (await getApplicationSupportDirectory()).path;
   return p.join(
-      base, 'workspaces', 'tasks', 'project_${projectId}_task_$taskPk.nxtprj');
+    base,
+    'workspaces',
+    'tasks',
+    'project_${projectId}_task_$taskPk.nxtprj',
+  );
 }
 
 /// Delete a finished task's working-tree disk (best-effort). The project's git
@@ -45,7 +49,8 @@ Future<void> pruneTaskDisks(int projectId) async {
     final dir = Directory(p.join(base, 'workspaces', 'tasks'));
     if (!await dir.exists()) return;
     await for (final e in dir.list()) {
-      if (e is File && p.basename(e.path).startsWith('project_${projectId}_task_')) {
+      if (e is File &&
+          p.basename(e.path).startsWith('project_${projectId}_task_')) {
         try {
           await e.delete();
         } catch (_) {}
@@ -57,7 +62,10 @@ Future<void> pruneTaskDisks(int projectId) async {
 /// The project's workspace: a single-file SQLite "virtual disk", accessed
 /// purely through the [Workspace] API (no mounting). Cached per project; the
 /// same file is later bound to the git2dart custom backend.
-final workspaceFsProvider = FutureProvider.family<Workspace, int>((ref, projectId) async {
+final workspaceFsProvider = FutureProvider.family<Workspace, int>((
+  ref,
+  projectId,
+) async {
   final path = await projectDiskPath(projectId);
   // Ensure the parent dir exists before SQLite opens the file.
   await Directory(p.dirname(path)).create(recursive: true);
@@ -72,15 +80,15 @@ final workspaceFsProvider = FutureProvider.family<Workspace, int>((ref, projectI
 /// under the git lane) and commits it back; the file is deleted on completion.
 final taskWorkspaceProvider =
     FutureProvider.family<Workspace, ({int projectId, int taskPk})>((
-  ref,
-  key,
-) async {
-  final path = await taskDiskPath(key.projectId, key.taskPk);
-  await Directory(p.dirname(path)).create(recursive: true);
-  final ws = await VhdWorkspace.open(path);
-  ref.onDispose(() => ws.dispose());
-  return ws;
-});
+      ref,
+      key,
+    ) async {
+      final path = await taskDiskPath(key.projectId, key.taskPk);
+      await Directory(p.dirname(path)).create(recursive: true);
+      final ws = await VhdWorkspace.open(path);
+      ref.onDispose(() => ws.dispose());
+      return ws;
+    });
 
 /// Per-project "git lane": serializes all multi-step git object/ref operations
 /// (materialize / commit / merge) across concurrent task agents, since the
@@ -90,9 +98,13 @@ final gitLaneProvider = Provider.family<AsyncLock, int>((ref, projectId) {
 });
 
 /// Bumped to force the browser to re-list after a mutation (create/delete/move).
-final workspaceRevisionProvider = StateProvider.family<int, int>((ref, projectId) => 0);
+final workspaceRevisionProvider = StateProvider.family<int, int>(
+  (ref, projectId) => 0,
+);
 
 /// The currently-open file in the right-panel editor. Shared between the
 /// center tree and the right-panel editor so a click in the tree opens the
 /// file on the right.
-final selectedWorkspaceFileProvider = StateProvider.family<String?, int>((ref, projectId) => null);
+final selectedWorkspaceFileProvider = StateProvider.family<String?, int>(
+  (ref, projectId) => null,
+);

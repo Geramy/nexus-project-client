@@ -29,6 +29,7 @@ class CoordinatorDuplexVoiceSession {
   final AudioRecorderService recorder;
   final TtsService tts;
   final VoiceActivityService vad;
+
   /// STT model id to transcribe with. When null the server/default is used
   /// (which may 404 on servers without an OpenAI-style `whisper-1`).
   final String? sttModel;
@@ -37,7 +38,8 @@ class CoordinatorDuplexVoiceSession {
   /// [onAssistantReply] receives the reply text plus the path to its synthesized
   /// audio (when available) so the session can replay it.
   final void Function(String userText)? onUserTranscript;
-  final void Function(String assistantText, String? audioPath)? onAssistantReply;
+  final void Function(String assistantText, String? audioPath)?
+  onAssistantReply;
   final void Function(String note)? onSystemNote;
 
   final AudioSessionService _audioSession = AudioSessionService();
@@ -85,14 +87,20 @@ class CoordinatorDuplexVoiceSession {
 
     // Use the audio captured BY the VAD for the just-completed utterance.
     _speechEndSub = vad.onSpeechEnd.listen(_handleUtterance);
-    debugPrint('[Voice] Duplex call started. sttModel=${sttModel ?? "(server default — likely whisper-1)"}');
+    debugPrint(
+      '[Voice] Duplex call started. sttModel=${sttModel ?? "(server default — likely whisper-1)"}',
+    );
   }
 
   /// Processes one completed utterance: STT → coordinator (with tools) → TTS.
   Future<void> _handleUtterance(List<double> samples) async {
-    debugPrint('[Voice] _handleUtterance: ${samples.length} samples (active=$_isActive busy=$_busy)');
+    debugPrint(
+      '[Voice] _handleUtterance: ${samples.length} samples (active=$_isActive busy=$_busy)',
+    );
     if (!_isActive || _busy || samples.isEmpty) {
-      debugPrint('[Voice] utterance skipped (active=$_isActive busy=$_busy empty=${samples.isEmpty})');
+      debugPrint(
+        '[Voice] utterance skipped (active=$_isActive busy=$_busy empty=${samples.isEmpty})',
+      );
       return;
     }
     _busy = true;
@@ -101,7 +109,9 @@ class CoordinatorDuplexVoiceSession {
       _stateController.add(VoiceState.processing);
 
       final wav = _floatSamplesToWav(samples);
-      debugPrint('[Voice] transcribing ${wav.length} WAV bytes with model=${sttModel ?? "(server default)"}');
+      debugPrint(
+        '[Voice] transcribing ${wav.length} WAV bytes with model=${sttModel ?? "(server default)"}',
+      );
       final stt = await coordinatorSession.client.transcribeAudio(
         audioBytes: wav,
         filename: 'utterance.wav',
@@ -115,7 +125,9 @@ class CoordinatorDuplexVoiceSession {
 
         final reply = StringBuffer();
 
-        debugPrint('[Voice] sending transcript to coordinator (model=${coordinatorSession.model ?? "(default)"})…');
+        debugPrint(
+          '[Voice] sending transcript to coordinator (model=${coordinatorSession.model ?? "(default)"})…',
+        );
         // runTurn handles the tool loop internally and produces a spoken answer.
         await for (final event in coordinatorSession.runTurn(
           transcript,
@@ -147,7 +159,9 @@ class CoordinatorDuplexVoiceSession {
           }
         } else {
           debugPrint('[Voice] no spoken reply produced by the model');
-          onSystemNote?.call('(No spoken reply produced. Check that the chat model is valid.)');
+          onSystemNote?.call(
+            '(No spoken reply produced. Check that the chat model is valid.)',
+          );
         }
       }
     } catch (e, st) {
@@ -219,8 +233,12 @@ class CoordinatorDuplexVoiceSession {
 
     final builder = BytesBuilder();
     void writeStr(String s) => builder.add(s.codeUnits);
-    void writeU32(int v) =>
-        builder.add([v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >> 24) & 0xff]);
+    void writeU32(int v) => builder.add([
+      v & 0xff,
+      (v >> 8) & 0xff,
+      (v >> 16) & 0xff,
+      (v >> 24) & 0xff,
+    ]);
     void writeU16(int v) => builder.add([v & 0xff, (v >> 8) & 0xff]);
 
     writeStr('RIFF');
@@ -242,10 +260,4 @@ class CoordinatorDuplexVoiceSession {
 }
 
 /// Shared voice UI state used by the Coordinator call screens.
-enum VoiceState {
-  idle,
-  listening,
-  processing,
-  speaking,
-  error,
-}
+enum VoiceState { idle, listening, processing, speaking, error }

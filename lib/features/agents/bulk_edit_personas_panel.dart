@@ -100,35 +100,50 @@ class _BulkEditPersonasPanelState extends ConsumerState<BulkEditPersonasPanel> {
         if (_applyTools) {
           final row = await db.resolveAgentPersona(id);
           configJson = Value(
-            AgentToolPermissions.writeIntoConfigJson(row?.configJson, _toolPerms),
+            AgentToolPermissions.writeIntoConfigJson(
+              row?.configJson,
+              _toolPerms,
+            ),
           );
         }
 
-        updated += await (db.update(db.agentPersonas)
-              ..where((p) => p.agent_pk.equals(id)))
-            .write(
-          AgentPersonasCompanion(
-            provider_fk: _applyServer ? Value(_serverId) : const Value.absent(),
-            omniCollectionModel:
-                _applyModels ? Value(_safe(_omniCollection)) : const Value.absent(),
-            ttsModel: _applyModels ? Value(resolved!.tts) : const Value.absent(),
-            sttModel: _applyModels ? Value(resolved!.stt) : const Value.absent(),
-            imageGenModel:
-                _applyModels ? Value(resolved!.imageGen) : const Value.absent(),
-            visionModel:
-                _applyModels ? Value(resolved!.vision) : const Value.absent(),
-            llmModel: _applyModels ? Value(resolved!.llm) : const Value.absent(),
-            title: _applyRole ? Value(_role?.key) : const Value.absent(),
-            configJson: configJson,
-            updatedAt: Value(DateTime.now()),
-          ),
-        );
+        updated +=
+            await (db.update(
+              db.agentPersonas,
+            )..where((p) => p.agent_pk.equals(id))).write(
+              AgentPersonasCompanion(
+                provider_fk: _applyServer
+                    ? Value(_serverId)
+                    : const Value.absent(),
+                omniCollectionModel: _applyModels
+                    ? Value(_safe(_omniCollection))
+                    : const Value.absent(),
+                ttsModel: _applyModels
+                    ? Value(resolved!.tts)
+                    : const Value.absent(),
+                sttModel: _applyModels
+                    ? Value(resolved!.stt)
+                    : const Value.absent(),
+                imageGenModel: _applyModels
+                    ? Value(resolved!.imageGen)
+                    : const Value.absent(),
+                visionModel: _applyModels
+                    ? Value(resolved!.vision)
+                    : const Value.absent(),
+                llmModel: _applyModels
+                    ? Value(resolved!.llm)
+                    : const Value.absent(),
+                title: _applyRole ? Value(_role?.key) : const Value.absent(),
+                configJson: configJson,
+                updatedAt: Value(DateTime.now()),
+              ),
+            );
       }
       if (!mounted) return;
       ref.read(personaBulkSelectionProvider.notifier).exit();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Updated $updated personas.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Updated $updated personas.')));
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -144,8 +159,9 @@ class _BulkEditPersonasPanelState extends ConsumerState<BulkEditPersonasPanel> {
     final theme = Theme.of(context);
     final selection = ref.watch(personaBulkSelectionProvider);
     final selectedIds = selection.ids.toList();
-    final serversAsync =
-        ref.watch(inferenceServersForClientProvider(widget.clientId));
+    final serversAsync = ref.watch(
+      inferenceServersForClientProvider(widget.clientId),
+    );
     ref.watch(aiServersCacheProvider); // live model lists
 
     return Column(
@@ -164,7 +180,9 @@ class _BulkEditPersonasPanelState extends ConsumerState<BulkEditPersonasPanel> {
                     'Bulk edit ${selectedIds.length} '
                     '${selectedIds.length == 1 ? 'persona' : 'personas'}',
                     style: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w700),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
                 IconButton(
@@ -172,8 +190,9 @@ class _BulkEditPersonasPanelState extends ConsumerState<BulkEditPersonasPanel> {
                   icon: const Icon(Icons.close, size: 18),
                   onPressed: _busy
                       ? null
-                      : () =>
-                          ref.read(personaBulkSelectionProvider.notifier).exit(),
+                      : () => ref
+                            .read(personaBulkSelectionProvider.notifier)
+                            .exit(),
                 ),
               ],
             ),
@@ -191,8 +210,10 @@ class _BulkEditPersonasPanelState extends ConsumerState<BulkEditPersonasPanel> {
                       if (_error != null)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 8),
-                          child: Text(_error!,
-                              style: TextStyle(color: theme.colorScheme.error)),
+                          child: Text(
+                            _error!,
+                            style: TextStyle(color: theme.colorScheme.error),
+                          ),
                         ),
                       Text(
                         'Only the sections you switch on are written to every '
@@ -232,13 +253,15 @@ class _BulkEditPersonasPanelState extends ConsumerState<BulkEditPersonasPanel> {
         Padding(
           padding: const EdgeInsets.all(12),
           child: FilledButton(
-            onPressed:
-                _canApply(selectedIds.length) ? () => _apply(selectedIds) : null,
+            onPressed: _canApply(selectedIds.length)
+                ? () => _apply(selectedIds)
+                : null,
             child: _busy
                 ? const SizedBox(
                     width: 16,
                     height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2))
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
                 : const Text('Apply to selected'),
           ),
         ),
@@ -258,7 +281,10 @@ class _BulkEditPersonasPanelState extends ConsumerState<BulkEditPersonasPanel> {
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           dense: true,
-          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+          title: Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
           value: value,
           onChanged: _busy ? null : onChanged,
         ),
@@ -276,31 +302,43 @@ class _BulkEditPersonasPanelState extends ConsumerState<BulkEditPersonasPanel> {
     return serversAsync.when(
       data: (srvs) {
         if (srvs.isEmpty) {
-          return const Text('No AI Providers configured.',
-              style: TextStyle(fontSize: 12, color: Colors.grey));
+          return const Text(
+            'No AI Providers configured.',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          );
         }
-        final valid =
-            srvs.any((s) => s.server_pk == _serverId) ? _serverId : null;
+        final valid = srvs.any((s) => s.server_pk == _serverId)
+            ? _serverId
+            : null;
         return DropdownButtonFormField<int?>(
           initialValue: valid,
           isExpanded: true,
           decoration: const InputDecoration(
-              border: OutlineInputBorder(), isDense: true, labelText: 'AI Provider'),
+            border: OutlineInputBorder(),
+            isDense: true,
+            labelText: 'AI Provider',
+          ),
           items: [
-            const DropdownMenuItem(value: null, child: Text('Client / project default')),
+            const DropdownMenuItem(
+              value: null,
+              child: Text('Client / project default'),
+            ),
             for (final s in srvs)
               DropdownMenuItem(
                 value: s.server_pk,
-                child: Text('${s.providerType} • ${s.name}',
-                    overflow: TextOverflow.ellipsis),
+                child: Text(
+                  '${s.providerType} • ${s.name}',
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
           ],
           onChanged: (v) => setState(() => _serverId = v),
         );
       },
       loading: () => const Padding(
-          padding: EdgeInsets.all(8),
-          child: Center(child: CircularProgressIndicator())),
+        padding: EdgeInsets.all(8),
+        child: Center(child: CircularProgressIndicator()),
+      ),
       error: (e, _) => Text('Error: $e'),
     );
   }
@@ -319,8 +357,10 @@ class _BulkEditPersonasPanelState extends ConsumerState<BulkEditPersonasPanel> {
         _serverDropdown(serversAsync),
         const SizedBox(height: 8),
         if (_serverId == null)
-          const Text('Select a server to pick models.',
-              style: TextStyle(fontSize: 12, color: Colors.grey))
+          const Text(
+            'Select a server to pick models.',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          )
         else
           _modelPickers(cache[_serverId!]),
       ],
@@ -331,19 +371,26 @@ class _BulkEditPersonasPanelState extends ConsumerState<BulkEditPersonasPanel> {
     final isLoading = entry == null;
     if (isLoading) {
       return const Padding(
-          padding: EdgeInsets.all(8),
-          child: Center(child: CircularProgressIndicator()));
+        padding: EdgeInsets.all(8),
+        child: Center(child: CircularProgressIndicator()),
+      );
     }
     final omniModels = entry.omniModels;
     final individual = entry.individualModels;
 
     final omniItems = <DropdownMenuItem<String?>>[
       const DropdownMenuItem(
-          value: null, child: Text('No Omni Collection — use individual models')),
+        value: null,
+        child: Text('No Omni Collection — use individual models'),
+      ),
       for (final m in omniModels)
-        DropdownMenuItem(value: m.id, child: Text(m.id, overflow: TextOverflow.ellipsis)),
+        DropdownMenuItem(
+          value: m.id,
+          child: Text(m.id, overflow: TextOverflow.ellipsis),
+        ),
     ];
-    final curOmni = _omniCollection?.isNotEmpty == true &&
+    final curOmni =
+        _omniCollection?.isNotEmpty == true &&
             omniModels.any((m) => m.id == _omniCollection)
         ? _omniCollection
         : null;
@@ -355,9 +402,10 @@ class _BulkEditPersonasPanelState extends ConsumerState<BulkEditPersonasPanel> {
           initialValue: curOmni,
           isExpanded: true,
           decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              isDense: true,
-              labelText: 'Omni Collection'),
+            border: OutlineInputBorder(),
+            isDense: true,
+            labelText: 'Omni Collection',
+          ),
           items: omniItems,
           onChanged: (v) => setState(() => _omniCollection = v),
         ),
@@ -374,8 +422,7 @@ class _BulkEditPersonasPanelState extends ConsumerState<BulkEditPersonasPanel> {
   }
 
   Widget _modPicker(String label, String key, List<ApiModelInfo> models) {
-    final cur =
-        models.any((m) => m.id == _mods[key]) ? _mods[key] : null;
+    final cur = models.any((m) => m.id == _mods[key]) ? _mods[key] : null;
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: DropdownButtonFormField<String?>(
@@ -383,11 +430,17 @@ class _BulkEditPersonasPanelState extends ConsumerState<BulkEditPersonasPanel> {
         isExpanded: true,
         isDense: true,
         decoration: InputDecoration(
-            border: const OutlineInputBorder(), isDense: true, labelText: label),
+          border: const OutlineInputBorder(),
+          isDense: true,
+          labelText: label,
+        ),
         items: [
           const DropdownMenuItem(value: null, child: Text('Use default')),
           for (final m in models)
-            DropdownMenuItem(value: m.id, child: Text(m.id, overflow: TextOverflow.ellipsis)),
+            DropdownMenuItem(
+              value: m.id,
+              child: Text(m.id, overflow: TextOverflow.ellipsis),
+            ),
         ],
         onChanged: (v) => setState(() => _mods[key] = v),
       ),
@@ -399,12 +452,16 @@ class _BulkEditPersonasPanelState extends ConsumerState<BulkEditPersonasPanel> {
       initialValue: _role,
       isExpanded: true,
       decoration: const InputDecoration(
-          border: OutlineInputBorder(), isDense: true, labelText: 'Role'),
+        border: OutlineInputBorder(),
+        isDense: true,
+        labelText: 'Role',
+      ),
       items: [
         for (final r in AgentRole.values)
           DropdownMenuItem(
-              value: r,
-              child: Text(r.displayTitle, overflow: TextOverflow.ellipsis)),
+            value: r,
+            child: Text(r.displayTitle, overflow: TextOverflow.ellipsis),
+          ),
       ],
       onChanged: (v) => setState(() => _role = v),
     );
@@ -414,33 +471,47 @@ class _BulkEditPersonasPanelState extends ConsumerState<BulkEditPersonasPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(children: [
-          TextButton(
+        Row(
+          children: [
+            TextButton(
               onPressed: () => _setAllPerms(ToolPerm.grant),
-              child: const Text('Grant all')),
-          TextButton(
+              child: const Text('Grant all'),
+            ),
+            TextButton(
               onPressed: () => _setAllPerms(ToolPerm.ask),
-              child: const Text('Ask all')),
-          TextButton(
+              child: const Text('Ask all'),
+            ),
+            TextButton(
               onPressed: () => _setAllPerms(ToolPerm.deny),
-              child: const Text('Deny all')),
-        ]),
+              child: const Text('Deny all'),
+            ),
+          ],
+        ),
         for (final category in kToolCategories) ...[
           Padding(
             padding: const EdgeInsets.only(top: 6, bottom: 2),
-            child: Text(category,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            child: Text(
+              category,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
           ),
-          ...kCoordinatorToolSpecs.where((t) => t.category == category).map(
+          ...kCoordinatorToolSpecs
+              .where((t) => t.category == category)
+              .map(
                 (t) => Padding(
                   padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Row(children: [
-                    Expanded(
-                        child: Text(t.label,
-                            style: const TextStyle(fontSize: 12),
-                            overflow: TextOverflow.ellipsis)),
-                    _permChip(t.name),
-                  ]),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          t.label,
+                          style: const TextStyle(fontSize: 12),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      _permChip(t.name),
+                    ],
+                  ),
                 ),
               ),
         ],
@@ -466,11 +537,17 @@ class _BulkEditPersonasPanelState extends ConsumerState<BulkEditPersonasPanel> {
         : (cur == ToolPerm.ask ? 'Ask' : 'Deny');
     return PopupMenuButton<ToolPerm>(
       child: Chip(
-          label: Text(label,
-              style: TextStyle(
-                  color: color, fontSize: 11, fontWeight: FontWeight.w600)),
-          backgroundColor: color.withValues(alpha: 0.1),
-          visualDensity: VisualDensity.compact),
+        label: Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        backgroundColor: color.withValues(alpha: 0.1),
+        visualDensity: VisualDensity.compact,
+      ),
       itemBuilder: (_) => const [
         PopupMenuItem(value: ToolPerm.grant, child: Text('Grant')),
         PopupMenuItem(value: ToolPerm.ask, child: Text('Ask')),

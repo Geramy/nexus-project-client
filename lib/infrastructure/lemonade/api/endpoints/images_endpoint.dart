@@ -12,21 +12,44 @@ class ImagesEndpoint {
   const ImagesEndpoint(this._client);
 
   /// `POST /v1/images/generations`
-  Future<ImageResponse> generate(ImageGenerationRequest request, {Duration? timeout}) async {
-    final body = await _client.postJson(_client.apiUriFor('/images/generations'), request.toWireJson(), timeout: timeout ?? const Duration(minutes: 4));
+  Future<ImageResponse> generate(
+    ImageGenerationRequest request, {
+    Duration? timeout,
+  }) async {
+    final body = await _client.postJson(
+      _client.apiUriFor('/images/generations'),
+      request.toWireJson(),
+      timeout: timeout ?? const Duration(minutes: 4),
+    );
     return ImageResponse.fromJson(body);
   }
 
   /// `POST /v1/images/edits` (multipart/form-data).
-  Future<ImageResponse> edit(ImageEditRequest request, {Duration? timeout}) async {
-    final fields = <String, String>{'model': request.model, 'prompt': request.prompt, 'response_format': request.responseFormat, 'n': '${request.n}'};
+  Future<ImageResponse> edit(
+    ImageEditRequest request, {
+    Duration? timeout,
+  }) async {
+    final fields = <String, String>{
+      'model': request.model,
+      'prompt': request.prompt,
+      'response_format': request.responseFormat,
+      'n': '${request.n}',
+    };
     if (request.size != null) fields['size'] = request.size!;
 
     final body = await _client.postMultipart(
       _client.apiUriFor('/images/edits'),
-      fields: fields, files: [
-        MultipartFile(field: 'image', filename: request.sourceFilename, bytes: request.sourceImageBytes, mimeType: request.sourceImageMime),
-      ], timeout: timeout ?? const Duration(minutes: 4));
+      fields: fields,
+      files: [
+        MultipartFile(
+          field: 'image',
+          filename: request.sourceFilename,
+          bytes: request.sourceImageBytes,
+          mimeType: request.sourceImageMime,
+        ),
+      ],
+      timeout: timeout ?? const Duration(minutes: 4),
+    );
 
     return ImageResponse.fromJson(body);
   }
@@ -43,5 +66,14 @@ class ImageEditRequest {
   final String sourceFilename;
   final String sourceImageMime;
 
-  const ImageEditRequest({required this.model, required this.prompt, required this.sourceImageBytes, this.size = '1024x1024', this.n = 1, this.responseFormat = 'b64_json', this.sourceFilename = 'image.png', this.sourceImageMime = 'image/png'});
+  const ImageEditRequest({
+    required this.model,
+    required this.prompt,
+    required this.sourceImageBytes,
+    this.size = '1024x1024',
+    this.n = 1,
+    this.responseFormat = 'b64_json',
+    this.sourceFilename = 'image.png',
+    this.sourceImageMime = 'image/png',
+  });
 }

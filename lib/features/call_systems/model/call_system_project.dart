@@ -18,8 +18,10 @@ enum CallSystemSubCategory {
 }
 
 CallSystemSubCategory subCategoryFromKey(String k) =>
-    CallSystemSubCategory.values.firstWhere((s) => s.name == k,
-        orElse: () => CallSystemSubCategory.inboundIvr);
+    CallSystemSubCategory.values.firstWhere(
+      (s) => s.name == k,
+      orElse: () => CallSystemSubCategory.inboundIvr,
+    );
 
 /// Whether outbound calling is part of this sub-category (drives the compliance
 /// surface the builder enforces/warns on).
@@ -53,18 +55,18 @@ class Prompt {
       );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'text': text,
-        'voice': voice,
-        'audioAssetPath': audioAssetPath,
-      };
+    'id': id,
+    'text': text,
+    'voice': voice,
+    'audioAssetPath': audioAssetPath,
+  };
 
   factory Prompt.fromJson(Map<String, dynamic> j) => Prompt(
-        id: j['id'] as String,
-        text: (j['text'] as String?) ?? '',
-        voice: j['voice'] as String?,
-        audioAssetPath: j['audioAssetPath'] as String?,
-      );
+    id: j['id'] as String,
+    text: (j['text'] as String?) ?? '',
+    voice: j['voice'] as String?,
+    audioAssetPath: j['audioAssetPath'] as String?,
+  );
 }
 
 /// The PORTABLE call-system project: the single source of truth a user can
@@ -133,22 +135,22 @@ class CallSystemProject {
   }
 
   Map<String, dynamic> toJson() => {
-        'schemaVersion': schemaVersion,
-        'name': name,
-        'subCategory': subCategory.name,
-        'experienceMode': experienceMode,
-        'dids': dids.map((e) => e.toJson()).toList(),
-        'extensions': extensions.map((e) => e.toJson()).toList(),
-        'ringGroups': ringGroups.map((e) => e.toJson()).toList(),
-        'pickupGroups': pickupGroups.map((e) => e.toJson()).toList(),
-        'parkGroups': parkGroups.map((e) => e.toJson()).toList(),
-        'queues': queues.map((e) => e.toJson()).toList(),
-        'voicemailBoxes': voicemailBoxes.map((e) => e.toJson()).toList(),
-        'timeConditions': timeConditions.map((e) => e.toJson()).toList(),
-        'flows': flows.map((e) => e.toJson()).toList(),
-        'prompts': prompts.map((e) => e.toJson()).toList(),
-        'variables': variables,
-      };
+    'schemaVersion': schemaVersion,
+    'name': name,
+    'subCategory': subCategory.name,
+    'experienceMode': experienceMode,
+    'dids': dids.map((e) => e.toJson()).toList(),
+    'extensions': extensions.map((e) => e.toJson()).toList(),
+    'ringGroups': ringGroups.map((e) => e.toJson()).toList(),
+    'pickupGroups': pickupGroups.map((e) => e.toJson()).toList(),
+    'parkGroups': parkGroups.map((e) => e.toJson()).toList(),
+    'queues': queues.map((e) => e.toJson()).toList(),
+    'voicemailBoxes': voicemailBoxes.map((e) => e.toJson()).toList(),
+    'timeConditions': timeConditions.map((e) => e.toJson()).toList(),
+    'flows': flows.map((e) => e.toJson()).toList(),
+    'prompts': prompts.map((e) => e.toJson()).toList(),
+    'variables': variables,
+  };
 
   factory CallSystemProject.fromJson(Map<String, dynamic> j) {
     List<T> list<T>(String key, T Function(Map<String, dynamic>) from) =>
@@ -157,7 +159,9 @@ class CallSystemProject {
             .toList();
     return CallSystemProject(
       name: (j['name'] as String?) ?? 'Call System',
-      subCategory: subCategoryFromKey((j['subCategory'] as String?) ?? 'inboundIvr'),
+      subCategory: subCategoryFromKey(
+        (j['subCategory'] as String?) ?? 'inboundIvr',
+      ),
       experienceMode: (j['experienceMode'] as String?) ?? 'regular',
       dids: list('dids', Did.fromJson),
       extensions: list('extensions', Extension.fromJson),
@@ -169,8 +173,7 @@ class CallSystemProject {
       timeConditions: list('timeConditions', TimeCondition.fromJson),
       flows: list('flows', CallFlow.fromJson),
       prompts: list('prompts', Prompt.fromJson),
-      variables:
-          Map<String, dynamic>.from(j['variables'] as Map? ?? const {}),
+      variables: Map<String, dynamic>.from(j['variables'] as Map? ?? const {}),
     );
   }
 }

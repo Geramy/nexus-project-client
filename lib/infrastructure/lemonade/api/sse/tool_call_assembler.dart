@@ -63,7 +63,13 @@ class ToolCallAssembler {
       final s = _slots[k]!;
       if (s.id == null || s.name == null) continue;
       final args = s.argsBuffer.toString();
-      result.add(tc.ToolCall(id: s.id!, name: s.name!, argumentsJson: args.isEmpty ? '{}' : args));
+      result.add(
+        tc.ToolCall(
+          id: s.id!,
+          name: s.name!,
+          argumentsJson: args.isEmpty ? '{}' : args,
+        ),
+      );
     }
     return result;
   }
@@ -77,5 +83,10 @@ class _Slot {
   String? name;
   final StringBuffer argsBuffer = StringBuffer();
   _Slot(this.index);
-  tc.PartialToolCall toPartial() => tc.PartialToolCall(index: index, id: id, name: name, argumentsAccum: argsBuffer.toString());
+  tc.PartialToolCall toPartial() => tc.PartialToolCall(
+    index: index,
+    id: id,
+    name: name,
+    argumentsAccum: argsBuffer.toString(),
+  );
 }

@@ -172,7 +172,12 @@ void _writerEntry(_PipeArg arg) {
       while (off < data.length) {
         final slice = Pointer<Uint8>.fromAddress(buf.address + off);
         final ok = writeFile(
-            arg.handle, slice, data.length - off, written, nullptr);
+          arg.handle,
+          slice,
+          data.length - off,
+          written,
+          nullptr,
+        );
         if (ok == 0) break;
         final w = written.value;
         if (w == 0) break;
@@ -191,39 +196,43 @@ const int _genericWrite = 0x40000000;
 const int _openExisting = 3;
 const int _invalidHandle = -1;
 
-typedef _CreateFileWNative = IntPtr Function(
-  Pointer<Utf16> lpFileName,
-  Uint32 dwDesiredAccess,
-  Uint32 dwShareMode,
-  Pointer<Void> lpSecurityAttributes,
-  Uint32 dwCreationDisposition,
-  Uint32 dwFlagsAndAttributes,
-  IntPtr hTemplateFile,
-);
-typedef _CreateFileWDart = int Function(
-  Pointer<Utf16> lpFileName,
-  int dwDesiredAccess,
-  int dwShareMode,
-  Pointer<Void> lpSecurityAttributes,
-  int dwCreationDisposition,
-  int dwFlagsAndAttributes,
-  int hTemplateFile,
-);
+typedef _CreateFileWNative =
+    IntPtr Function(
+      Pointer<Utf16> lpFileName,
+      Uint32 dwDesiredAccess,
+      Uint32 dwShareMode,
+      Pointer<Void> lpSecurityAttributes,
+      Uint32 dwCreationDisposition,
+      Uint32 dwFlagsAndAttributes,
+      IntPtr hTemplateFile,
+    );
+typedef _CreateFileWDart =
+    int Function(
+      Pointer<Utf16> lpFileName,
+      int dwDesiredAccess,
+      int dwShareMode,
+      Pointer<Void> lpSecurityAttributes,
+      int dwCreationDisposition,
+      int dwFlagsAndAttributes,
+      int hTemplateFile,
+    );
 
-typedef _ReadWriteNative = Int32 Function(
-  IntPtr hFile,
-  Pointer<Uint8> lpBuffer,
-  Uint32 nNumberOfBytes,
-  Pointer<Uint32> lpNumberOfBytesXfer,
-  Pointer<Void> lpOverlapped,
-);
-typedef _ReadWriteDart = int Function(
-  int hFile,
-  Pointer<Uint8> lpBuffer,
-  int nNumberOfBytes,
-  Pointer<Uint32> lpNumberOfBytesXfer,
-  Pointer<Void> lpOverlapped,
-);
+typedef _ReadWriteNative =
+    Int32 Function(
+      IntPtr hFile,
+      Pointer<Uint8> lpBuffer,
+      Uint32 nNumberOfBytes,
+      Pointer<Uint32> lpNumberOfBytesXfer,
+      Pointer<Void> lpOverlapped,
+    );
+typedef _ReadWriteDart =
+    int Function(
+      int hFile,
+      Pointer<Uint8> lpBuffer,
+      int nNumberOfBytes,
+      Pointer<Uint32> lpNumberOfBytesXfer,
+      Pointer<Void> lpOverlapped,
+    );
 
 typedef _CloseHandleNative = Int32 Function(IntPtr hObject);
 typedef _CloseHandleDart = int Function(int hObject);
@@ -240,8 +249,9 @@ _ReadWriteDart _lookupWriteFile() =>
 /// on failure.
 int _openPipe(String pipePath) {
   final k32 = _kernel32();
-  final createFileW =
-      k32.lookupFunction<_CreateFileWNative, _CreateFileWDart>('CreateFileW');
+  final createFileW = k32.lookupFunction<_CreateFileWNative, _CreateFileWDart>(
+    'CreateFileW',
+  );
   final namePtr = pipePath.toNativeUtf16();
   try {
     return createFileW(

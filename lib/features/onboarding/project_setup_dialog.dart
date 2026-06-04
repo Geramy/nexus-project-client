@@ -21,7 +21,11 @@ Future<void> showProjectSetupDialog(BuildContext context) {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.xl, AppSpacing.xxl, AppSpacing.xl, AppSpacing.xl),
+                AppSpacing.xl,
+                AppSpacing.xxl,
+                AppSpacing.xl,
+                AppSpacing.xl,
+              ),
               child: ProjectStep(
                 headline: 'New project',
                 subhead:

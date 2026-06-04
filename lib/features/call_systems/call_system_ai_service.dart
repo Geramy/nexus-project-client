@@ -28,9 +28,12 @@ class CallSystemAiService {
 
   Future<dynamic> _resolveInference() async {
     final clientId = _ref.read(currentClientIdProvider);
-    return _ref.read(projectInferenceProvider(
-      (projectId: projectId, clientId: clientId),
-    ).future);
+    return _ref.read(
+      projectInferenceProvider((
+        projectId: projectId,
+        clientId: clientId,
+      )).future,
+    );
   }
 
   static const _schemaSpec = '''
@@ -60,7 +63,8 @@ Keep it focused and valid.''';
     final resolved = await _resolveInference();
     if (resolved == null) {
       throw StateError(
-          'No inference is configured. Sign in or add a local server first.');
+        'No inference is configured. Sign in or add a local server first.',
+      );
     }
     final current = _editor.current;
     final resp = await resolved.backend.createChatCompletion(
@@ -69,12 +73,12 @@ Keep it focused and valid.''';
         {
           'role': 'system',
           'content':
-              'You are an expert phone-system (IVR) designer. $_schemaSpec'
+              'You are an expert phone-system (IVR) designer. $_schemaSpec',
         },
         {
           'role': 'user',
           'content':
-              'Design the call flow for: "$description". Sub-category: ${current.subCategory.name}.'
+              'Design the call flow for: "$description". Sub-category: ${current.subCategory.name}.',
         },
       ],
       temperature: 0.4,
@@ -94,8 +98,9 @@ Keep it focused and valid.''';
       subCategory: current.subCategory,
       experienceMode: current.experienceMode,
       dids: generated.dids.isNotEmpty ? generated.dids : current.dids,
-      extensions:
-          generated.extensions.isNotEmpty ? generated.extensions : current.extensions,
+      extensions: generated.extensions.isNotEmpty
+          ? generated.extensions
+          : current.extensions,
       ringGroups: generated.ringGroups,
       pickupGroups: generated.pickupGroups,
       parkGroups: generated.parkGroups,
@@ -189,14 +194,18 @@ Keep it focused and valid.''';
 
 /// Mark every non-entry node of a flow `proposed` (awaiting approval).
 CallFlow _markProposed(CallFlow f) => f.copyWith(
-      nodes: f.nodes
-          .map((n) => n.type == CallNodeType.entry
-              ? n
-              : n.copyWith(status: NodeStatus.proposed))
-          .toList(),
-    );
+  nodes: f.nodes
+      .map(
+        (n) => n.type == CallNodeType.entry
+            ? n
+            : n.copyWith(status: NodeStatus.proposed),
+      )
+      .toList(),
+);
 
-final callSystemAiServiceProvider =
-    Provider.family<CallSystemAiService, int>((ref, projectId) {
+final callSystemAiServiceProvider = Provider.family<CallSystemAiService, int>((
+  ref,
+  projectId,
+) {
   return CallSystemAiService(ref, projectId);
 });

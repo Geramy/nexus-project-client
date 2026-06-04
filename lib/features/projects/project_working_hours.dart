@@ -2,7 +2,8 @@
 // Author: Geramy Loveless <support@nexus-projects.ai>
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
-import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart' show Project;
+import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart'
+    show Project;
 
 /// Pure helpers for a project's working-hours window. The window is stored on
 /// the project as minutes-from-midnight ([Project.workHoursStart]/[workHoursEnd])
@@ -45,7 +46,15 @@ String formatMinutesOfDay(int? minutes) {
 }
 
 /// Short Mon..Sun labels indexed by bit (0 = Monday).
-const List<String> kWeekdayShortLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const List<String> kWeekdayShortLabels = [
+  'Mon',
+  'Tue',
+  'Wed',
+  'Thu',
+  'Fri',
+  'Sat',
+  'Sun',
+];
 
 /// Human summary of the working-hours config for display.
 String workingHoursSummary(Project project) {

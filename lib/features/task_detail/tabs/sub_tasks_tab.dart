@@ -45,41 +45,51 @@ class SubTasksTab extends ConsumerWidget {
                   compact: true,
                 )
               else
-                ...children.map((c) => Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                      child: NexusCard(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(c.title,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w600)),
-                                  Text('#${c.task_pk}',
-                                      style: TextStyle(
-                                          fontSize: 12,
-                                          color: context.nx.textFaint)),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: AppSpacing.sm),
-                            StatusChip(c.status, dense: true),
-                            IconButton(
-                              icon: const Icon(Icons.open_in_new, size: 16),
-                              tooltip: 'Open',
-                              onPressed: () => ref
-                                  .read(selectedTaskIdNotifierProvider.notifier)
-                                  .selectTask(c.task_pk),
-                            ),
-                          ],
-                        ),
+                ...children.map(
+                  (c) => Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                    child: NexusCard(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                        vertical: AppSpacing.sm,
                       ),
-                    )),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  c.title,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  '#${c.task_pk}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: context.nx.textFaint,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          StatusChip(c.status, dense: true),
+                          IconButton(
+                            icon: const Icon(Icons.open_in_new, size: 16),
+                            tooltip: 'Open',
+                            onPressed: () => ref
+                                .read(selectedTaskIdNotifierProvider.notifier)
+                                .selectTask(c.task_pk),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         );
@@ -89,21 +99,37 @@ class SubTasksTab extends ConsumerWidget {
     );
   }
 
-  Future<void> _addSubTask(BuildContext context, WidgetRef ref, int projectId) async {
+  Future<void> _addSubTask(
+    BuildContext context,
+    WidgetRef ref,
+    int projectId,
+  ) async {
     final ctrl = TextEditingController();
     final title = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('New Sub-task'),
-        content: TextField(controller: ctrl, autofocus: true, decoration: const InputDecoration(labelText: 'Title')),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Title'),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('Create')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: const Text('Create'),
+          ),
         ],
       ),
     );
     if (title == null || title.isEmpty) return;
-    await ref.read(nexusDatabaseProvider).createTaskInProject(
+    await ref
+        .read(nexusDatabaseProvider)
+        .createTaskInProject(
           projectPk: projectId,
           title: title,
           parentPk: taskId,

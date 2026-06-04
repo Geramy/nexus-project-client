@@ -32,7 +32,14 @@ class _AdminLogsTabState extends ConsumerState<AdminLogsTab> {
   String _severityFilter = 'All';
   String? _error;
 
-  static const _severities = ['All', 'Info', 'Warning', 'Error', 'Debug', 'Trace'];
+  static const _severities = [
+    'All',
+    'Info',
+    'Warning',
+    'Error',
+    'Debug',
+    'Trace',
+  ];
 
   @override
   void initState() {
@@ -194,10 +201,9 @@ class _LogRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       child: RichText(
         text: TextSpan(
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                fontFamily: 'Courier',
-                fontSize: 12,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(fontFamily: 'Courier', fontSize: 12),
           children: [
             TextSpan(
               text: '${entry.timestamp} ',

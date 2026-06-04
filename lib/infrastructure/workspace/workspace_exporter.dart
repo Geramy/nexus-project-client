@@ -44,8 +44,13 @@ class WorkspaceExporter {
     }
 
     final dir = await _destinationDir();
-    final file = File(p.join(dir.path, '${_safeName(projectName)}_export_'
-        '${_stamp(DateTime.now())}.zip'));
+    final file = File(
+      p.join(
+        dir.path,
+        '${_safeName(projectName)}_export_'
+        '${_stamp(DateTime.now())}.zip',
+      ),
+    );
     await file.writeAsBytes(data, flush: true);
     return file;
   }

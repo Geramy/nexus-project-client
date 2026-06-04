@@ -33,7 +33,10 @@ class ConfiguredServersTab extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Text('Configured Servers', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            const Text(
+              'Configured Servers',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
             const SizedBox(width: 8),
             ServerCountChip(count: configured.length, color: Colors.deepPurple),
             const Spacer(),
@@ -51,10 +54,12 @@ class ConfiguredServersTab extends StatelessWidget {
             message: 'No Lemonade servers configured. Add one to get started.',
           )
         else
-          ...configured.map((server) => ConfiguredServerCard(
-                server: server,
-                isSelected: selected == server,
-              )),
+          ...configured.map(
+            (server) => ConfiguredServerCard(
+              server: server,
+              isSelected: selected == server,
+            ),
+          ),
       ],
     );
   }

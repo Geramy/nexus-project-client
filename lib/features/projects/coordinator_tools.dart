@@ -12,6 +12,7 @@ import 'package:nexus_projects_client/features/agents/agent_tool_permissions.dar
 import 'package:nexus_projects_client/features/projects/agent_assignment.dart';
 import 'package:nexus_projects_client/features/project_plans/plan_store.dart';
 import 'package:nexus_projects_client/features/project_setup/plan_task_sync.dart';
+import 'package:nexus_projects_client/infrastructure/workspace/async_lock.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/workspace.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/git/nxtprj_git_engine.dart';
 import 'package:nexus_projects_client/infrastructure/build/build_service.dart';
@@ -1273,6 +1274,14 @@ class CoordinatorToolExecutor {
   final void Function()? onPlanningComplete;
   final void Function(bool approved, String gaps)? onPlanReview;
 
+  /// Per-task isolation (orchestrated worker): when set, [workspace] is an
+  /// ISOLATED per-task working tree and `git_commit` snapshots it onto
+  /// [workBranch] in the shared object DB, serialized through [gitLane]. The
+  /// agent is pinned to its task branch (no checkout/create). Null in the
+  /// interactive chat, which commits the shared tree onto HEAD.
+  final String? workBranch;
+  final AsyncLock? gitLane;
+
   CoordinatorToolExecutor({
     required this.db,
     required this.projectId,
@@ -1288,7 +1297,13 @@ class CoordinatorToolExecutor {
     this.buildService,
     this.onPlanningComplete,
     this.onPlanReview,
+    this.workBranch,
+    this.gitLane,
   });
+
+  /// True when running as an orchestrated worker on an isolated task tree.
+  bool get _isolatedTask =>
+      workBranch != null && gitLane != null && workspace != null && git != null;
 
   /// A short human-readable summary of what a tool call will do (for approval).
   String _summary(String name, Map<String, dynamic> args) {
@@ -2281,6 +2296,14 @@ class CoordinatorToolExecutor {
 
   Future<String> _gitStatus() async {
     if (git == null) return 'Git is unavailable in this context.';
+    if (_isolatedTask) {
+      // The shared git status reflects the project tree, not this task's
+      // isolated tree — report the task context instead so the worker commits.
+      final files = await workspace!.walk();
+      final n = files.where((e) => !e.isDirectory).length;
+      return 'On task branch "$workBranch" with $n file(s) in your working '
+          'tree. Edits are uncommitted until you call git_commit.';
+    }
     try {
       final snap = await git!.status();
       if (!snap.hasRepo) return 'This workspace has no git repository yet.';
@@ -2321,6 +2344,24 @@ class CoordinatorToolExecutor {
     if (git == null) return 'Git is unavailable in this context.';
     final message = (args['message'] as String? ?? '').trim();
     if (message.isEmpty) return 'git_commit failed: message is required.';
+    // Orchestrated worker: snapshot the ISOLATED task tree onto its branch in
+    // the shared object DB, serialized so concurrent agents never interleave.
+    if (_isolatedTask) {
+      try {
+        final oid = await gitLane!.run(
+          () => git!.commitFrom(
+            workspace!,
+            branch: workBranch!,
+            message: message,
+            authorName: agentName,
+          ),
+        );
+        final shortOid = oid.length >= 8 ? oid.substring(0, 8) : oid;
+        return 'Committed your working tree to "$workBranch" as $shortOid: "$message".';
+      } catch (e) {
+        return 'git_commit failed: $e';
+      }
+    }
     final rawPaths = args['paths'];
     final paths = (rawPaths is List)
         ? rawPaths.map((e) => '$e'.trim()).where((e) => e.isNotEmpty).toList()
@@ -2358,6 +2399,10 @@ class CoordinatorToolExecutor {
 
   Future<String> _gitCreateBranch(Map<String, dynamic> args) async {
     if (git == null) return 'Git is unavailable in this context.';
+    if (_isolatedTask) {
+      return 'Branching is managed for you — stay on your task branch '
+          '"$workBranch", edit files, and git_commit.';
+    }
     final name = (args['name'] as String? ?? '').trim();
     if (name.isEmpty) return 'git_create_branch failed: name is required.';
     final checkout = args['checkout'] == true;
@@ -2371,6 +2416,10 @@ class CoordinatorToolExecutor {
 
   Future<String> _gitCheckoutBranch(Map<String, dynamic> args) async {
     if (git == null) return 'Git is unavailable in this context.';
+    if (_isolatedTask) {
+      return 'You are pinned to your task branch "$workBranch" — branch '
+          'switching is managed for you. Just edit files and git_commit.';
+    }
     final name = (args['name'] as String? ?? '').trim();
     if (name.isEmpty) return 'git_checkout_branch failed: name is required.';
     try {

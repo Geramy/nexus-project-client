@@ -85,7 +85,9 @@ class VoiceActivityService {
         model: 'v5',
       );
       _isListening = true;
-      debugPrint('[Voice] VAD now listening (Silero v5) — feeding our PCM stream');
+      debugPrint(
+        '[Voice] VAD now listening (Silero v5) — feeding our PCM stream',
+      );
     } catch (e, st) {
       debugPrint('VAD startListening failed (non-fatal): $e');
       debugPrintStack(stackTrace: st);

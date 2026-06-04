@@ -22,6 +22,12 @@ jobs:
           channel: stable
           cache: true
 
+      # The integration tests drive the real git engine (libgit2 via
+      # git2dart_binaries) over a SQLite virtual disk, so ensure the system
+      # SQLite + GTK runtime deps are present on the runner.
+      - name: System deps for native git/sqlite tests
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-0 libsqlite3-dev
+
       - name: Install dependencies
         run: flutter pub get
 
@@ -37,5 +43,11 @@ jobs:
       - name: Analyze
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
-      - name: Run tests
+      - name: Run unit tests
         run: flutter test
+
+      # Explicit, named gate: drives the real git engine to prove the parallel
+      # task workflow (isolated per-task trees → concurrent commits to their own
+      # branches → clean merge to main; real conflicts detected; lane serializes).
+      - name: Prove the parallel agent workflow (integration)
+        run: flutter test test/integration

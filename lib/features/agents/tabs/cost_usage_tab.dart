@@ -26,7 +26,8 @@ class CostUsageTab extends ConsumerWidget {
         child: EmptyState(
           icon: Icons.payments_outlined,
           title: 'Sign in to see agent cost',
-          message: 'Per-agent spend is tracked by the Nexus Router for your '
+          message:
+              'Per-agent spend is tracked by the Nexus Router for your '
               'subscription. Sign in on the Account screen to view it.',
         ),
       );
@@ -61,8 +62,9 @@ class CostUsageTab extends ConsumerWidget {
   }
 
   Widget _buildReport(BuildContext context, AgentUsageReport r) {
-    final attributed =
-        r.agents.where((a) => a.agent != '(unattributed)').toList();
+    final attributed = r.agents
+        .where((a) => a.agent != '(unattributed)')
+        .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -84,7 +86,8 @@ class CostUsageTab extends ConsumerWidget {
           const EmptyState(
             icon: Icons.smart_toy_outlined,
             title: 'No usage yet',
-            message: 'Once your agents run inference through the Router, their '
+            message:
+                'Once your agents run inference through the Router, their '
                 'cost will appear here.',
           )
         else
@@ -98,7 +101,8 @@ class CostUsageTab extends ConsumerWidget {
                   _CostRow(
                     label: r.agents[i].agent,
                     cost: _money(r.agents[i].cost),
-                    detail: '${r.agents[i].calls} calls · '
+                    detail:
+                        '${r.agents[i].calls} calls · '
                         '${r.agents[i].totalTokens} tokens',
                   ),
                 ],
@@ -118,7 +122,11 @@ class CostUsageTab extends ConsumerWidget {
 }
 
 class _CostRow extends StatelessWidget {
-  const _CostRow({required this.label, required this.cost, required this.detail});
+  const _CostRow({
+    required this.label,
+    required this.cost,
+    required this.detail,
+  });
 
   final String label;
   final String cost;
