@@ -251,12 +251,16 @@ void main() {
 
       await shot('story_tree');
 
-      // ── 3. Press "Generate tasks from stories" → linked tasks. ───────────
+      // ── 3. Press "Generate tasks from stories". The new generator runs a
+      //      scoped AI session PER story, so wait until the run completes. ────
       final genBtn = find.textContaining('Generate tasks from stories');
       expect(genBtn, findsOneWidget);
       await tester.tap(genBtn);
-      for (var i = 0; i < 10; i++) {
-        await tester.pump(const Duration(milliseconds: 300));
+      final genDeadline = DateTime.now().add(const Duration(minutes: 6));
+      while (DateTime.now().isBefore(genDeadline)) {
+        await tester.pump(const Duration(milliseconds: 500));
+        final p = await db.getProjectById(projectId);
+        if (p?.explorationStatus == 'complete') break;
       }
       await shot('tasks_generated');
 
