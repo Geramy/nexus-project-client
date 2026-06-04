@@ -24,8 +24,16 @@ jobs:
     with:
       version: ${{ github.ref_name }}
 
+  # Capture the live setup-flow UI screenshots + timing for this release; the
+  # ZIP it uploads (artifact `installer-screenshots`) is bundled below.
+  screenshots:
+    uses: ./.github/workflows/setup-screenshots.yml
+    secrets: inherit
+    with:
+      version: ${{ github.ref_name }}
+
   publish:
-    needs: build
+    needs: [build, screenshots]
     runs-on: ubuntu-latest
     steps:
       - name: Download installers
@@ -45,7 +53,7 @@ jobs:
       - name: Generate checksums
         working-directory: artifacts
         run: |
-          sha256sum *.pkg *.exe *.deb *.tar.gz 2>/dev/null > SHA256SUMS.txt
+          sha256sum *.pkg *.exe *.deb *.tar.gz *.zip 2>/dev/null > SHA256SUMS.txt
           echo "----- SHA256SUMS.txt -----"
           cat SHA256SUMS.txt
 

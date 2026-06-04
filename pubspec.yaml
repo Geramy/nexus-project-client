@@ -99,6 +99,10 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
+  # Drives the real setup UI end-to-end in CI (live setup-flow screenshots test).
+  integration_test:
+    sdk: flutter
+
   flutter_lints: ^6.0.0
 
   # Test-only: lets the live orchestrator E2E route path_provider to a temp dir

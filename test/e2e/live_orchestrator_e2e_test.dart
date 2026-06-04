@@ -44,6 +44,7 @@ import 'package:nexus_projects_client/infrastructure/workspace/git/git_engine_pr
 import 'package:nexus_projects_client/infrastructure/workspace/vhd_workspace.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/workspace_provider.dart';
 
+import 'support/metrics.dart';
 import 'support/model_picker.dart';
 
 /// Routes path_provider to a temp dir so the orchestrator's own providers build
@@ -207,23 +208,64 @@ void main() {
       container.read(projectOrchestratorProvider(projectId)); // self-starts
       await db.setProjectOrchestrationState(projectId, 'running');
 
-      // ── 8. Drive to completion: poll until every task reaches Done. ───────
+      // ── 8. Drive to completion: poll until every task reaches Done, TIMING
+      //      each task from first-running → done so CI gets per-task stats. ────
+      final metrics = MetricsLog('orchestrator_e2e');
+      final runWatch = Stopwatch()..start();
+      final startedAt = <int, int>{}; // taskPk → ms when first seen running
+      final taskDoneMs = <int, int>{}; // taskPk → ms first-running → done
+      final taskTitle = <int, String>{};
       final deadline = DateTime.now().add(const Duration(minutes: 9));
       var done = 0;
       var maxConcurrentSeen = 0;
       while (DateTime.now().isBefore(deadline)) {
         final tasks = await db.getTasksForProject(projectId);
-        done = tasks.where((t) => t.status == TaskStatus.done).length;
-        final running = tasks
-            .where((t) => t.executionStatus == TaskExecStatus.running)
-            .length;
+        var running = 0;
+        for (final t in tasks) {
+          taskTitle[t.task_pk] = t.title;
+          if (t.executionStatus == TaskExecStatus.running) {
+            running++;
+            startedAt.putIfAbsent(t.task_pk, () => runWatch.elapsedMilliseconds);
+          }
+          if (t.status == TaskStatus.done && !taskDoneMs.containsKey(t.task_pk)) {
+            final from = startedAt[t.task_pk] ?? 0;
+            taskDoneMs[t.task_pk] = runWatch.elapsedMilliseconds - from;
+          }
+        }
         if (running > maxConcurrentSeen) maxConcurrentSeen = running;
+        done = tasks.where((t) => t.status == TaskStatus.done).length;
         if (done == deliverables.length) break;
-        await Future<void>.delayed(const Duration(seconds: 4));
+        await Future<void>.delayed(const Duration(milliseconds: 1500));
       }
+      runWatch.stop();
       // Stop the orchestrator before we read/export (no concurrent git ops).
       await db.setProjectOrchestrationState(projectId, 'stopped');
       await Future<void>.delayed(const Duration(milliseconds: 500));
+
+      // Per-task + whole-run timing → metrics files (jsonl + csv) for CI.
+      for (final entry in taskDoneMs.entries) {
+        metrics.record(
+          'task',
+          taskTitle[entry.key] ?? 'task ${entry.key}',
+          Duration(milliseconds: entry.value),
+          extra: {'task_pk': entry.key, 'model': model},
+        );
+      }
+      metrics.record(
+        'run',
+        'orchestrator: ${deliverables.length} tasks, cap 3',
+        Duration(milliseconds: runWatch.elapsedMilliseconds),
+        ok: done == deliverables.length,
+        extra: {
+          'tasks_done': done,
+          'tasks_total': deliverables.length,
+          'max_concurrent': maxConcurrentSeen,
+          'model': model,
+        },
+      );
+      final metricsDir = await metrics.flush();
+      debugPrint(metrics.renderTable());
+      debugPrint('metrics written to ${metricsDir.path}/orchestrator_e2e.*');
 
       // ── 9. Export `main` and verify each named deliverable has real content.
       final mainTree = await VhdWorkspace.open('${dir.path}/main-export.nxtprj');

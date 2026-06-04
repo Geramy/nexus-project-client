@@ -1,0 +1,101 @@
+name: Setup screenshots
+
+# Drives the REAL project-setup interview UI end-to-end (live login + live AI)
+# on a macOS desktop target, screenshotting every step and timing each Q&A turn.
+# Produces a versioned ZIP of screenshots + timing data that the release bundles
+# (release.yml calls this via `uses:`), and that you can grab on demand.
+#
+# Requires repo secrets NEXUS_EMAIL / NEXUS_PASSWORD (optional NEXUS_GATEWAY,
+# NEXUS_MODEL). Without them the underlying test SKIPS and the ZIP is empty-ish.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version label for the screenshots ZIP filename.'
+        type: string
+        required: false
+        default: ''
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version label for the screenshots ZIP filename.'
+        type: string
+        required: false
+        default: 'dev'
+
+jobs:
+  screenshots:
+    # macOS desktop is a turnkey integration_test target (no xvfb/driver needed).
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Enable macOS desktop
+        run: flutter config --enable-macos-desktop
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate code (riverpod / drift / freezed / json)
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Resolve version label
+        id: ver
+        run: |
+          V="${{ inputs.version }}"; V="${V#v}"
+          if [ -z "$V" ]; then
+            V="$(grep -E '^version:' pubspec.yaml | head -1 | sed -E 's/^version:[[:space:]]*//; s/\+.*$//')"
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Run setup-flow UI walkthrough (live, on-device, screenshots)
+        env:
+          NEXUS_EMAIL: ${{ secrets.NEXUS_EMAIL }}
+          NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+          NEXUS_GATEWAY: ${{ secrets.NEXUS_GATEWAY }}
+          NEXUS_MODEL: ${{ secrets.NEXUS_MODEL }}
+          NEXUS_SHOTS_DIR: ${{ github.workspace }}/screenshots
+          NEXUS_METRICS_DIR: ${{ github.workspace }}/build/metrics
+        run: |
+          flutter test integration_test/setup_flow_screens_test.dart \
+            -d macos --reporter expanded
+
+      - name: Bundle screenshots + timing into a ZIP
+        id: zip
+        run: |
+          NAME="nexus-setup-screenshots-${{ steps.ver.outputs.version }}"
+          mkdir -p "dist/$NAME"
+          # Screenshots + transcript (if the live test produced them).
+          cp -R screenshots/. "dist/$NAME/" 2>/dev/null || true
+          # Timing data (jsonl + csv) for statistics.
+          mkdir -p "dist/$NAME/metrics"
+          cp build/metrics/setup_flow.* "dist/$NAME/metrics/" 2>/dev/null || true
+          ( cd dist && zip -r "$NAME.zip" "$NAME" )
+          echo "path=dist/$NAME.zip" >> "$GITHUB_OUTPUT"
+          echo "----- ZIP contents -----"
+          unzip -l "dist/$NAME.zip" || true
+
+      # Named `installer-screenshots` so release.yml's `pattern: installer-*`
+      # download picks it up and bundles the ZIP into the GitHub Release.
+      - name: Upload screenshots ZIP (release asset)
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-screenshots
+          path: ${{ steps.zip.outputs.path }}
+          if-no-files-found: warn
+
+      # Also expose the raw screenshots + metrics for quick browsing.
+      - name: Upload raw screenshots + metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: setup-screenshots-raw
+          path: |
+            screenshots/**
+            build/metrics/**
+          if-no-files-found: ignore

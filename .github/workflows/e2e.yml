@@ -45,4 +45,17 @@ jobs:
           # Optional: pin a specific text/chat model. If unset, the test
           # auto-picks an LLM-family model from the routed catalog.
           NEXUS_MODEL: ${{ secrets.NEXUS_MODEL }}
+          # Where the live tests write machine-readable timing (jsonl + csv).
+          NEXUS_METRICS_DIR: ${{ github.workspace }}/build/metrics
         run: flutter test test/e2e --reporter expanded
+
+      # Per-task + per-run timing as machine-readable data, for statistics over
+      # time. Kept even if the test step fails (timing of a partial run is still
+      # useful). Skips silently when the E2E was gated/skipped (no files).
+      - name: Upload timing metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-metrics
+          path: build/metrics/**
+          if-no-files-found: ignore
