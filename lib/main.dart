@@ -52,6 +52,14 @@ bool _recoverFromKeyboardDesync(Object exception) {
   return false;
 }
 
+/// Reconcile the framework's pressed-key set with the engine whenever focus
+/// moves. Cheap and idempotent; fires only on actual focus/highlight changes
+/// (not per keystroke), which is exactly when a missed key-up from a native
+/// surface would otherwise leave text input dead.
+void _syncKeyboardOnFocusChange() {
+  HardwareKeyboard.instance.syncKeyboardState();
+}
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -88,6 +96,15 @@ void main() {
   // Keep keyboard state reconciled on every focus regain, not just startup, so a
   // missed key-up during a focus change can't permanently break text input.
   WidgetsBinding.instance.addObserver(_KeyboardResyncObserver());
+
+  // Also reconcile on every focus change. A native modal (file/share sheet, the
+  // update installer, a mic-permission prompt) can steal a key-up WITHOUT a
+  // lifecycle "resumed", leaving a phantom-pressed key that drops text input
+  // until focus moves again. This is why "clicking around" recovers it — a focus
+  // change. Resyncing on focus changes closes that window automatically, in
+  // release builds too (where the desync assertion is stripped and the
+  // error-handler recovery never fires), so the user never has to click around.
+  FocusManager.instance.addListener(_syncKeyboardOnFocusChange);
 
   WidgetsBinding.instance.addPostFrameCallback((_) {
     _initializeDatabase(container);

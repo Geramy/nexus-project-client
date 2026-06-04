@@ -32,6 +32,16 @@ class SubmitOnEnter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Focus(
+      // CRITICAL: this wrapper must NEVER hold primary focus itself — it only
+      // observes key events bubbling up from the focused TextField below it.
+      // With the default (focusable) Focus, Tab traversal or a rebuild could
+      // park focus on THIS node instead of the field; then letters bubble to
+      // onKeyEvent (returned `ignored`) while the EditableText never sees them —
+      // a "dead keyboard" until you click the field. canRequestFocus:false +
+      // skipTraversal:true keep it a pure key-observer, so onKeyEvent still
+      // fires (events bubble up from the focused field) but focus can't land here.
+      canRequestFocus: false,
+      skipTraversal: true,
       // Intercept before the TextField's own handler. KeyDownEvent only (not
       // repeats) so a held Enter sends once.
       onKeyEvent: (node, event) {
