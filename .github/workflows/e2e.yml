@@ -1,0 +1,45 @@
+name: Live E2E
+
+# Drives a REAL account + REAL inference end-to-end: login (mint a token with
+# device_id + app_name) → a real agent writes code → commit → merge to main →
+# export the files → verify + compile. Runs on every push to main and on demand.
+#
+# Requires two repo secrets (Settings → Secrets and variables → Actions):
+#   NEXUS_EMAIL, NEXUS_PASSWORD   (optional: NEXUS_GATEWAY to point at a non-prod
+#   gateway). Without them the E2E test SKIPS, so this job stays green but does
+#   nothing. NOTE: each run spends real inference tokens.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: System deps for native git/sqlite
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-0 libsqlite3-dev
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate code (riverpod / drift / freezed / json)
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Live end-to-end (real login → agent → code → merge → compile)
+        env:
+          NEXUS_EMAIL: ${{ secrets.NEXUS_EMAIL }}
+          NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+          NEXUS_GATEWAY: ${{ secrets.NEXUS_GATEWAY }}
+        run: flutter test test/e2e --reporter expanded
