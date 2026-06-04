@@ -39,6 +39,22 @@ class ProjectExplorationView extends ConsumerWidget {
   final String projectName;
 
   Future<void> _generate(BuildContext context, WidgetRef ref) async {
+    // Nothing to generate from: don't mark exploration "complete" on an empty
+    // tree (that would strand the project with no tasks and no orchestration).
+    // Send the user back to build at least one story first.
+    final stories =
+        ref.read(projectStoriesProvider(projectId)).valueOrNull ?? const [];
+    if (stories.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No user stories yet — talk it through with the Coordinator (or add '
+            'a story) to capture at least one, then generate tasks.',
+          ),
+        ),
+      );
+      return;
+    }
     // Walk the tree: each story → its own scoped AI session → 1..N tasks. The
     // run keeps us on this screen (explorationStatus stays 'active' until done)
     // and updates per-story progress; the canvas shows a bar on each story.

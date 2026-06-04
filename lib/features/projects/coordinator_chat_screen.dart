@@ -308,6 +308,12 @@ class _ProjectCoordinatorChatScreenState
         confirmAsk: _confirmToolUse,
         workspace: workspace,
         git: gitEngine,
+        // Serialize this interactive session's git WRITES (commit/branch/merge on
+        // the shared HEAD tree) on the project's git lane, so they never
+        // interleave with the orchestrator's concurrent lane-serialized commits
+        // against the same object DB. No workBranch → not isolated; just shares
+        // the lane.
+        gitLane: ref.read(gitLaneProvider(widget.projectId)),
         buildService: buildService,
         // Agent-level thinking mode (Project Manager defaults Off, others Unset).
         // Pass-2 will let a task override when the agent is Unset.

@@ -744,6 +744,8 @@ class ProjectCoordinatorSession {
       workspace: workspace,
       git: git,
       buildService: buildService,
+      workBranch: workBranch,
+      gitLane: gitLane,
     );
 
     final results = <String>[];

@@ -485,11 +485,19 @@ class SetupChatController extends ChangeNotifier {
     try {
       await voice.startCall();
     } catch (e) {
-      error = 'Could not start the call: $e';
-      await endVoiceCall();
-      notifyListeners();
+      // Only surface/teardown if THIS session is still the active one — a
+      // concurrent endVoiceCall()/dispose() may have already replaced it.
+      if (_voice == voice) {
+        error = 'Could not start the call: $e';
+        await endVoiceCall();
+        notifyListeners();
+      }
       return;
     }
+    // startCall() awaited; if the session was torn down meanwhile (hang-up,
+    // dispose, or a fresh start), `voice` is now disposed — don't arm a greeting
+    // or question on a dead session (use-after-dispose window).
+    if (_voice != voice) return;
     notifyListeners();
 
     // If the interview is parked on an unanswered question, re-arm it; otherwise

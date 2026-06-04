@@ -1524,6 +1524,15 @@ class CoordinatorToolExecutor {
   bool get _isolatedTask =>
       workBranch != null && gitLane != null && workspace != null && git != null;
 
+  /// Serialize a git WRITE through the project's shared git lane when one is
+  /// available. The interactive chat commits the shared working tree onto HEAD
+  /// (not an isolated task tree), so its writes must not interleave with the
+  /// orchestrator's lane-serialized commits against the same object DB. When no
+  /// lane is wired (e.g. tests, or a context with no concurrency), the op runs
+  /// directly. Read-only git ops (status/log/branches) don't need this.
+  Future<T> _withGitLane<T>(Future<T> Function() op) =>
+      gitLane != null ? gitLane!.run(op) : op();
+
   /// A short human-readable summary of what a tool call will do (for approval).
   String _summary(String name, Map<String, dynamic> args) {
     final spec = toolSpecFor(name);
@@ -2855,13 +2864,15 @@ class CoordinatorToolExecutor {
         ? rawPaths.map((e) => '$e'.trim()).where((e) => e.isNotEmpty).toList()
         : const <String>[];
     try {
-      final oid = paths.isEmpty
-          ? await git!.commitAll(message: message, authorName: agentName)
-          : await git!.commitFiles(
-              paths: paths,
-              message: message,
-              authorName: agentName,
-            );
+      final oid = await _withGitLane(
+        () => paths.isEmpty
+            ? git!.commitAll(message: message, authorName: agentName)
+            : git!.commitFiles(
+                paths: paths,
+                message: message,
+                authorName: agentName,
+              ),
+      );
       final shortOid = oid.length >= 8 ? oid.substring(0, 8) : oid;
       return 'Committed ${paths.isEmpty ? 'all changes' : '${paths.length} path(s)'} as $shortOid: "$message".';
     } catch (e) {
@@ -2895,7 +2906,7 @@ class CoordinatorToolExecutor {
     if (name.isEmpty) return 'git_create_branch failed: name is required.';
     final checkout = args['checkout'] == true;
     try {
-      await git!.createBranch(name, checkout: checkout);
+      await _withGitLane(() => git!.createBranch(name, checkout: checkout));
       return 'Created branch "$name"${checkout ? ' and switched to it' : ''}.';
     } catch (e) {
       return 'git_create_branch failed: $e';
@@ -2911,7 +2922,7 @@ class CoordinatorToolExecutor {
     final name = (args['name'] as String? ?? '').trim();
     if (name.isEmpty) return 'git_checkout_branch failed: name is required.';
     try {
-      await git!.checkoutBranch(name);
+      await _withGitLane(() => git!.checkoutBranch(name));
       return 'Switched workspace to branch "$name".';
     } catch (e) {
       return 'git_checkout_branch failed: $e';
@@ -2935,10 +2946,12 @@ class CoordinatorToolExecutor {
     final message = (args['message'] as String?)?.trim();
     try {
       final current = await git!.currentBranch();
-      final result = await git!.merge(
-        branch,
-        authorName: agentName,
-        message: (message == null || message.isEmpty) ? null : message,
+      final result = await _withGitLane(
+        () => git!.merge(
+          branch,
+          authorName: agentName,
+          message: (message == null || message.isEmpty) ? null : message,
+        ),
       );
       final into = current ?? 'the current branch';
       switch (result.outcome) {
