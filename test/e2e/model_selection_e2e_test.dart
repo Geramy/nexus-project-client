@@ -87,8 +87,11 @@ void main() {
         messages: const [
           {'role': 'user', 'content': 'Reply with exactly the word: ok'},
         ],
-        maxTokens: 16,
+        maxTokens: 256,
         temperature: 0,
+        // Don't let a reasoning model burn the budget on thinking with nothing
+        // left for the answer.
+        enableThinking: false,
       );
       sw.stop();
       expect(
@@ -98,11 +101,18 @@ void main() {
             'the router did not serve a chat completion for '
             '"${resolved.chat}" — the model is wrong or not available.',
       );
-      final content = (resp.choices.first.message.content ?? '').trim();
+      final msg = resp.choices.first.message;
+      final content = (msg.content ?? '').trim();
+      final reasoning = (msg.reasoning ?? '').trim();
+      // The model is "used" if it produced anything (answer OR reasoning) — i.e.
+      // the router really ran LMX-Omni-52B-Halo, not just echoed an empty shell.
       expect(
-        content,
-        isNotEmpty,
-        reason: 'served model "${resolved.chat}" returned no content.',
+        content.isNotEmpty || reasoning.isNotEmpty,
+        isTrue,
+        reason:
+            'served model "${resolved.chat}" produced no output '
+            '(content + reasoning both empty) — finish='
+            '${resp.choices.first.finishReason}.',
       );
 
       // ── Record what was selected + served, for the stats. ────────────────
@@ -121,7 +131,9 @@ void main() {
       await metrics.flush();
       debugPrint(
         'model selection → collection=${resolved.collection} '
-        'chat=${resolved.chat} reply="$content" (${sw.elapsed.inMilliseconds}ms)',
+        'chat=${resolved.chat} '
+        'reply="${content.isEmpty ? '[reasoning:${reasoning.length}c]' : content}" '
+        '(${sw.elapsed.inMilliseconds}ms)',
       );
     },
     skip: skip,
