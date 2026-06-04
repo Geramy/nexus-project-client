@@ -32,6 +32,7 @@ import 'package:nexus_projects_client/features/agents/agent_role_policy.dart';
 import 'package:nexus_projects_client/features/agents/agent_tool_permissions.dart';
 import 'package:nexus_projects_client/features/projects/coordinator_session.dart';
 import 'package:nexus_projects_client/features/projects/orchestration/orchestrator_prompts.dart';
+import 'package:nexus_projects_client/features/projects/orchestration/weighted_scheduler.dart';
 import 'package:nexus_projects_client/features/projects/project_working_hours.dart';
 import 'package:nexus_projects_client/features/projects/task_workflow.dart';
 
@@ -76,6 +77,11 @@ class ProjectOrchestrator {
   /// Per-task worker attempt counts, to cap retries on a task that keeps
   /// failing to submit rather than spinning forever.
   final Map<int, int> _attempts = {};
+
+  /// Fair, backlog-weighted scheduler over the pipeline stages, so verify/build/
+  /// merge aren't starved by a long implement queue while busier stages still
+  /// get proportionally more turns.
+  final WeightedRoundRobin<_Stage> _scheduler = WeightedRoundRobin<_Stage>();
 
   static const int _maxAttemptsPerTask = 2;
   static const int _maxTurnsPerTask = 12;
@@ -143,62 +149,73 @@ class ProjectOrchestrator {
     }
   }
 
-  /// Pick the single next task + stage to act on, in pipeline order. Implement
-  /// work has priority (keeps the board moving), then verify, build, and merge
-  /// for tasks already in flight.
+  /// Pick the single next task + stage to act on. Work is one-at-a-time (all
+  /// agents share one git working tree), but instead of strict priority we use a
+  /// smooth weighted round-robin across the four stages, weighted by each
+  /// stage's backlog — so verify/build/merge are never starved by a long
+  /// implement queue, while busier stages ("more to do") still get
+  /// proportionally more turns.
   Future<(Task?, _Stage?)> _nextPipelineWork() async {
-    final implement = await _nextAssignableTask();
-    if (implement != null) return (implement, _Stage.implement);
-
     final tasks = await _db.getTasksForProject(projectId);
-    Task? firstWhere(bool Function(Task) test) {
-      final matches = tasks
-          .where((t) => !_active.contains(t.task_pk) && test(t))
-          .toList();
-      if (matches.isEmpty) return null;
-      matches.sort((a, b) {
-        final p = _priorityRank(
-          b.priority,
-        ).compareTo(_priorityRank(a.priority));
-        if (p != 0) return p;
-        return a.createdAt.compareTo(b.createdAt);
-      });
-      return matches.first;
+    final review = tasks
+        .where(
+          (t) => !_active.contains(t.task_pk) && t.status == TaskStatus.review,
+        )
+        .toList();
+
+    final pools = <_Stage, List<Task>>{};
+    void addPool(_Stage s, List<Task> list) {
+      if (list.isNotEmpty) pools[s] = _sortByPriority(list);
     }
 
-    final verify = firstWhere(
-      (t) =>
-          t.status == TaskStatus.review &&
-          t.executionStatus == TaskExecStatus.submitted,
+    addPool(_Stage.implement, _assignableTasks(tasks));
+    addPool(
+      _Stage.verify,
+      review
+          .where((t) => t.executionStatus == TaskExecStatus.submitted)
+          .toList(),
     );
-    if (verify != null) return (verify, _Stage.verify);
-
-    final build = firstWhere(
-      (t) =>
-          t.status == TaskStatus.review &&
-          t.executionStatus == TaskExecStatus.verified &&
-          t.requiresBuild,
+    addPool(
+      _Stage.build,
+      review
+          .where(
+            (t) =>
+                t.executionStatus == TaskExecStatus.verified && t.requiresBuild,
+          )
+          .toList(),
     );
-    if (build != null) return (build, _Stage.build);
-
-    final merge = firstWhere(
-      (t) =>
-          t.status == TaskStatus.review &&
-          (t.executionStatus == TaskExecStatus.built ||
-              (t.executionStatus == TaskExecStatus.verified &&
-                  !t.requiresBuild)),
+    addPool(
+      _Stage.merge,
+      review
+          .where(
+            (t) =>
+                t.executionStatus == TaskExecStatus.built ||
+                (t.executionStatus == TaskExecStatus.verified &&
+                    !t.requiresBuild),
+          )
+          .toList(),
     );
-    if (merge != null) return (merge, _Stage.merge);
 
-    return (null, null);
+    final stage = _scheduler.pick({
+      for (final e in pools.entries) e.key: e.value.length,
+    });
+    if (stage == null) return (null, null);
+    return (pools[stage]!.first, stage);
   }
 
-  /// The next task ready for a worker: assigned to a worker-role persona, on the
-  /// Todo board, not already running here, and under its retry cap. Highest
-  /// priority first, then oldest.
-  Future<Task?> _nextAssignableTask() async {
-    final tasks = await _db.getTasksForProject(projectId);
-    final candidates = <Task>[];
+  List<Task> _sortByPriority(List<Task> list) {
+    list.sort((a, b) {
+      final p = _priorityRank(b.priority).compareTo(_priorityRank(a.priority));
+      if (p != 0) return p;
+      return a.createdAt.compareTo(b.createdAt);
+    });
+    return list;
+  }
+
+  /// Tasks ready for a worker: assigned to a worker-role persona, on the Todo
+  /// board, not already running here, and under the retry cap.
+  List<Task> _assignableTasks(List<Task> tasks) {
+    final out = <Task>[];
     for (final t in tasks) {
       if (t.task_agent_fk == null) continue;
       if (_active.contains(t.task_pk)) continue;
@@ -208,16 +225,9 @@ class ProjectOrchestrator {
           (t.executionStatus == TaskExecStatus.idle ||
               t.executionStatus == TaskExecStatus.queued ||
               t.executionStatus == TaskExecStatus.failed);
-      if (!isStartable) continue;
-      candidates.add(t);
+      if (isStartable) out.add(t);
     }
-    if (candidates.isEmpty) return null;
-    candidates.sort((a, b) {
-      final p = _priorityRank(b.priority).compareTo(_priorityRank(a.priority));
-      if (p != 0) return p;
-      return a.createdAt.compareTo(b.createdAt);
-    });
-    return candidates.first;
+    return out;
   }
 
   int _priorityRank(String p) => switch (p.toUpperCase()) {
