@@ -78,13 +78,15 @@ void main() {
         isNotEmpty,
         reason: '/models must authorize with the token',
       );
-      // Pick a TEXT/chat model: prefer an explicit NEXUS_MODEL, else skip
-      // image/audio models (e.g. SD-Turbo) and favor known LLM families.
-      final model = pickTextModel(
-        models.map((m) => m.id).toList(),
-        Platform.environment['NEXUS_MODEL'],
+      // Resolve the coordinator model the SAME way the app does: the default
+      // Omni collection (LMX-Omni-52B-Halo) decomposed into its LLM component.
+      final resolved = await resolveCoordinatorModel(
+        gateway: gateway,
+        token: auth.token,
+        override: Platform.environment['NEXUS_MODEL'],
       );
-      expect(model, isNotEmpty, reason: 'no text/chat model available');
+      final model = resolved.chat;
+      expect(model, isNotEmpty, reason: 'no chat model resolved');
 
       // ── 3. Seed an in-memory project + a worker task; open real git workspace. ──
       final db = NexusDatabase.forTesting(NativeDatabase.memory());

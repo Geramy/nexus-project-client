@@ -80,21 +80,18 @@ void main() {
         deviceName: 'github-ci',
         appName: kNexusAppName,
       );
-      final probe = backendForServer(
-        ui_model.InferenceServer(
-          id: 'routed',
-          name: 'Nexus Router',
-          baseUrl: gateway,
-          apiKey: auth.token,
-          providerType: 'routed',
-        ),
-        agentName: 'Explore',
+      // Resolve the coordinator model like the app: the Omni collection
+      // (LMX-Omni-52B-Halo) → its LLM component.
+      final resolved = await resolveCoordinatorModel(
+        gateway: gateway,
+        token: auth.token,
+        override: Platform.environment['NEXUS_MODEL'],
       );
-      final model = pickTextModel(
-        (await probe.listModels(showAll: false)).map((m) => m.id).toList(),
-        Platform.environment['NEXUS_MODEL'],
-      );
+      final model = resolved.chat;
       expect(model, isNotEmpty);
+      debugPrint(
+        'coordinator model → collection=${resolved.collection}, chat=$model',
+      );
       final backend = backendForServer(
         ui_model.InferenceServer(
           id: 'routed',

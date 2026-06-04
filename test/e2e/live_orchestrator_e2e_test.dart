@@ -35,10 +35,7 @@ import 'package:nexus_projects_client/features/projects/agent_assignment.dart';
 import 'package:nexus_projects_client/features/projects/orchestration/project_orchestrator.dart';
 import 'package:nexus_projects_client/features/projects/task_workflow.dart';
 import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart';
-import 'package:nexus_projects_client/infrastructure/inference/inference_backend_factory.dart';
 import 'package:nexus_projects_client/infrastructure/inference/routed_server.dart';
-import 'package:nexus_projects_client/infrastructure/models/ui/inference_server.dart'
-    as ui_model;
 import 'package:nexus_projects_client/infrastructure/nexus/nexus_account_client.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/git/git_engine_provider.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/vhd_workspace.dart';
@@ -119,24 +116,15 @@ void main() {
       );
       expect(auth.token, isNotEmpty, reason: 'login must mint a token');
 
-      // ── 2. Pick a text/chat model from the live catalog. ──────────────────
-      final probe = backendForServer(
-        ui_model.InferenceServer(
-          id: 'routed',
-          name: 'Nexus Router',
-          baseUrl: gateway,
-          apiKey: auth.token,
-          providerType: 'routed',
-        ),
-        agentName: 'E2E',
+      // ── 2. Resolve the coordinator model like the app: the default Omni
+      //      collection (LMX-Omni-52B-Halo) → its LLM component. ──────────────
+      final resolved = await resolveCoordinatorModel(
+        gateway: gateway,
+        token: auth.token,
+        override: Platform.environment['NEXUS_MODEL'],
       );
-      final catalog = await probe.listModels(showAll: false);
-      expect(catalog, isNotEmpty, reason: '/models must authorize');
-      final model = pickTextModel(
-        catalog.map((m) => m.id).toList(),
-        Platform.environment['NEXUS_MODEL'],
-      );
-      expect(model, isNotEmpty, reason: 'no text/chat model available');
+      final model = resolved.chat;
+      expect(model, isNotEmpty, reason: 'no chat model resolved');
 
       // ── 3. Temp app-support dir → the orchestrator builds its own disks. ──
       final dir = await Directory.systemTemp.createTemp('nx-orch-e2e');

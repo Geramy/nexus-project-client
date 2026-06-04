@@ -36,10 +36,7 @@ import 'package:nexus_projects_client/features/project_setup/providers/tag_provi
 import 'package:nexus_projects_client/features/project_setup/setup_chat_controller.dart';
 import 'package:nexus_projects_client/features/project_setup/setup_interview_panel.dart';
 import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart';
-import 'package:nexus_projects_client/infrastructure/inference/inference_backend_factory.dart';
 import 'package:nexus_projects_client/infrastructure/inference/routed_server.dart';
-import 'package:nexus_projects_client/infrastructure/models/ui/inference_server.dart'
-    as ui_model;
 import 'package:nexus_projects_client/infrastructure/nexus/nexus_account_client.dart';
 
 import '../test/e2e/support/metrics.dart';
@@ -109,21 +106,18 @@ void main() {
         appName: kNexusAppName,
       );
       expect(auth.token, isNotEmpty);
-      final probe = backendForServer(
-        ui_model.InferenceServer(
-          id: 'routed',
-          name: 'Nexus Router',
-          baseUrl: gateway,
-          apiKey: auth.token,
-          providerType: 'routed',
-        ),
-        agentName: 'SetupUI',
+      // The app's default model is the Omni collection (LMX-Omni-52B-Halo);
+      // resolve it (and its LLM component) the same way here.
+      final resolved = await resolveCoordinatorModel(
+        gateway: gateway,
+        token: auth.token,
+        override: Platform.environment['NEXUS_MODEL'],
       );
-      final model = pickTextModel(
-        (await probe.listModels(showAll: false)).map((m) => m.id).toList(),
-        Platform.environment['NEXUS_MODEL'],
-      );
+      final model = resolved.chat;
       expect(model, isNotEmpty);
+      debugPrint(
+        'coordinator model → collection=${resolved.collection}, chat=$model',
+      );
 
       // ── Temp app-support dir (plan files) + in-memory DB. ────────────────
       final tmp = await Directory.systemTemp.createTemp('nx-setup-ui');
