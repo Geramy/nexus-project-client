@@ -270,41 +270,12 @@ void main() {
         return byCat;
       }
 
-      // ── One LIVE AI interview turn: describe the project, screenshot + time
-      //    the host's response (proves live inference + composer navigation). ─
-      {
-        await waitTurn(60);
-        final send = find.byIcon(Icons.send);
-        if (send.evaluate().isNotEmpty) {
-          const intro =
-              'I want to build a cross-platform personal to-do / task tracker '
-              'app. It runs on iOS, Android and Web, works offline and syncs, '
-              'stores tasks in SQLite locally and PostgreSQL on the server.';
-          await tester.enterText(composer, intro);
-          await tester.pump(const Duration(milliseconds: 120));
-          final sw = Stopwatch()..start();
-          await tester.tap(send);
-          await tester.pump(const Duration(milliseconds: 120));
-          await waitTurn(90);
-          sw.stop();
-          metrics.record(
-            'qa_step',
-            'live interview: ${snip(latestHostText())}',
-            sw.elapsed,
-            extra: {'model': model},
-          );
-          transcript
-            ..writeln('\n── live interview turn (${sw.elapsed.inMilliseconds} ms) ──')
-            ..writeln('User: $intro')
-            ..writeln('Host: ${snip(latestHostText())}');
-        }
-      }
-      await settle(300);
-      await shot('interview_live');
-
-      // ── Walk the board ONE CATEGORY AT A TIME. Each category is a step: add
-      //    its values via the board's real controller (the "+ Add" path), let
-      //    the board update, then screenshot + count that category's tags. ────
+      // ── Walk the board ONE CATEGORY AT A TIME, starting from an EMPTY board
+      //    so each screenshot shows exactly one more category filled in. Each
+      //    category is a step: add its values via the board's real controller
+      //    (the "+ Add" path), let the board rebuild, then screenshot + count.
+      //    (The live AI interview turn runs LATER so it doesn't pre-populate
+      //    the board and mask the per-step progression.) ──────────────────────
       final tagCtl = container.read(tagControllerProvider(projectId));
       var stagesRun = 0;
       for (var i = 0; i < stages.length; i++) {
@@ -389,6 +360,40 @@ void main() {
       }
       await settle(400);
       await shot('stack_resolved');
+
+      // ── One LIVE AI interview turn (real composer + send) AFTER the board is
+      //    built, so it proves live inference without pre-populating the per-
+      //    step screenshots above. ────────────────────────────────────────────
+      {
+        await waitTurn(60);
+        final send = find.byIcon(Icons.send);
+        if (send.evaluate().isNotEmpty) {
+          const ask =
+              'The board above is my project profile. Briefly confirm the plan '
+              'and call out anything important I might be missing.';
+          await tester.enterText(composer, ask);
+          await tester.pump(const Duration(milliseconds: 120));
+          final sw = Stopwatch()..start();
+          await tester.tap(send);
+          await tester.pump(const Duration(milliseconds: 120));
+          await waitTurn(90);
+          sw.stop();
+          metrics.record(
+            'qa_step',
+            'live interview: ${snip(latestHostText())}',
+            sw.elapsed,
+            extra: {'model': model},
+          );
+          transcript
+            ..writeln(
+              '\n── live interview turn (${sw.elapsed.inMilliseconds} ms) ──',
+            )
+            ..writeln('User: $ask')
+            ..writeln('Host: ${snip(latestHostText())}');
+        }
+      }
+      await settle(300);
+      await shot('interview_live');
 
       // ── Finalize → generate plans (best-effort). ─────────────────────────
       if (!controller.refining) {
