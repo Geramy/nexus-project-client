@@ -6,6 +6,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   flutter_secure_storage_windows
   git2dart_binaries
   permission_handler_windows
+  printing
   record_windows
   sqlite3_flutter_libs
   url_launcher_windows

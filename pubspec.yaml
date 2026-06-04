@@ -68,6 +68,11 @@ dependencies:
   yaml: ^3.1.2                   # parse .github/workflows/*.yml for the local CI runner
   archive: ^3.6.1                # tar the build context for the Docker Engine API (POST /build)
 
+  # PDF export (user-story tree, etc.) — `pdf` builds the document, `printing`
+  # saves/shares/prints it cross-platform (desktop + mobile).
+  pdf: ^3.11.1
+  printing: ^5.13.4
+
   # Audio / Voice (for multi-modal coordinator conversations, modeled after lemonade_mobile)
   # Using the exact same versions/commit of the recording + VAD stack that works
   # reliably on macOS desktop in ~/IdeaProjects/lemonade_mobile (record ^6 + vad 0.0.8).

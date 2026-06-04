@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/database_provider.dart';
 import '../../../infrastructure/database/nexus_database.dart';
+import 'story_pdf_export.dart';
 import 'story_providers.dart';
 
 const double kStoryNodeWidth = 224;
@@ -72,6 +73,20 @@ class _StoryTreeCanvasState extends ConsumerState<StoryTreeCanvas> {
   void dispose() {
     _transform.dispose();
     super.dispose();
+  }
+
+  Future<void> _exportPdf() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final n = await exportStoryTreePdf(_db, widget.projectId);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Exported $n stories to PDF.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('PDF export failed: $e')));
+    }
   }
 
   /// Deterministic top-down layered layout for nodes that don't have a saved
@@ -200,6 +215,21 @@ class _StoryTreeCanvasState extends ConsumerState<StoryTreeCanvas> {
                 child: Text(
                   'No user stories yet.\nTalk to the Coordinator, or add one.',
                   textAlign: TextAlign.center,
+                ),
+              )
+            else
+              Positioned(
+                right: 16,
+                top: 16,
+                child: Material(
+                  color: scheme.surface,
+                  elevation: 1,
+                  borderRadius: BorderRadius.circular(8),
+                  child: OutlinedButton.icon(
+                    onPressed: _exportPdf,
+                    icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+                    label: const Text('Export PDF'),
+                  ),
                 ),
               ),
             Positioned(
