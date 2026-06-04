@@ -5,14 +5,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:nexus_projects_client/core/providers/app_shell_provider.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
-import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart' show Project;
+import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart'
+    show Project;
+import 'package:nexus_projects_client/features/project_plans/plan_store.dart';
+import 'package:nexus_projects_client/features/project_setup/setup_inference.dart';
+import 'package:nexus_projects_client/features/projects/planning/project_planning_run.dart';
 import 'package:nexus_projects_client/features/projects/project_working_hours.dart';
 
 /// Start / Pause / Stop control bar for a project's autonomous worker-spawn
 /// loop. Flips the project's `orchestrationState` in the DB; the orchestration
-/// driver (a provider keyed by project) watches that state and reacts.
-class ProjectOrchestrationControls extends ConsumerWidget {
+/// driver (a provider keyed by project) watches that state and reacts. Also
+/// offers "Build the plan" — re-runs the deep planning agent on demand.
+class ProjectOrchestrationControls extends ConsumerStatefulWidget {
   final int projectId;
 
   /// Compact mode renders just the buttons (for a toolbar); otherwise it adds
@@ -26,7 +32,85 @@ class ProjectOrchestrationControls extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProjectOrchestrationControls> createState() =>
+      _ProjectOrchestrationControlsState();
+}
+
+class _ProjectOrchestrationControlsState
+    extends ConsumerState<ProjectOrchestrationControls> {
+  bool _building = false;
+  String? _buildStatus;
+
+  int get projectId => widget.projectId;
+  bool get compact => widget.compact;
+
+  /// Re-run the deep planning agent: expand the plans, engineers review, build
+  /// any new tasks, and start orchestration. Progress shows on the button.
+  Future<void> _buildPlan() async {
+    final db = ref.read(nexusDatabaseProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    final clientId = ref.read(currentClientIdProvider);
+    final resolved = await ref.read(
+      projectInferenceProvider((
+        projectId: projectId,
+        clientId: clientId,
+      )).future,
+    );
+    if (resolved == null) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Add an inference server in Agents Hub to build the plan.',
+          ),
+        ),
+      );
+      return;
+    }
+    final planStore = await ref.read(planStoreProvider(projectId).future);
+    final proj = await db.getProjectById(projectId);
+    setState(() {
+      _building = true;
+      _buildStatus = 'Starting…';
+    });
+    try {
+      final result = await ProjectPlanningRun(
+        db: db,
+        planStore: planStore,
+        backend: resolved.backend,
+        projectId: projectId,
+        projectName: proj?.name ?? 'Project',
+        model: resolved.model,
+        enableThinking: resolved.enableThinking,
+        brief:
+            'Deepen and complete the existing /PLANS: cover anything missing '
+            'and split any oversized outline items into small ones.',
+        onProgress: (line) {
+          if (mounted) setState(() => _buildStatus = line);
+        },
+      ).run();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Plan built — ${result.tasksCreated} new task(s); agents started.',
+          ),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Build the plan failed: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _building = false;
+          _buildStatus = null;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final db = ref.watch(nexusDatabaseProvider);
     return StreamBuilder<Project?>(
       stream: db.watchProject(projectId),
@@ -36,7 +120,24 @@ class ProjectOrchestrationControls extends ConsumerWidget {
         final running = state == 'running';
         final paused = state == 'paused';
 
-        Future<void> set(String s) => db.setProjectOrchestrationState(projectId, s);
+        Future<void> set(String s) =>
+            db.setProjectOrchestrationState(projectId, s);
+
+        final buildButton = _building
+            ? OutlinedButton.icon(
+                onPressed: null,
+                icon: const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                label: const Text('Building…'),
+              )
+            : OutlinedButton.icon(
+                onPressed: _buildPlan,
+                icon: const Icon(Icons.auto_awesome, size: 18),
+                label: const Text('Build the plan'),
+              );
 
         final buttons = Row(
           mainAxisSize: MainAxisSize.min,
@@ -59,6 +160,8 @@ class ProjectOrchestrationControls extends ConsumerWidget {
               icon: const Icon(Icons.stop, size: 18),
               label: const Text('Stop'),
             ),
+            const SizedBox(width: 8),
+            buildButton,
           ],
         );
 
@@ -71,24 +174,34 @@ class ProjectOrchestrationControls extends ConsumerWidget {
               children: [
                 _StateDot(state: state),
                 const SizedBox(width: 8),
-                Text(
-                  switch (state) {
-                    'running' => 'Orchestration running',
-                    'paused' => 'Orchestration paused',
-                    _ => 'Orchestration stopped',
-                  },
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
+                Text(switch (state) {
+                  'running' => 'Orchestration running',
+                  'paused' => 'Orchestration paused',
+                  _ => 'Orchestration stopped',
+                }, style: const TextStyle(fontWeight: FontWeight.w600)),
               ],
             ),
             const SizedBox(height: 4),
             if (project != null)
               Text(
                 'Working hours: ${workingHoursSummary(project)}',
-                style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).hintColor,
+                ),
               ),
             const SizedBox(height: 12),
             buttons,
+            if (_buildStatus != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _buildStatus!,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).hintColor,
+                ),
+              ),
+            ],
           ],
         );
       },
@@ -135,7 +248,14 @@ class ProjectWorkingHoursEditor extends ConsumerWidget {
         final end = project.workHoursEnd;
         final mask = project.workDaysMask ?? 0;
 
-        Future<void> save({bool? en, int? s, int? e, int? dm, bool clearStart = false, bool clearEnd = false}) {
+        Future<void> save({
+          bool? en,
+          int? s,
+          int? e,
+          int? dm,
+          bool clearStart = false,
+          bool clearEnd = false,
+        }) {
           return db.setProjectWorkingHours(
             projectId,
             enabled: en ?? enabled,
@@ -146,10 +266,14 @@ class ProjectWorkingHoursEditor extends ConsumerWidget {
         }
 
         Future<void> pick(bool isStart) async {
-          final initialMin = (isStart ? start : end) ?? (isStart ? 9 * 60 : 17 * 60);
+          final initialMin =
+              (isStart ? start : end) ?? (isStart ? 9 * 60 : 17 * 60);
           final picked = await showTimePicker(
             context: context,
-            initialTime: TimeOfDay(hour: initialMin ~/ 60, minute: initialMin % 60),
+            initialTime: TimeOfDay(
+              hour: initialMin ~/ 60,
+              minute: initialMin % 60,
+            ),
           );
           if (picked == null) return;
           final m = picked.hour * 60 + picked.minute;
@@ -162,7 +286,9 @@ class ProjectWorkingHoursEditor extends ConsumerWidget {
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Limit work to specific hours'),
-              subtitle: const Text('Outside these hours the loop idles even while running.'),
+              subtitle: const Text(
+                'Outside these hours the loop idles even while running.',
+              ),
               value: enabled,
               onChanged: (v) => save(en: v),
             ),
@@ -186,7 +312,13 @@ class ProjectWorkingHoursEditor extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              Text('Active days', style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor)),
+              Text(
+                'Active days',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).hintColor,
+                ),
+              ),
               const SizedBox(height: 6),
               Wrap(
                 spacing: 6,

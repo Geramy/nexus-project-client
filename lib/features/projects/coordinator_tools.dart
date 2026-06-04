@@ -29,14 +29,64 @@ import 'package:nexus_projects_client/infrastructure/build/build_models.dart';
 class CoordinatorTools {
   /// Returns the OpenAI-compatible tools array the LLM should see.
   /// Pass [includePlanTools] when the conversation is focused on a plan document.
-  static List<Map<String, dynamic>> buildToolSchemas({bool includePlanTools = false}) {
+  /// [includePlannerComplete]/[includePlannerReview] add the two signal-only
+  /// tools used by the deep planning run (planner says it's done; an engineer
+  /// reviewer votes on the plan) — off for the normal coordinator chat.
+  static List<Map<String, dynamic>> buildToolSchemas({
+    bool includePlanTools = false,
+    bool includePlannerComplete = false,
+    bool includePlannerReview = false,
+  }) {
     return [
+      if (includePlannerComplete)
+        {
+          'type': 'function',
+          'function': {
+            'name': 'mark_planning_complete',
+            'description':
+                'Call this ONLY when the plans are fully fleshed out: every '
+                'layer has a complete `## Outline`, every idea from the brief '
+                'is covered, and each `- [ ]` item is a small, single-session '
+                'job. Signals the planning loop to stop.',
+            'parameters': {'type': 'object', 'properties': {}},
+          },
+        },
+      if (includePlannerReview)
+        {
+          'type': 'function',
+          'function': {
+            'name': 'submit_plan_review',
+            'description':
+                'Submit your verdict on the plan from your engineering domain. '
+                'Set approved=true if it is complete, coherent, and the tasks '
+                'are appropriately small; otherwise approved=false and list the '
+                'specific gaps to fix.',
+            'parameters': {
+              'type': 'object',
+              'properties': {
+                'approved': {
+                  'type': 'boolean',
+                  'description':
+                      'Whether the plan is good enough to build tasks from.',
+                },
+                'gaps': {
+                  'type': 'string',
+                  'description':
+                      'If not approved, the specific missing/oversized items to '
+                      'address (empty when approved).',
+                },
+              },
+              'required': ['approved'],
+            },
+          },
+        },
       if (includePlanTools) ...[
         {
           'type': 'function',
           'function': {
             'name': 'view_plan',
-            'description': 'Read the full current contents of the plan document being edited.',
+            'description':
+                'Read the full current contents of the plan document being edited.',
             'parameters': {'type': 'object', 'properties': {}},
           },
         },
@@ -44,11 +94,15 @@ class CoordinatorTools {
           'type': 'function',
           'function': {
             'name': 'update_plan',
-            'description': 'Replace the plan document with new contents (markdown). Provide the COMPLETE new document, not a diff.',
+            'description':
+                'Replace the plan document with new contents (markdown). Provide the COMPLETE new document, not a diff.',
             'parameters': {
               'type': 'object',
               'properties': {
-                'content': {'type': 'string', 'description': 'The full new plan document (markdown)'},
+                'content': {
+                  'type': 'string',
+                  'description': 'The full new plan document (markdown)',
+                },
               },
               'required': ['content'],
             },
@@ -59,16 +113,39 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'create_task',
-          'description': 'Create a new task (or subtask) in the current project. Use when the user asks to add work, break down a plan, or capture an action item. Every task MUST end up assigned to a worker agent: pass agent_persona_id with the best-fit specialist (call list_agents first to get real ids). If you omit it, a default worker is auto-assigned so the task is never left unassigned.',
+          'description':
+              'Create a new task (or subtask) in the current project. Use when the user asks to add work, break down a plan, or capture an action item. Every task MUST end up assigned to a worker agent: pass agent_persona_id with the best-fit specialist (call list_agents first to get real ids). If you omit it, a default worker is auto-assigned so the task is never left unassigned.',
           'parameters': {
             'type': 'object',
             'properties': {
-              'title': {'type': 'string', 'description': 'Short, clear title for the task'},
-              'description': {'type': 'string', 'description': 'Optional details or acceptance criteria'},
-              'parent_task_id': {'type': 'string', 'description': 'Optional parent task id to create this as a subtask'},
-              'priority': {'type': 'string', 'enum': ['HIGH', 'MED', 'LOW'], 'description': 'Priority level'},
-              'agent_persona_id': {'type': 'string', 'description': 'Worker persona id to assign. Strongly preferred — call list_agents first. If omitted, a default worker is auto-assigned.'},
-              'thinking_enabled': {'type': 'boolean', 'description': 'Optional. Enable the model\'s thinking/reasoning mode for THIS task. Only set true for small, very specific, cut-and-dry jobs. Leave unset/false for long or open-ended tasks (thinking degrades those ~15%).'},
+              'title': {
+                'type': 'string',
+                'description': 'Short, clear title for the task',
+              },
+              'description': {
+                'type': 'string',
+                'description': 'Optional details or acceptance criteria',
+              },
+              'parent_task_id': {
+                'type': 'string',
+                'description':
+                    'Optional parent task id to create this as a subtask',
+              },
+              'priority': {
+                'type': 'string',
+                'enum': ['HIGH', 'MED', 'LOW'],
+                'description': 'Priority level',
+              },
+              'agent_persona_id': {
+                'type': 'string',
+                'description':
+                    'Worker persona id to assign. Strongly preferred — call list_agents first. If omitted, a default worker is auto-assigned.',
+              },
+              'thinking_enabled': {
+                'type': 'boolean',
+                'description':
+                    'Optional. Enable the model\'s thinking/reasoning mode for THIS task. Only set true for small, very specific, cut-and-dry jobs. Leave unset/false for long or open-ended tasks (thinking degrades those ~15%).',
+              },
             },
             'required': ['title'],
           },
@@ -78,13 +155,20 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'update_task_status',
-          'description': 'Change the status of an existing task. Common values: "Todo", "In Progress", "Agent Active", "Done", "Blocked".',
+          'description':
+              'Change the status of an existing task. Common values: "Todo", "In Progress", "Agent Active", "Done", "Blocked".',
           'parameters': {
             'type': 'object',
             'properties': {
-              'task_id': {'type': 'string', 'description': 'The id of the task to update'},
+              'task_id': {
+                'type': 'string',
+                'description': 'The id of the task to update',
+              },
               'status': {'type': 'string', 'description': 'New status string'},
-              'note': {'type': 'string', 'description': 'Optional short note explaining the change'},
+              'note': {
+                'type': 'string',
+                'description': 'Optional short note explaining the change',
+              },
             },
             'required': ['task_id', 'status'],
           },
@@ -101,8 +185,15 @@ class CoordinatorTools {
               'task_id': {'type': 'string'},
               'title': {'type': 'string'},
               'description': {'type': 'string'},
-              'priority': {'type': 'string', 'enum': ['HIGH', 'MED', 'LOW']},
-              'thinking_enabled': {'type': 'boolean', 'description': 'Optional. Enable the model\'s thinking/reasoning mode for THIS task. Only set true for small, very specific, cut-and-dry jobs. Leave unset/false for long or open-ended tasks (thinking degrades those ~15%).'},
+              'priority': {
+                'type': 'string',
+                'enum': ['HIGH', 'MED', 'LOW'],
+              },
+              'thinking_enabled': {
+                'type': 'boolean',
+                'description':
+                    'Optional. Enable the model\'s thinking/reasoning mode for THIS task. Only set true for small, very specific, cut-and-dry jobs. Leave unset/false for long or open-ended tasks (thinking degrades those ~15%).',
+              },
             },
             'required': ['task_id'],
           },
@@ -112,12 +203,20 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'generate_diagram',
-          'description': 'Generate a visual diagram or infographic for the current plan or a specific task using the server image model. Returns a URL or data reference the user can see.',
+          'description':
+              'Generate a visual diagram or infographic for the current plan or a specific task using the server image model. Returns a URL or data reference the user can see.',
           'parameters': {
             'type': 'object',
             'properties': {
-              'prompt': {'type': 'string', 'description': 'Detailed prompt describing the diagram content and style'},
-              'size': {'type': 'string', 'description': 'e.g. 1024x1024 or 1792x1024'},
+              'prompt': {
+                'type': 'string',
+                'description':
+                    'Detailed prompt describing the diagram content and style',
+              },
+              'size': {
+                'type': 'string',
+                'description': 'e.g. 1024x1024 or 1792x1024',
+              },
             },
             'required': ['prompt'],
           },
@@ -127,12 +226,19 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'propose_plan_adjustment',
-          'description': 'Record a high-level adjustment or addition to the overall project plan. Use when the user wants to evolve the plan itself rather than a single task. The proposal is surfaced in the chat for human review.',
+          'description':
+              'Record a high-level adjustment or addition to the overall project plan. Use when the user wants to evolve the plan itself rather than a single task. The proposal is surfaced in the chat for human review.',
           'parameters': {
             'type': 'object',
             'properties': {
-              'summary': {'type': 'string', 'description': 'One-sentence summary of the plan change'},
-              'details': {'type': 'string', 'description': 'Longer explanation of the proposed adjustment'},
+              'summary': {
+                'type': 'string',
+                'description': 'One-sentence summary of the plan change',
+              },
+              'details': {
+                'type': 'string',
+                'description': 'Longer explanation of the proposed adjustment',
+              },
             },
             'required': ['summary'],
           },
@@ -142,11 +248,9 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'list_open_tasks',
-          'description': 'List current open/in-progress tasks in the project so the coordinator can report status or suggest next actions.',
-          'parameters': {
-            'type': 'object',
-            'properties': {},
-          },
+          'description':
+              'List current open/in-progress tasks in the project so the coordinator can report status or suggest next actions.',
+          'parameters': {'type': 'object', 'properties': {}},
         },
       },
       {
@@ -158,7 +262,10 @@ class CoordinatorTools {
             'type': 'object',
             'properties': {
               'task_id': {'type': 'string'},
-              'agent_persona_id': {'type': 'string', 'description': 'The persona id to assign'},
+              'agent_persona_id': {
+                'type': 'string',
+                'description': 'The persona id to assign',
+              },
             },
             'required': ['task_id', 'agent_persona_id'],
           },
@@ -168,35 +275,38 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'view_current_plan',
-          'description': 'Retrieve the current high-level plan context for the project.',
-          'parameters': {
-            'type': 'object',
-            'properties': {},
-          },
+          'description':
+              'Retrieve the current high-level plan context for the project.',
+          'parameters': {'type': 'object', 'properties': {}},
         },
       },
       {
         'type': 'function',
         'function': {
           'name': 'sync_plans_to_tasks',
-          'description': 'Scan every plan document under /PLANS and create a task for each unchecked outline item ("- [ ] …") that does not already have one. Each plan item is annotated with its task id so re-running never creates duplicates. New tasks are auto-assigned to a worker. Call this to turn the plans into the task board (it runs automatically when setup completes, but you can re-run it after editing plans).',
-          'parameters': {
-            'type': 'object',
-            'properties': {},
-          },
+          'description':
+              'Scan every plan document under /PLANS and create a task for each unchecked outline item ("- [ ] …") that does not already have one. Each plan item is annotated with its task id so re-running never creates duplicates. New tasks are auto-assigned to a worker. Call this to turn the plans into the task board (it runs automatically when setup completes, but you can re-run it after editing plans).',
+          'parameters': {'type': 'object', 'properties': {}},
         },
       },
       {
         'type': 'function',
         'function': {
           'name': 'set_task_dates',
-          'description': 'Set or clear a task\'s start and/or due date. Dates are ISO format YYYY-MM-DD. Send an empty string to clear a date.',
+          'description':
+              'Set or clear a task\'s start and/or due date. Dates are ISO format YYYY-MM-DD. Send an empty string to clear a date.',
           'parameters': {
             'type': 'object',
             'properties': {
               'task_id': {'type': 'string'},
-              'start_date': {'type': 'string', 'description': 'YYYY-MM-DD (empty string clears it)'},
-              'due_date': {'type': 'string', 'description': 'YYYY-MM-DD (empty string clears it)'},
+              'start_date': {
+                'type': 'string',
+                'description': 'YYYY-MM-DD (empty string clears it)',
+              },
+              'due_date': {
+                'type': 'string',
+                'description': 'YYYY-MM-DD (empty string clears it)',
+              },
             },
             'required': ['task_id'],
           },
@@ -206,15 +316,32 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'set_task_build_config',
-          'description': 'Configure a task\'s build gate. When requires_build is true, the orchestrator runs a Docker/CI build after verification and before merge. Provide either a workflow_path (GitHub-Actions YAML) or a dockerfile_path. Send an empty string to clear a path.',
+          'description':
+              'Configure a task\'s build gate. When requires_build is true, the orchestrator runs a Docker/CI build after verification and before merge. Provide either a workflow_path (GitHub-Actions YAML) or a dockerfile_path. Send an empty string to clear a path.',
           'parameters': {
             'type': 'object',
             'properties': {
               'task_id': {'type': 'string'},
-              'requires_build': {'type': 'boolean', 'description': 'Whether this task must pass a build before merge.'},
-              'dockerfile_path': {'type': 'string', 'description': 'Workspace-relative Dockerfile path (empty string clears it).'},
-              'workflow_path': {'type': 'string', 'description': 'Workspace-relative CI workflow YAML path (empty string clears it).'},
-              'image_tag': {'type': 'string', 'description': 'Optional image tag for the Docker build (empty string clears it).'},
+              'requires_build': {
+                'type': 'boolean',
+                'description':
+                    'Whether this task must pass a build before merge.',
+              },
+              'dockerfile_path': {
+                'type': 'string',
+                'description':
+                    'Workspace-relative Dockerfile path (empty string clears it).',
+              },
+              'workflow_path': {
+                'type': 'string',
+                'description':
+                    'Workspace-relative CI workflow YAML path (empty string clears it).',
+              },
+              'image_tag': {
+                'type': 'string',
+                'description':
+                    'Optional image tag for the Docker build (empty string clears it).',
+              },
             },
             'required': ['task_id'],
           },
@@ -225,11 +352,16 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'list_tasks',
-          'description': 'List ALL tasks in the project (not just open ones), including subtasks, status, priority, assigned agent, and source plan path. Use this to search/review before acting.',
+          'description':
+              'List ALL tasks in the project (not just open ones), including subtasks, status, priority, assigned agent, and source plan path. Use this to search/review before acting.',
           'parameters': {
             'type': 'object',
             'properties': {
-              'status': {'type': 'string', 'description': 'Optional filter by exact status (e.g. "Done", "In Progress").'},
+              'status': {
+                'type': 'string',
+                'description':
+                    'Optional filter by exact status (e.g. "Done", "In Progress").',
+              },
             },
           },
         },
@@ -238,10 +370,13 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'get_task',
-          'description': 'Read the full details of a single task by id (title, description, status, priority, dates, parent, plan, assigned agent).',
+          'description':
+              'Read the full details of a single task by id (title, description, status, priority, dates, parent, plan, assigned agent).',
           'parameters': {
             'type': 'object',
-            'properties': {'task_id': {'type': 'string'}},
+            'properties': {
+              'task_id': {'type': 'string'},
+            },
             'required': ['task_id'],
           },
         },
@@ -250,10 +385,13 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'delete_task',
-          'description': 'Delete a task by id. Its subtasks are deleted too. This is permanent — only do it when the user clearly asks to remove the task.',
+          'description':
+              'Delete a task by id. Its subtasks are deleted too. This is permanent — only do it when the user clearly asks to remove the task.',
           'parameters': {
             'type': 'object',
-            'properties': {'task_id': {'type': 'string'}},
+            'properties': {
+              'task_id': {'type': 'string'},
+            },
             'required': ['task_id'],
           },
         },
@@ -262,12 +400,17 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'link_task_to_plan',
-          'description': 'Link an existing task to a plan (sets which plan the task came from), or pass an empty plan_path to unlink it.',
+          'description':
+              'Link an existing task to a plan (sets which plan the task came from), or pass an empty plan_path to unlink it.',
           'parameters': {
             'type': 'object',
             'properties': {
               'task_id': {'type': 'string'},
-              'plan_path': {'type': 'string', 'description': 'The plan workspace path to link to, e.g. "/PLANS/Roadmap.md" (empty string to unlink).'},
+              'plan_path': {
+                'type': 'string',
+                'description':
+                    'The plan workspace path to link to, e.g. "/PLANS/Roadmap.md" (empty string to unlink).',
+              },
             },
             'required': ['task_id'],
           },
@@ -277,7 +420,8 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'list_agents',
-          'description': 'List the agent personas available to assign to tasks (their ids and names). Call this BEFORE assign_agent_to_task so you use a real agent id.',
+          'description':
+              'List the agent personas available to assign to tasks (their ids and names). Call this BEFORE assign_agent_to_task so you use a real agent id.',
           'parameters': {'type': 'object', 'properties': {}},
         },
       },
@@ -285,7 +429,8 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'list_plans',
-          'description': 'List all plan documents and folders in the project (workspace path, name, whether it is a folder, parent folder path).',
+          'description':
+              'List all plan documents and folders in the project (workspace path, name, whether it is a folder, parent folder path).',
           'parameters': {'type': 'object', 'properties': {}},
         },
       },
@@ -293,14 +438,30 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'create_plan',
-          'description': 'Create a new plan document (or folder) under /PLANS in the project workspace. Returns the new plan\'s workspace path, which you can then write to or create tasks under.',
+          'description':
+              'Create a new plan document (or folder) under /PLANS in the project workspace. Returns the new plan\'s workspace path, which you can then write to or create tasks under.',
           'parameters': {
             'type': 'object',
             'properties': {
-              'name': {'type': 'string', 'description': 'Plan or folder name (basename)'},
-              'is_folder': {'type': 'boolean', 'description': 'true to create a folder, false (default) for a plan document'},
-              'parent_path': {'type': 'string', 'description': 'Optional parent folder workspace path, e.g. "/PLANS/Sprint 1" (defaults to /PLANS)'},
-              'content': {'type': 'string', 'description': 'Optional initial markdown content for a plan document'},
+              'name': {
+                'type': 'string',
+                'description': 'Plan or folder name (basename)',
+              },
+              'is_folder': {
+                'type': 'boolean',
+                'description':
+                    'true to create a folder, false (default) for a plan document',
+              },
+              'parent_path': {
+                'type': 'string',
+                'description':
+                    'Optional parent folder workspace path, e.g. "/PLANS/Sprint 1" (defaults to /PLANS)',
+              },
+              'content': {
+                'type': 'string',
+                'description':
+                    'Optional initial markdown content for a plan document',
+              },
             },
             'required': ['name'],
           },
@@ -310,10 +471,16 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'read_plan',
-          'description': 'Read the full contents of any plan document by its workspace path.',
+          'description':
+              'Read the full contents of any plan document by its workspace path.',
           'parameters': {
             'type': 'object',
-            'properties': {'plan_path': {'type': 'string', 'description': 'Workspace path, e.g. "/PLANS/Roadmap.md"'}},
+            'properties': {
+              'plan_path': {
+                'type': 'string',
+                'description': 'Workspace path, e.g. "/PLANS/Roadmap.md"',
+              },
+            },
             'required': ['plan_path'],
           },
         },
@@ -322,12 +489,19 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'write_plan',
-          'description': 'Replace the contents of any plan document by its workspace path with new markdown. Provide the COMPLETE new document, not a diff.',
+          'description':
+              'Replace the contents of any plan document by its workspace path with new markdown. Provide the COMPLETE new document, not a diff.',
           'parameters': {
             'type': 'object',
             'properties': {
-              'plan_path': {'type': 'string', 'description': 'Workspace path, e.g. "/PLANS/Roadmap.md"'},
-              'content': {'type': 'string', 'description': 'The full new plan document (markdown)'},
+              'plan_path': {
+                'type': 'string',
+                'description': 'Workspace path, e.g. "/PLANS/Roadmap.md"',
+              },
+              'content': {
+                'type': 'string',
+                'description': 'The full new plan document (markdown)',
+              },
             },
             'required': ['plan_path', 'content'],
           },
@@ -337,11 +511,16 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'rename_plan',
-          'description': 'Rename a plan document or folder by its workspace path.',
+          'description':
+              'Rename a plan document or folder by its workspace path.',
           'parameters': {
             'type': 'object',
             'properties': {
-              'plan_path': {'type': 'string', 'description': 'Current workspace path, e.g. "/PLANS/Roadmap.md"'},
+              'plan_path': {
+                'type': 'string',
+                'description':
+                    'Current workspace path, e.g. "/PLANS/Roadmap.md"',
+              },
               'name': {'type': 'string', 'description': 'New name (basename)'},
             },
             'required': ['plan_path', 'name'],
@@ -352,10 +531,16 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'delete_plan',
-          'description': 'Delete a plan document or folder by its workspace path (folders delete everything inside). Tasks created from it keep their history but lose the plan link. Permanent — only when the user asks.',
+          'description':
+              'Delete a plan document or folder by its workspace path (folders delete everything inside). Tasks created from it keep their history but lose the plan link. Permanent — only when the user asks.',
           'parameters': {
             'type': 'object',
-            'properties': {'plan_path': {'type': 'string', 'description': 'Workspace path, e.g. "/PLANS/Roadmap.md"'}},
+            'properties': {
+              'plan_path': {
+                'type': 'string',
+                'description': 'Workspace path, e.g. "/PLANS/Roadmap.md"',
+              },
+            },
             'required': ['plan_path'],
           },
         },
@@ -365,11 +550,16 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'list_files',
-          'description': 'List the files and folders in the project workspace at a directory path. Use to explore the codebase before reading or editing.',
+          'description':
+              'List the files and folders in the project workspace at a directory path. Use to explore the codebase before reading or editing.',
           'parameters': {
             'type': 'object',
             'properties': {
-              'path': {'type': 'string', 'description': 'Workspace directory path, e.g. "/" (root) or "/src". Defaults to "/".'},
+              'path': {
+                'type': 'string',
+                'description':
+                    'Workspace directory path, e.g. "/" (root) or "/src". Defaults to "/".',
+              },
             },
           },
         },
@@ -378,10 +568,16 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'read_file',
-          'description': 'Read the full text contents of a file in the project workspace by its path.',
+          'description':
+              'Read the full text contents of a file in the project workspace by its path.',
           'parameters': {
             'type': 'object',
-            'properties': {'path': {'type': 'string', 'description': 'Workspace file path, e.g. "/lib/main.dart"'}},
+            'properties': {
+              'path': {
+                'type': 'string',
+                'description': 'Workspace file path, e.g. "/lib/main.dart"',
+              },
+            },
             'required': ['path'],
           },
         },
@@ -390,12 +586,19 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'write_file',
-          'description': 'Create or overwrite a file in the project workspace with the given text content. Creates parent folders as needed. Provide the COMPLETE new file contents.',
+          'description':
+              'Create or overwrite a file in the project workspace with the given text content. Creates parent folders as needed. Provide the COMPLETE new file contents.',
           'parameters': {
             'type': 'object',
             'properties': {
-              'path': {'type': 'string', 'description': 'Workspace file path, e.g. "/src/app.js"'},
-              'content': {'type': 'string', 'description': 'The full file contents to write'},
+              'path': {
+                'type': 'string',
+                'description': 'Workspace file path, e.g. "/src/app.js"',
+              },
+              'content': {
+                'type': 'string',
+                'description': 'The full file contents to write',
+              },
             },
             'required': ['path', 'content'],
           },
@@ -405,10 +608,16 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'create_directory',
-          'description': 'Create a directory (and any missing parents) in the project workspace.',
+          'description':
+              'Create a directory (and any missing parents) in the project workspace.',
           'parameters': {
             'type': 'object',
-            'properties': {'path': {'type': 'string', 'description': 'Workspace directory path, e.g. "/src/utils"'}},
+            'properties': {
+              'path': {
+                'type': 'string',
+                'description': 'Workspace directory path, e.g. "/src/utils"',
+              },
+            },
             'required': ['path'],
           },
         },
@@ -417,11 +626,15 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'move_path',
-          'description': 'Move or rename a file or folder within the project workspace.',
+          'description':
+              'Move or rename a file or folder within the project workspace.',
           'parameters': {
             'type': 'object',
             'properties': {
-              'from': {'type': 'string', 'description': 'Existing workspace path'},
+              'from': {
+                'type': 'string',
+                'description': 'Existing workspace path',
+              },
               'to': {'type': 'string', 'description': 'New workspace path'},
             },
             'required': ['from', 'to'],
@@ -432,10 +645,16 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'delete_path',
-          'description': 'Delete a file or folder (folders are removed recursively) from the project workspace. Permanent — only when the user clearly asks.',
+          'description':
+              'Delete a file or folder (folders are removed recursively) from the project workspace. Permanent — only when the user clearly asks.',
           'parameters': {
             'type': 'object',
-            'properties': {'path': {'type': 'string', 'description': 'Workspace path to delete'}},
+            'properties': {
+              'path': {
+                'type': 'string',
+                'description': 'Workspace path to delete',
+              },
+            },
             'required': ['path'],
           },
         },
@@ -444,10 +663,16 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'delete_file',
-          'description': 'Delete a single file from the project workspace. Fails if the path is a directory. Permanent — only when the user clearly asks.',
+          'description':
+              'Delete a single file from the project workspace. Fails if the path is a directory. Permanent — only when the user clearly asks.',
           'parameters': {
             'type': 'object',
-            'properties': {'path': {'type': 'string', 'description': 'Workspace path of the file to delete'}},
+            'properties': {
+              'path': {
+                'type': 'string',
+                'description': 'Workspace path of the file to delete',
+              },
+            },
             'required': ['path'],
           },
         },
@@ -456,10 +681,16 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'delete_folder',
-          'description': 'Delete a folder and all of its contents (recursive) from the project workspace. Fails if the path is a file. Permanent — only when the user clearly asks.',
+          'description':
+              'Delete a folder and all of its contents (recursive) from the project workspace. Fails if the path is a file. Permanent — only when the user clearly asks.',
           'parameters': {
             'type': 'object',
-            'properties': {'path': {'type': 'string', 'description': 'Workspace path of the folder to delete'}},
+            'properties': {
+              'path': {
+                'type': 'string',
+                'description': 'Workspace path of the folder to delete',
+              },
+            },
             'required': ['path'],
           },
         },
@@ -469,7 +700,8 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'git_status',
-          'description': 'Show the git status of the project workspace: current branch and the list of changed/untracked/deleted files.',
+          'description':
+              'Show the git status of the project workspace: current branch and the list of changed/untracked/deleted files.',
           'parameters': {'type': 'object', 'properties': {}},
         },
       },
@@ -477,10 +709,16 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'git_log',
-          'description': 'Show recent commits (newest first) on the current branch.',
+          'description':
+              'Show recent commits (newest first) on the current branch.',
           'parameters': {
             'type': 'object',
-            'properties': {'limit': {'type': 'integer', 'description': 'Max commits to return (default 20).'}},
+            'properties': {
+              'limit': {
+                'type': 'integer',
+                'description': 'Max commits to return (default 20).',
+              },
+            },
           },
         },
       },
@@ -488,12 +726,18 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'git_commit',
-          'description': 'Commit changes in the workspace. By default commits ALL changes; pass a list of paths to commit only those.',
+          'description':
+              'Commit changes in the workspace. By default commits ALL changes; pass a list of paths to commit only those.',
           'parameters': {
             'type': 'object',
             'properties': {
               'message': {'type': 'string', 'description': 'Commit message'},
-              'paths': {'type': 'array', 'items': {'type': 'string'}, 'description': 'Optional workspace paths to commit (omit to commit everything)'},
+              'paths': {
+                'type': 'array',
+                'items': {'type': 'string'},
+                'description':
+                    'Optional workspace paths to commit (omit to commit everything)',
+              },
             },
             'required': ['message'],
           },
@@ -511,12 +755,17 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'git_create_branch',
-          'description': 'Create a new git branch at the current commit. Optionally switch to it.',
+          'description':
+              'Create a new git branch at the current commit. Optionally switch to it.',
           'parameters': {
             'type': 'object',
             'properties': {
               'name': {'type': 'string', 'description': 'New branch name'},
-              'checkout': {'type': 'boolean', 'description': 'Switch to the new branch after creating it (default false)'},
+              'checkout': {
+                'type': 'boolean',
+                'description':
+                    'Switch to the new branch after creating it (default false)',
+              },
             },
             'required': ['name'],
           },
@@ -526,10 +775,16 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'git_checkout_branch',
-          'description': 'Switch the workspace to an existing branch. WARNING: this overwrites uncommitted workspace changes with the branch tip. Commit first if needed.',
+          'description':
+              'Switch the workspace to an existing branch. WARNING: this overwrites uncommitted workspace changes with the branch tip. Commit first if needed.',
           'parameters': {
             'type': 'object',
-            'properties': {'name': {'type': 'string', 'description': 'Branch name to switch to'}},
+            'properties': {
+              'name': {
+                'type': 'string',
+                'description': 'Branch name to switch to',
+              },
+            },
             'required': ['name'],
           },
         },
@@ -539,14 +794,31 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'build_docker_image',
-          'description': 'Build a Docker image from a Dockerfile in the project workspace. Runs locally and streams the build log into the Builds/CI view. Returns a run id you can poll with get_ci_run.',
+          'description':
+              'Build a Docker image from a Dockerfile in the project workspace. Runs locally and streams the build log into the Builds/CI view. Returns a run id you can poll with get_ci_run.',
           'parameters': {
             'type': 'object',
             'properties': {
-              'dockerfile_path': {'type': 'string', 'description': 'Workspace path to the Dockerfile (e.g. "/Dockerfile")'},
-              'image_tag': {'type': 'string', 'description': 'Tag for the produced image (e.g. "myapp:latest")'},
-              'context': {'type': 'string', 'description': 'Build context directory relative to the workspace root (default ".")'},
-              'task_id': {'type': 'string', 'description': 'Optional task to gate on this build: if it succeeds the task is auto-marked Done, if it fails the task returns to the board.'},
+              'dockerfile_path': {
+                'type': 'string',
+                'description':
+                    'Workspace path to the Dockerfile (e.g. "/Dockerfile")',
+              },
+              'image_tag': {
+                'type': 'string',
+                'description':
+                    'Tag for the produced image (e.g. "myapp:latest")',
+              },
+              'context': {
+                'type': 'string',
+                'description':
+                    'Build context directory relative to the workspace root (default ".")',
+              },
+              'task_id': {
+                'type': 'string',
+                'description':
+                    'Optional task to gate on this build: if it succeeds the task is auto-marked Done, if it fails the task returns to the board.',
+              },
             },
             'required': ['dockerfile_path', 'image_tag'],
           },
@@ -556,12 +828,21 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'run_workflow',
-          'description': 'Run a GitHub-Actions-format workflow (.github/workflows/*.yml) locally against the project workspace. Parses the YAML and executes its jobs/steps, streaming logs into the Builds/CI view. Returns a run id.',
+          'description':
+              'Run a GitHub-Actions-format workflow (.github/workflows/*.yml) locally against the project workspace. Parses the YAML and executes its jobs/steps, streaming logs into the Builds/CI view. Returns a run id.',
           'parameters': {
             'type': 'object',
             'properties': {
-              'workflow_path': {'type': 'string', 'description': 'Workspace path to the workflow YAML (e.g. "/.github/workflows/ci.yml")'},
-              'task_id': {'type': 'string', 'description': 'Optional task to gate on this run: a green run auto-marks the task Done, a red one sends it back to the board.'},
+              'workflow_path': {
+                'type': 'string',
+                'description':
+                    'Workspace path to the workflow YAML (e.g. "/.github/workflows/ci.yml")',
+              },
+              'task_id': {
+                'type': 'string',
+                'description':
+                    'Optional task to gate on this run: a green run auto-marks the task Done, a red one sends it back to the board.',
+              },
             },
             'required': ['workflow_path'],
           },
@@ -571,12 +852,22 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'scaffold_ci_workflow',
-          'description': 'Write a default GitHub-Actions-format CI workflow into the project workspace (default path /.github/workflows/ci.yml). Use this to bootstrap CI before run_workflow. Choose a template by project kind.',
+          'description':
+              'Write a default GitHub-Actions-format CI workflow into the project workspace (default path /.github/workflows/ci.yml). Use this to bootstrap CI before run_workflow. Choose a template by project kind.',
           'parameters': {
             'type': 'object',
             'properties': {
-              'kind': {'type': 'string', 'enum': ['flutter', 'dart', 'node', 'generic'], 'description': 'Project type the workflow should target (default "flutter").'},
-              'path': {'type': 'string', 'description': 'Workspace path to write (default "/.github/workflows/ci.yml").'},
+              'kind': {
+                'type': 'string',
+                'enum': ['flutter', 'dart', 'node', 'generic'],
+                'description':
+                    'Project type the workflow should target (default "flutter").',
+              },
+              'path': {
+                'type': 'string',
+                'description':
+                    'Workspace path to write (default "/.github/workflows/ci.yml").',
+              },
             },
           },
         },
@@ -585,7 +876,8 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'list_ci_runs',
-          'description': 'List recent build / CI runs for this project (id, name, status, kind).',
+          'description':
+              'List recent build / CI runs for this project (id, name, status, kind).',
           'parameters': {'type': 'object', 'properties': {}},
         },
       },
@@ -593,12 +885,21 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'get_ci_run',
-          'description': 'Get the details of one build / CI run by id: its jobs, steps, statuses, exit codes, and the captured log output (so you can diagnose build errors).',
+          'description':
+              'Get the details of one build / CI run by id: its jobs, steps, statuses, exit codes, and the captured log output (so you can diagnose build errors).',
           'parameters': {
             'type': 'object',
             'properties': {
-              'run_id': {'type': 'string', 'description': 'The run id (from list_ci_runs or build_docker_image / run_workflow)'},
-              'tail': {'type': 'integer', 'description': 'Only include the last N lines of each step log (default 200).'},
+              'run_id': {
+                'type': 'string',
+                'description':
+                    'The run id (from list_ci_runs or build_docker_image / run_workflow)',
+              },
+              'tail': {
+                'type': 'integer',
+                'description':
+                    'Only include the last N lines of each step log (default 200).',
+              },
             },
             'required': ['run_id'],
           },
@@ -609,14 +910,30 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'submit_for_completion',
-          'description': 'WORKER tool. Call when the assigned task is implemented and committed to its task branch. Moves the task to Review and records your submission so the Verification Agent can prove it.',
+          'description':
+              'WORKER tool. Call when the assigned task is implemented and committed to its task branch. Moves the task to Review and records your submission so the Verification Agent can prove it.',
           'parameters': {
             'type': 'object',
             'properties': {
-              'task_id': {'type': 'string', 'description': 'The task you were assigned.'},
-              'summary': {'type': 'string', 'description': 'What you changed and how it satisfies the acceptance criteria.'},
-              'evidence': {'type': 'string', 'description': 'Proof you gathered: test output, build ids, diffs.'},
-              'branch': {'type': 'string', 'description': 'The task branch your commits are on (e.g. "task/42").'},
+              'task_id': {
+                'type': 'string',
+                'description': 'The task you were assigned.',
+              },
+              'summary': {
+                'type': 'string',
+                'description':
+                    'What you changed and how it satisfies the acceptance criteria.',
+              },
+              'evidence': {
+                'type': 'string',
+                'description':
+                    'Proof you gathered: test output, build ids, diffs.',
+              },
+              'branch': {
+                'type': 'string',
+                'description':
+                    'The task branch your commits are on (e.g. "task/42").',
+              },
             },
             'required': ['task_id', 'summary'],
           },
@@ -626,10 +943,13 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'run_verification',
-          'description': 'VERIFICATION AGENT tool. Begin verifying a submitted task: marks it as verifying and returns the task\'s acceptance criteria and runnable verification command so you can execute the proof with your read/run tools.',
+          'description':
+              'VERIFICATION AGENT tool. Begin verifying a submitted task: marks it as verifying and returns the task\'s acceptance criteria and runnable verification command so you can execute the proof with your read/run tools.',
           'parameters': {
             'type': 'object',
-            'properties': {'task_id': {'type': 'string'}},
+            'properties': {
+              'task_id': {'type': 'string'},
+            },
             'required': ['task_id'],
           },
         },
@@ -638,13 +958,21 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'submit_verdict',
-          'description': 'VERIFICATION AGENT tool. Emit the pass/fail verdict for a task after running its verification. On pass the task awaits Coordinator integration; on fail it returns to the board for the same agent to re-engage.',
+          'description':
+              'VERIFICATION AGENT tool. Emit the pass/fail verdict for a task after running its verification. On pass the task awaits Coordinator integration; on fail it returns to the board for the same agent to re-engage.',
           'parameters': {
             'type': 'object',
             'properties': {
               'task_id': {'type': 'string'},
-              'verdict': {'type': 'string', 'enum': ['pass', 'fail'], 'description': '"pass" or "fail".'},
-              'evidence': {'type': 'string', 'description': 'The observed proof that justifies the verdict.'},
+              'verdict': {
+                'type': 'string',
+                'enum': ['pass', 'fail'],
+                'description': '"pass" or "fail".',
+              },
+              'evidence': {
+                'type': 'string',
+                'description': 'The observed proof that justifies the verdict.',
+              },
             },
             'required': ['task_id', 'verdict'],
           },
@@ -654,10 +982,13 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'review_submission',
-          'description': 'Read a task\'s worker submission (summary, evidence, branch) and current execution state, so you can decide whether to approve or reject it.',
+          'description':
+              'Read a task\'s worker submission (summary, evidence, branch) and current execution state, so you can decide whether to approve or reject it.',
           'parameters': {
             'type': 'object',
-            'properties': {'task_id': {'type': 'string'}},
+            'properties': {
+              'task_id': {'type': 'string'},
+            },
             'required': ['task_id'],
           },
         },
@@ -666,10 +997,13 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'approve_task',
-          'description': 'Approve a verified task as fully done: marks it Done and tears down the ephemeral worker session. Merge the task branch into main with git_merge BEFORE approving.',
+          'description':
+              'Approve a verified task as fully done: marks it Done and tears down the ephemeral worker session. Merge the task branch into main with git_merge BEFORE approving.',
           'parameters': {
             'type': 'object',
-            'properties': {'task_id': {'type': 'string'}},
+            'properties': {
+              'task_id': {'type': 'string'},
+            },
             'required': ['task_id'],
           },
         },
@@ -678,12 +1012,17 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'reject_task',
-          'description': 'Send a task back to the board (Todo) for rework, clearing its submission and live worker session. Use when a submission or verification is unsatisfactory.',
+          'description':
+              'Send a task back to the board (Todo) for rework, clearing its submission and live worker session. Use when a submission or verification is unsatisfactory.',
           'parameters': {
             'type': 'object',
             'properties': {
               'task_id': {'type': 'string'},
-              'reason': {'type': 'string', 'description': 'Why it is being sent back (recorded on the task).'},
+              'reason': {
+                'type': 'string',
+                'description':
+                    'Why it is being sent back (recorded on the task).',
+              },
             },
             'required': ['task_id'],
           },
@@ -694,11 +1033,16 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'list_directory',
-          'description': 'List everything inside a workspace directory, labeling each entry as a folder or file.',
+          'description':
+              'List everything inside a workspace directory, labeling each entry as a folder or file.',
           'parameters': {
             'type': 'object',
             'properties': {
-              'dir_path': {'type': 'string', 'description': 'Workspace directory path, e.g. "/" or "/src/utils".'},
+              'dir_path': {
+                'type': 'string',
+                'description':
+                    'Workspace directory path, e.g. "/" or "/src/utils".',
+              },
             },
             'required': ['dir_path'],
           },
@@ -708,12 +1052,20 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'search_directory',
-          'description': 'Recursively search every text file under a workspace directory for a string. Returns each matching file with line numbers and a snippet.',
+          'description':
+              'Recursively search every text file under a workspace directory for a string. Returns each matching file with line numbers and a snippet.',
           'parameters': {
             'type': 'object',
             'properties': {
-              'pattern': {'type': 'string', 'description': 'The exact text to search for.'},
-              'dir_path': {'type': 'string', 'description': 'Subfolder to search within (defaults to the workspace root "/").'},
+              'pattern': {
+                'type': 'string',
+                'description': 'The exact text to search for.',
+              },
+              'dir_path': {
+                'type': 'string',
+                'description':
+                    'Subfolder to search within (defaults to the workspace root "/").',
+              },
             },
             'required': ['pattern'],
           },
@@ -723,11 +1075,15 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'search_file_content',
-          'description': 'Search for a string inside a single file. Returns the line numbers and matching text. Use to pinpoint a line before editing.',
+          'description':
+              'Search for a string inside a single file. Returns the line numbers and matching text. Use to pinpoint a line before editing.',
           'parameters': {
             'type': 'object',
             'properties': {
-              'file_path': {'type': 'string', 'description': 'Workspace file path.'},
+              'file_path': {
+                'type': 'string',
+                'description': 'Workspace file path.',
+              },
               'pattern': {'type': 'string', 'description': 'The text to find.'},
             },
             'required': ['file_path', 'pattern'],
@@ -738,13 +1094,24 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'read_file_chunk',
-          'description': 'Read a specific range of lines from a file (max 200 lines per call) so you do not ingest huge files. Output is labeled with line numbers.',
+          'description':
+              'Read a specific range of lines from a file (max 200 lines per call) so you do not ingest huge files. Output is labeled with line numbers.',
           'parameters': {
             'type': 'object',
             'properties': {
-              'file_path': {'type': 'string', 'description': 'Workspace file path.'},
-              'start_line': {'type': 'integer', 'description': 'First line to read (1-based).'},
-              'end_line': {'type': 'integer', 'description': 'Last line to read (capped to start_line + 200).'},
+              'file_path': {
+                'type': 'string',
+                'description': 'Workspace file path.',
+              },
+              'start_line': {
+                'type': 'integer',
+                'description': 'First line to read (1-based).',
+              },
+              'end_line': {
+                'type': 'integer',
+                'description':
+                    'Last line to read (capped to start_line + 200).',
+              },
             },
             'required': ['file_path', 'start_line', 'end_line'],
           },
@@ -754,12 +1121,19 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'create_file',
-          'description': 'Create a NEW file with the given content. Fails if a file already exists at that path (use write_file or edit_file to change existing files).',
+          'description':
+              'Create a NEW file with the given content. Fails if a file already exists at that path (use write_file or edit_file to change existing files).',
           'parameters': {
             'type': 'object',
             'properties': {
-              'file_path': {'type': 'string', 'description': 'Workspace path and file name to create.'},
-              'content': {'type': 'string', 'description': 'The full text to populate the new file with.'},
+              'file_path': {
+                'type': 'string',
+                'description': 'Workspace path and file name to create.',
+              },
+              'content': {
+                'type': 'string',
+                'description': 'The full text to populate the new file with.',
+              },
             },
             'required': ['file_path', 'content'],
           },
@@ -769,13 +1143,23 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'edit_file',
-          'description': 'Safely edit a file with an exact search-and-replace. Reads the file, replaces the FIRST occurrence of old_text with new_text, and writes it back. Aborts if old_text is not found exactly.',
+          'description':
+              'Safely edit a file with an exact search-and-replace. Reads the file, replaces the FIRST occurrence of old_text with new_text, and writes it back. Aborts if old_text is not found exactly.',
           'parameters': {
             'type': 'object',
             'properties': {
-              'file_path': {'type': 'string', 'description': 'Target workspace file path.'},
-              'old_text': {'type': 'string', 'description': 'The exact existing text block to replace.'},
-              'new_text': {'type': 'string', 'description': 'The replacement text block.'},
+              'file_path': {
+                'type': 'string',
+                'description': 'Target workspace file path.',
+              },
+              'old_text': {
+                'type': 'string',
+                'description': 'The exact existing text block to replace.',
+              },
+              'new_text': {
+                'type': 'string',
+                'description': 'The replacement text block.',
+              },
             },
             'required': ['file_path', 'old_text', 'new_text'],
           },
@@ -786,10 +1170,14 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'git_push',
-          'description': 'Push commits to a remote. (Not yet supported — the workspace repo is local-only with no remote configured.)',
+          'description':
+              'Push commits to a remote. (Not yet supported — the workspace repo is local-only with no remote configured.)',
           'parameters': {
             'type': 'object',
-            'properties': {'remote': {'type': 'string'}, 'branch': {'type': 'string'}},
+            'properties': {
+              'remote': {'type': 'string'},
+              'branch': {'type': 'string'},
+            },
           },
         },
       },
@@ -797,10 +1185,14 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'git_pull',
-          'description': 'Pull commits from a remote. (Not yet supported — the workspace repo is local-only with no remote configured.)',
+          'description':
+              'Pull commits from a remote. (Not yet supported — the workspace repo is local-only with no remote configured.)',
           'parameters': {
             'type': 'object',
-            'properties': {'remote': {'type': 'string'}, 'branch': {'type': 'string'}},
+            'properties': {
+              'remote': {'type': 'string'},
+              'branch': {'type': 'string'},
+            },
           },
         },
       },
@@ -808,12 +1200,20 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'git_merge',
-          'description': 'Merge another branch into the CURRENT branch (typically a task/<id> branch into main). Fast-forwards when possible, otherwise creates a merge commit. If both sides changed the same files, it reports the conflicting paths and makes NO changes — send the task back rather than guessing. Switch to the target branch (git_checkout_branch) first.',
+          'description':
+              'Merge another branch into the CURRENT branch (typically a task/<id> branch into main). Fast-forwards when possible, otherwise creates a merge commit. If both sides changed the same files, it reports the conflicting paths and makes NO changes — send the task back rather than guessing. Switch to the target branch (git_checkout_branch) first.',
           'parameters': {
             'type': 'object',
             'properties': {
-              'branch': {'type': 'string', 'description': 'The branch to merge into the current branch.'},
-              'message': {'type': 'string', 'description': 'Optional merge commit message (used only when a merge commit is created).'},
+              'branch': {
+                'type': 'string',
+                'description': 'The branch to merge into the current branch.',
+              },
+              'message': {
+                'type': 'string',
+                'description':
+                    'Optional merge commit message (used only when a merge commit is created).',
+              },
             },
             'required': ['branch'],
           },
@@ -829,13 +1229,17 @@ class CoordinatorTools {
 class CoordinatorToolExecutor {
   final NexusDatabase db;
   final int projectId;
+
   /// Backend instance (used for image generation / diagram tools).
   final InferenceBackend? inference;
+
   /// Provenance: the chat session and/or plan this conversation is about, so
   /// created tasks can be backtracked to why/where they came from.
   final int? chatSessionPk;
+
   /// Workspace path of the plan this conversation is focused on (or null).
   final String? openPlanPath;
+
   /// Filesystem-backed plan store for the project workspace. Required for the
   /// plan tools to function (they read/write real files under /PLANS).
   final PlanStore? planStore;
@@ -862,6 +1266,13 @@ class CoordinatorToolExecutor {
   /// Build/CI orchestrator. Required for the build tools.
   final BuildService? buildService;
 
+  /// Signal hooks for the deep planning run. When set, the matching planner
+  /// tool is offered and routed here: [onPlanningComplete] fires when the
+  /// planner declares the plan done; [onPlanReview] carries an engineer
+  /// reviewer's verdict. Null for the normal coordinator chat.
+  final void Function()? onPlanningComplete;
+  final void Function(bool approved, String gaps)? onPlanReview;
+
   CoordinatorToolExecutor({
     required this.db,
     required this.projectId,
@@ -875,13 +1286,20 @@ class CoordinatorToolExecutor {
     this.workspace,
     this.git,
     this.buildService,
+    this.onPlanningComplete,
+    this.onPlanReview,
   });
 
   /// A short human-readable summary of what a tool call will do (for approval).
   String _summary(String name, Map<String, dynamic> args) {
     final spec = toolSpecFor(name);
     final label = spec?.label ?? name;
-    final detail = args['title'] ?? args['name'] ?? args['task_id'] ?? args['plan_path'] ?? '';
+    final detail =
+        args['title'] ??
+        args['name'] ??
+        args['task_id'] ??
+        args['plan_path'] ??
+        '';
     return detail.toString().isEmpty ? label : '$label — "$detail"';
   }
 
@@ -898,12 +1316,15 @@ class CoordinatorToolExecutor {
           return '⏸ "$name" requires human approval (Ask), which isn\'t available here. Approve it from the text chat, or change the permission to Grant.';
         }
         final approved = await confirmAsk!(name, _summary(name, args));
-        return approved ? null : '🙅 Declined: the user did not approve "$name".';
+        return approved
+            ? null
+            : '🙅 Declined: the user did not approve "$name".';
     }
   }
 
   /// Tool args arrive as JSON; ids may be numbers or numeric strings.
-  int? _asInt(dynamic v) => v is int ? v : (v is num ? v.toInt() : int.tryParse('${v ?? ''}'));
+  int? _asInt(dynamic v) =>
+      v is int ? v : (v is num ? v.toInt() : int.tryParse('${v ?? ''}'));
 
   Future<String> execute({
     required String name,
@@ -931,6 +1352,16 @@ class CoordinatorToolExecutor {
           return await _viewCurrentPlan();
         case 'sync_plans_to_tasks':
           return await _syncPlansToTasks();
+        case 'mark_planning_complete':
+          onPlanningComplete?.call();
+          return 'Planning marked complete.';
+        case 'submit_plan_review':
+          final approved = args['approved'] == true;
+          final gaps = (args['gaps'] as String? ?? '').trim();
+          onPlanReview?.call(approved, gaps);
+          return approved
+              ? 'Recorded your approval of the plan.'
+              : 'Recorded your review — gaps noted.';
         case 'assign_agent_to_task':
           return await _assignAgentToTask(args);
         case 'set_task_dates':
@@ -1105,8 +1536,13 @@ class CoordinatorToolExecutor {
     await db.updateTaskStatus(taskId, status);
 
     if (note.isNotEmpty) {
-      final updatedDesc = '${existing.description ?? ''}\n\n[Coordinator ${DateTime.now().toIso8601String().substring(0, 16)}]: $note'.trim();
-      await db.patchTask(taskId, TasksCompanion(description: Value(updatedDesc)));
+      final updatedDesc =
+          '${existing.description ?? ''}\n\n[Coordinator ${DateTime.now().toIso8601String().substring(0, 16)}]: $note'
+              .trim();
+      await db.patchTask(
+        taskId,
+        TasksCompanion(description: Value(updatedDesc)),
+      );
     }
 
     return 'Updated task "${existing.title}" status to "$status".${note.isNotEmpty ? ' Note recorded.' : ''}';
@@ -1126,12 +1562,19 @@ class CoordinatorToolExecutor {
         ? 'on'
         : (args['thinking_enabled'] == false ? 'off' : null);
 
-    await db.patchTask(taskId, TasksCompanion(
-      title: (newTitle != null && newTitle.isNotEmpty) ? Value(newTitle) : const Value.absent(),
-      description: newDesc != null ? Value(newDesc) : const Value.absent(),
-      priority: newPrio != null ? Value(newPrio) : const Value.absent(),
-      thinkingMode: newThinking != null ? Value(newThinking) : const Value.absent(),
-    ));
+    await db.patchTask(
+      taskId,
+      TasksCompanion(
+        title: (newTitle != null && newTitle.isNotEmpty)
+            ? Value(newTitle)
+            : const Value.absent(),
+        description: newDesc != null ? Value(newDesc) : const Value.absent(),
+        priority: newPrio != null ? Value(newPrio) : const Value.absent(),
+        thinkingMode: newThinking != null
+            ? Value(newThinking)
+            : const Value.absent(),
+      ),
+    );
 
     return 'Updated task "${newTitle ?? existing.title}". Changes are live in the UI.';
   }
@@ -1146,7 +1589,9 @@ class CoordinatorToolExecutor {
 
     try {
       final resp = await inference!.generateImage(prompt: prompt, size: size);
-      final url = resp.data.isNotEmpty ? (resp.data.first.url ?? 'generated image') : 'generated image';
+      final url = resp.data.isNotEmpty
+          ? (resp.data.first.url ?? 'generated image')
+          : 'generated image';
       return 'Generated diagram for the plan. Image available at: $url (or embedded in chat if supported).';
     } catch (e) {
       return 'Image generation attempted for prompt "$prompt" but failed: $e';
@@ -1163,7 +1608,9 @@ class CoordinatorToolExecutor {
     }
     final b = StringBuffer('Open tasks (${open.length}):\n');
     for (final t in open) {
-      b.writeln('- ${t.title} (id: ${t.task_pk}) — ${t.status} [${t.priority}]');
+      b.writeln(
+        '- ${t.title} (id: ${t.task_pk}) — ${t.status} [${t.priority}]',
+      );
     }
     return b.toString().trim();
   }
@@ -1175,7 +1622,9 @@ class CoordinatorToolExecutor {
     }
     final b = StringBuffer('Current project plan (${tasks.length} tasks):\n');
     for (final t in tasks.take(20)) {
-      final parent = t.task_parent_fk != null ? ' (subtask of ${t.task_parent_fk})' : '';
+      final parent = t.task_parent_fk != null
+          ? ' (subtask of ${t.task_parent_fk})'
+          : '';
       b.writeln('- ${t.title} — ${t.status}$parent');
     }
     if (tasks.length > 20) b.writeln('... and ${tasks.length - 20} more.');
@@ -1239,11 +1688,15 @@ class CoordinatorToolExecutor {
     Value<DateTime?>? due;
     if (args.containsKey('start_date')) {
       final s = args['start_date'];
-      start = Value(s is String && s.trim().isNotEmpty ? DateTime.tryParse(s.trim()) : null);
+      start = Value(
+        s is String && s.trim().isNotEmpty ? DateTime.tryParse(s.trim()) : null,
+      );
     }
     if (args.containsKey('due_date')) {
       final d = args['due_date'];
-      due = Value(d is String && d.trim().isNotEmpty ? DateTime.tryParse(d.trim()) : null);
+      due = Value(
+        d is String && d.trim().isNotEmpty ? DateTime.tryParse(d.trim()) : null,
+      );
     }
     if (start == null && due == null) {
       return 'set_task_dates: nothing to change (provide start_date and/or due_date).';
@@ -1258,14 +1711,21 @@ class CoordinatorToolExecutor {
     }
     await db.setTaskDates(taskId, start: start, due: due);
     final parts = <String>[];
-    if (start != null) parts.add('start=${(args['start_date'] as String?)?.isEmpty ?? true ? 'cleared' : args['start_date']}');
-    if (due != null) parts.add('due=${(args['due_date'] as String?)?.isEmpty ?? true ? 'cleared' : args['due_date']}');
+    if (start != null)
+      parts.add(
+        'start=${(args['start_date'] as String?)?.isEmpty ?? true ? 'cleared' : args['start_date']}',
+      );
+    if (due != null)
+      parts.add(
+        'due=${(args['due_date'] as String?)?.isEmpty ?? true ? 'cleared' : args['due_date']}',
+      );
     return 'Updated dates for "${task.title}" (${parts.join(', ')}).';
   }
 
   Future<String> _setTaskBuildConfig(Map<String, dynamic> args) async {
     final taskId = _asInt(args['task_id']);
-    if (taskId == null) return 'set_task_build_config failed: task_id is required.';
+    if (taskId == null)
+      return 'set_task_build_config failed: task_id is required.';
     final task = await db.getTaskById(taskId);
     if (task == null) return 'Task $taskId not found.';
 
@@ -1278,7 +1738,8 @@ class CoordinatorToolExecutor {
       final v = args['requires_build'];
       requiresBuild = Value(v == true || v == 'true');
     }
-    String? clearable(dynamic v) => (v is String && v.trim().isNotEmpty) ? v.trim() : null;
+    String? clearable(dynamic v) =>
+        (v is String && v.trim().isNotEmpty) ? v.trim() : null;
     if (args.containsKey('dockerfile_path')) {
       dockerfilePath = Value(clearable(args['dockerfile_path']));
     }
@@ -1288,7 +1749,10 @@ class CoordinatorToolExecutor {
     if (args.containsKey('image_tag')) {
       imageTag = Value(clearable(args['image_tag']));
     }
-    if (requiresBuild == null && dockerfilePath == null && workflowPath == null && imageTag == null) {
+    if (requiresBuild == null &&
+        dockerfilePath == null &&
+        workflowPath == null &&
+        imageTag == null) {
       return 'set_task_build_config: nothing to change (provide requires_build, dockerfile_path, workflow_path, and/or image_tag).';
     }
     await db.setTaskBuildConfig(
@@ -1299,16 +1763,20 @@ class CoordinatorToolExecutor {
       imageTag: imageTag,
     );
     final parts = <String>[];
-    if (requiresBuild != null) parts.add('requires_build=${requiresBuild.value}');
-    if (dockerfilePath != null) parts.add('dockerfile=${dockerfilePath.value ?? 'cleared'}');
-    if (workflowPath != null) parts.add('workflow=${workflowPath.value ?? 'cleared'}');
+    if (requiresBuild != null)
+      parts.add('requires_build=${requiresBuild.value}');
+    if (dockerfilePath != null)
+      parts.add('dockerfile=${dockerfilePath.value ?? 'cleared'}');
+    if (workflowPath != null)
+      parts.add('workflow=${workflowPath.value ?? 'cleared'}');
     if (imageTag != null) parts.add('image_tag=${imageTag.value ?? 'cleared'}');
     return 'Updated build config for "${task.title}" (${parts.join(', ')}).';
   }
 
   Future<String> _viewPlan() async {
     if (openPlanPath == null) return 'No plan is currently open.';
-    if (planStore == null) return 'Plan storage is unavailable in this context.';
+    if (planStore == null)
+      return 'Plan storage is unavailable in this context.';
     try {
       final content = await planStore!.read(openPlanPath!);
       return 'Plan "${_basename(openPlanPath!)}" contents:\n"""\n$content\n"""';
@@ -1319,7 +1787,8 @@ class CoordinatorToolExecutor {
 
   Future<String> _updatePlan(Map<String, dynamic> args) async {
     if (openPlanPath == null) return 'No plan is currently open to update.';
-    if (planStore == null) return 'Plan storage is unavailable in this context.';
+    if (planStore == null)
+      return 'Plan storage is unavailable in this context.';
     final content = args['content'] as String?;
     if (content == null) return 'update_plan failed: content is required.';
     await planStore!.write(openPlanPath!, content);
@@ -1348,10 +1817,14 @@ class CoordinatorToolExecutor {
     }
     final b = StringBuffer('Tasks (${rows.length}):\n');
     for (final t in rows) {
-      final parent = t.task_parent_fk != null ? ' subtask-of=${t.task_parent_fk}' : '';
+      final parent = t.task_parent_fk != null
+          ? ' subtask-of=${t.task_parent_fk}'
+          : '';
       final plan = t.task_plan_path != null ? ' plan=${t.task_plan_path}' : '';
       final agent = t.task_agent_fk != null ? ' agent=${t.task_agent_fk}' : '';
-      b.writeln('- id=${t.task_pk} "${t.title}" [${t.priority}] ${t.status}$parent$plan$agent');
+      b.writeln(
+        '- id=${t.task_pk} "${t.title}" [${t.priority}] ${t.status}$parent$plan$agent',
+      );
     }
     return b.toString().trim();
   }
@@ -1366,14 +1839,20 @@ class CoordinatorToolExecutor {
     final b = StringBuffer();
     b.writeln('Task id=${t.task_pk}: "${t.title}"');
     b.writeln('Status: ${t.status} | Priority: ${t.priority}');
-    if ((t.description ?? '').isNotEmpty) b.writeln('Description: ${t.description}');
-    if (t.startDate != null) b.writeln('Start: ${t.startDate!.toIso8601String().substring(0, 10)}');
-    if (t.dueDate != null) b.writeln('Due: ${t.dueDate!.toIso8601String().substring(0, 10)}');
+    if ((t.description ?? '').isNotEmpty)
+      b.writeln('Description: ${t.description}');
+    if (t.startDate != null)
+      b.writeln('Start: ${t.startDate!.toIso8601String().substring(0, 10)}');
+    if (t.dueDate != null)
+      b.writeln('Due: ${t.dueDate!.toIso8601String().substring(0, 10)}');
     if (t.task_parent_fk != null) b.writeln('Parent task: ${t.task_parent_fk}');
     if (t.task_plan_path != null) b.writeln('From plan: ${t.task_plan_path}');
-    if (t.task_agent_fk != null) b.writeln('Assigned agent: ${t.task_agent_fk}');
+    if (t.task_agent_fk != null)
+      b.writeln('Assigned agent: ${t.task_agent_fk}');
     if (subs.isNotEmpty) {
-      b.writeln('Subtasks: ${subs.map((s) => '${s.task_pk} "${s.title}" (${s.status})').join(', ')}');
+      b.writeln(
+        'Subtasks: ${subs.map((s) => '${s.task_pk} "${s.title}" (${s.status})').join(', ')}',
+      );
     }
     return b.toString().trim();
   }
@@ -1398,7 +1877,9 @@ class CoordinatorToolExecutor {
     final t = await db.getTaskById(taskId);
     if (t == null) return 'Task $taskId not found.';
     final raw = args['plan_path'];
-    final planPath = (raw is String && raw.trim().isNotEmpty) ? raw.trim() : null;
+    final planPath = (raw is String && raw.trim().isNotEmpty)
+        ? raw.trim()
+        : null;
     if (planPath != null) {
       if (planStore != null) {
         try {
@@ -1409,20 +1890,29 @@ class CoordinatorToolExecutor {
           return 'Plan "$planPath" not found.';
         }
       }
-      await db.patchTask(taskId, TasksCompanion(task_plan_path: Value(planPath)));
+      await db.patchTask(
+        taskId,
+        TasksCompanion(task_plan_path: Value(planPath)),
+      );
       return 'Linked task "${t.title}" to plan "${_basename(planPath)}".';
     }
-    await db.patchTask(taskId, const TasksCompanion(task_plan_path: Value(null)));
+    await db.patchTask(
+      taskId,
+      const TasksCompanion(task_plan_path: Value(null)),
+    );
     return 'Unlinked task "${t.title}" from any plan.';
   }
 
   Future<String> _listAgents() async {
     final agents = await db.getAgentPersonasForProject(projectId);
-    if (agents.isEmpty) return 'No agent personas exist yet. Create one in the Agents hub.';
+    if (agents.isEmpty)
+      return 'No agent personas exist yet. Create one in the Agents hub.';
     final b = StringBuffer('Available agents (${agents.length}):\n');
     for (final a in agents) {
       final role = (a.title ?? '').isNotEmpty ? ' — ${a.title}' : '';
-      final desc = (a.description ?? '').isNotEmpty ? ' (${a.description})' : '';
+      final desc = (a.description ?? '').isNotEmpty
+          ? ' (${a.description})'
+          : '';
       b.writeln('- id=${a.agent_pk} "${a.name}"$role$desc');
     }
     b.writeln('Use the id with assign_agent_to_task.');
@@ -1430,7 +1920,8 @@ class CoordinatorToolExecutor {
   }
 
   Future<String> _listPlans() async {
-    if (planStore == null) return 'Plan storage is unavailable in this context.';
+    if (planStore == null)
+      return 'Plan storage is unavailable in this context.';
     final plans = await planStore!.list();
     if (plans.isEmpty) return 'No plans or folders in this project yet.';
     final b = StringBuffer('Plans (${plans.length}):\n');
@@ -1442,20 +1933,29 @@ class CoordinatorToolExecutor {
   }
 
   Future<String> _createPlan(Map<String, dynamic> args) async {
-    if (planStore == null) return 'Plan storage is unavailable in this context.';
+    if (planStore == null)
+      return 'Plan storage is unavailable in this context.';
     final name = (args['name'] as String? ?? '').trim();
     if (name.isEmpty) return 'create_plan failed: name is required.';
     final isFolder = args['is_folder'] == true;
     final parentRaw = args['parent_path'];
-    final parent = (parentRaw is String && parentRaw.trim().isNotEmpty) ? parentRaw.trim() : null;
+    final parent = (parentRaw is String && parentRaw.trim().isNotEmpty)
+        ? parentRaw.trim()
+        : null;
     final content = args['content'] as String? ?? '';
-    final path = await planStore!.create(parent: parent, name: name, isFolder: isFolder, content: content);
+    final path = await planStore!.create(
+      parent: parent,
+      name: name,
+      isFolder: isFolder,
+      content: content,
+    );
     final synced = isFolder ? '' : await _autoSyncAfterPlanWrite();
     return 'Created ${isFolder ? 'folder' : 'plan'} "$name" (path: $path).$synced';
   }
 
   Future<String> _readPlan(Map<String, dynamic> args) async {
-    if (planStore == null) return 'Plan storage is unavailable in this context.';
+    if (planStore == null)
+      return 'Plan storage is unavailable in this context.';
     final path = (args['plan_path'] as String? ?? '').trim();
     if (path.isEmpty) return 'read_plan failed: plan_path required.';
     try {
@@ -1470,26 +1970,31 @@ class CoordinatorToolExecutor {
   }
 
   Future<String> _writePlan(Map<String, dynamic> args) async {
-    if (planStore == null) return 'Plan storage is unavailable in this context.';
+    if (planStore == null)
+      return 'Plan storage is unavailable in this context.';
     final path = (args['plan_path'] as String? ?? '').trim();
     final content = args['content'] as String?;
-    if (path.isEmpty || content == null) return 'write_plan failed: plan_path and content required.';
+    if (path.isEmpty || content == null)
+      return 'write_plan failed: plan_path and content required.';
     await planStore!.write(path, content);
     final synced = await _autoSyncAfterPlanWrite();
     return 'Updated plan "${_basename(path)}" (path: $path). The new version is saved.$synced';
   }
 
   Future<String> _renamePlan(Map<String, dynamic> args) async {
-    if (planStore == null) return 'Plan storage is unavailable in this context.';
+    if (planStore == null)
+      return 'Plan storage is unavailable in this context.';
     final path = (args['plan_path'] as String? ?? '').trim();
     final name = (args['name'] as String? ?? '').trim();
-    if (path.isEmpty || name.isEmpty) return 'rename_plan failed: plan_path and name required.';
+    if (path.isEmpty || name.isEmpty)
+      return 'rename_plan failed: plan_path and name required.';
     final newPath = await planStore!.rename(path, name);
     return 'Renamed "${_basename(path)}" to "$name" (path: $newPath).';
   }
 
   Future<String> _deletePlan(Map<String, dynamic> args) async {
-    if (planStore == null) return 'Plan storage is unavailable in this context.';
+    if (planStore == null)
+      return 'Plan storage is unavailable in this context.';
     final path = (args['plan_path'] as String? ?? '').trim();
     if (path.isEmpty) return 'delete_plan failed: plan_path required.';
     await planStore!.delete(path);
@@ -1507,7 +2012,9 @@ class CoordinatorToolExecutor {
       if (entries.isEmpty) return 'Directory "$dir" is empty.';
       final b = StringBuffer('Contents of "$dir" (${entries.length}):\n');
       for (final e in entries) {
-        b.writeln(e.isDirectory ? '- ${e.name}/' : '- ${e.name} (${e.size} bytes)');
+        b.writeln(
+          e.isDirectory ? '- ${e.name}/' : '- ${e.name} (${e.size} bytes)',
+        );
       }
       return b.toString().trim();
     } catch (e) {
@@ -1534,7 +2041,8 @@ class CoordinatorToolExecutor {
     if (workspace == null) return 'File access is unavailable in this context.';
     final path = (args['path'] as String? ?? '').trim();
     final content = args['content'] as String?;
-    if (path.isEmpty || content == null) return 'write_file failed: path and content are required.';
+    if (path.isEmpty || content == null)
+      return 'write_file failed: path and content are required.';
     try {
       final existed = await workspace!.exists(path);
       await workspace!.writeString(path, content);
@@ -1560,7 +2068,8 @@ class CoordinatorToolExecutor {
     if (workspace == null) return 'File access is unavailable in this context.';
     final from = (args['from'] as String? ?? '').trim();
     final to = (args['to'] as String? ?? '').trim();
-    if (from.isEmpty || to.isEmpty) return 'move_path failed: from and to are required.';
+    if (from.isEmpty || to.isEmpty)
+      return 'move_path failed: from and to are required.';
     try {
       await workspace!.move(from, to);
       return 'Moved "$from" → "$to".';
@@ -1574,7 +2083,8 @@ class CoordinatorToolExecutor {
     final path = (args['path'] as String? ?? '').trim();
     if (path.isEmpty) return 'delete_path failed: path is required.';
     try {
-      if (!await workspace!.exists(path)) return 'Nothing to delete at "$path".';
+      if (!await workspace!.exists(path))
+        return 'Nothing to delete at "$path".';
       await workspace!.delete(path);
       return 'Deleted "$path".';
     } catch (e) {
@@ -1587,7 +2097,8 @@ class CoordinatorToolExecutor {
     final path = (args['path'] as String? ?? '').trim();
     if (path.isEmpty) return 'delete_file failed: path is required.';
     try {
-      if (!await workspace!.exists(path)) return 'Nothing to delete at "$path".';
+      if (!await workspace!.exists(path))
+        return 'Nothing to delete at "$path".';
       final entry = await workspace!.stat(path);
       if (entry.isDirectory) {
         return 'delete_file failed: "$path" is a folder. Use delete_folder instead.';
@@ -1604,7 +2115,8 @@ class CoordinatorToolExecutor {
     final path = (args['path'] as String? ?? '').trim();
     if (path.isEmpty) return 'delete_folder failed: path is required.';
     try {
-      if (!await workspace!.exists(path)) return 'Nothing to delete at "$path".';
+      if (!await workspace!.exists(path))
+        return 'Nothing to delete at "$path".';
       final entry = await workspace!.stat(path);
       if (!entry.isDirectory) {
         return 'delete_folder failed: "$path" is a file. Use delete_file instead.';
@@ -1816,7 +2328,11 @@ class CoordinatorToolExecutor {
     try {
       final oid = paths.isEmpty
           ? await git!.commitAll(message: message, authorName: agentName)
-          : await git!.commitFiles(paths: paths, message: message, authorName: agentName);
+          : await git!.commitFiles(
+              paths: paths,
+              message: message,
+              authorName: agentName,
+            );
       final shortOid = oid.length >= 8 ? oid.substring(0, 8) : oid;
       return 'Committed ${paths.isEmpty ? 'all changes' : '${paths.length} path(s)'} as $shortOid: "$message".';
     } catch (e) {
@@ -1920,7 +2436,8 @@ class CoordinatorToolExecutor {
     final t = await db.getTaskById(id);
     if (t == null) return 'Task $id not found.';
     final summary = (args['summary'] as String? ?? '').trim();
-    if (summary.isEmpty) return 'submit_for_completion failed: summary is required.';
+    if (summary.isEmpty)
+      return 'submit_for_completion failed: summary is required.';
     final submission = <String, dynamic>{
       'summary': summary,
       'evidence': (args['evidence'] as String? ?? '').trim(),
@@ -1928,7 +2445,10 @@ class CoordinatorToolExecutor {
       'submittedBy': agentName,
       'submittedAt': DateTime.now().toIso8601String(),
     };
-    await db.submitTaskForCompletion(id, submissionJson: jsonEncode(submission));
+    await db.submitTaskForCompletion(
+      id,
+      submissionJson: jsonEncode(submission),
+    );
     return 'Submitted task "${t.title}" (id: $id) for completion. It is now in Review awaiting verification.';
   }
 
@@ -1939,12 +2459,18 @@ class CoordinatorToolExecutor {
     if (t == null) return 'Task $id not found.';
     await db.markTaskVerifying(id);
     final b = StringBuffer('Verifying task "${t.title}" (id: $id).\n');
-    b.writeln('Acceptance criteria: ${(t.acceptanceCriteria ?? '').isEmpty ? '(none specified)' : t.acceptanceCriteria}');
-    b.writeln('Verification to run: ${(t.verification ?? '').isEmpty ? '(none specified — judge against the acceptance criteria)' : t.verification}');
+    b.writeln(
+      'Acceptance criteria: ${(t.acceptanceCriteria ?? '').isEmpty ? '(none specified)' : t.acceptanceCriteria}',
+    );
+    b.writeln(
+      'Verification to run: ${(t.verification ?? '').isEmpty ? '(none specified — judge against the acceptance criteria)' : t.verification}',
+    );
     if ((t.submissionJson ?? '').isNotEmpty) {
       b.writeln('Worker submission: ${t.submissionJson}');
     }
-    b.writeln('Run the verification with your read/run tools, then call submit_verdict.');
+    b.writeln(
+      'Run the verification with your read/run tools, then call submit_verdict.',
+    );
     return b.toString().trim();
   }
 
@@ -1974,16 +2500,22 @@ class CoordinatorToolExecutor {
     final b = StringBuffer('Submission review for "${t.title}" (id: $id):\n');
     b.writeln('Status: ${t.status} | Execution: ${t.executionStatus}');
     if ((t.workBranch ?? '').isNotEmpty) b.writeln('Branch: ${t.workBranch}');
-    if ((t.acceptanceCriteria ?? '').isNotEmpty) b.writeln('Acceptance criteria: ${t.acceptanceCriteria}');
-    if ((t.verification ?? '').isNotEmpty) b.writeln('Verification: ${t.verification}');
+    if ((t.acceptanceCriteria ?? '').isNotEmpty)
+      b.writeln('Acceptance criteria: ${t.acceptanceCriteria}');
+    if ((t.verification ?? '').isNotEmpty)
+      b.writeln('Verification: ${t.verification}');
     if ((t.submissionJson ?? '').isEmpty) {
       b.writeln('No submission recorded yet.');
     } else {
       try {
         final s = jsonDecode(t.submissionJson!) as Map<String, dynamic>;
         b.writeln('Summary: ${s['summary'] ?? ''}');
-        if ('${s['evidence'] ?? ''}'.isNotEmpty) b.writeln('Evidence: ${s['evidence']}');
-        if ('${s['submittedBy'] ?? ''}'.isNotEmpty) b.writeln('Submitted by: ${s['submittedBy']} at ${s['submittedAt'] ?? ''}');
+        if ('${s['evidence'] ?? ''}'.isNotEmpty)
+          b.writeln('Evidence: ${s['evidence']}');
+        if ('${s['submittedBy'] ?? ''}'.isNotEmpty)
+          b.writeln(
+            'Submitted by: ${s['submittedBy']} at ${s['submittedAt'] ?? ''}',
+          );
       } catch (_) {
         b.writeln('Submission: ${t.submissionJson}');
       }
@@ -2007,7 +2539,9 @@ class CoordinatorToolExecutor {
     if (t == null) return 'Task $id not found.';
     final reason = (args['reason'] as String? ?? '').trim();
     if (reason.isNotEmpty) {
-      final note = '${t.description ?? ''}\n\n[Sent back ${DateTime.now().toIso8601String().substring(0, 16)} by $agentName]: $reason'.trim();
+      final note =
+          '${t.description ?? ''}\n\n[Sent back ${DateTime.now().toIso8601String().substring(0, 16)} by $agentName]: $reason'
+              .trim();
       await db.patchTask(id, TasksCompanion(description: Value(note)));
     }
     await db.reopenTask(id);
@@ -2016,7 +2550,8 @@ class CoordinatorToolExecutor {
 
   // ── Build / CI ──────────────────────────────────────────────────────
 
-  Future<int?> _clientPk() async => (await db.getProjectById(projectId))?.client_fk;
+  Future<int?> _clientPk() async =>
+      (await db.getProjectById(projectId))?.client_fk;
 
   Future<String> _buildDockerImage(Map<String, dynamic> args) async {
     if (buildService == null || workspace == null) {
@@ -2030,15 +2565,20 @@ class CoordinatorToolExecutor {
     final context = (args['context'] as String?)?.trim();
     final taskPk = _asInt(args['task_id']);
     final clientPk = await _clientPk();
-    if (clientPk == null) return 'build_docker_image failed: project not found.';
+    if (clientPk == null)
+      return 'build_docker_image failed: project not found.';
 
-    final unavailable = await buildService!.backendUnavailableReason(_localDockerKind);
+    final unavailable = await buildService!.backendUnavailableReason(
+      _localDockerKind,
+    );
     if (unavailable != null) return 'Cannot start build: $unavailable';
 
     if (!await workspace!.exists(dockerfile)) {
       return 'build_docker_image failed: no file at "$dockerfile".';
     }
-    final dfRel = dockerfile.startsWith('/') ? dockerfile.substring(1) : dockerfile;
+    final dfRel = dockerfile.startsWith('/')
+        ? dockerfile.substring(1)
+        : dockerfile;
     final started = await buildService!.startDockerBuild(
       clientPk: clientPk,
       projectPk: projectId,
@@ -2049,7 +2589,9 @@ class CoordinatorToolExecutor {
       triggeredBy: agentName,
       taskPk: taskPk,
     );
-    final gate = taskPk != null ? ' Task $taskPk will auto-complete on success (or return to the board on failure).' : '';
+    final gate = taskPk != null
+        ? ' Task $taskPk will auto-complete on success (or return to the board on failure).'
+        : '';
     return 'Started Docker build of "$imageTag" (run id: ${started.runPk}). It runs in the background — call get_ci_run with run_id ${started.runPk} to see progress and logs.$gate';
   }
 
@@ -2058,7 +2600,8 @@ class CoordinatorToolExecutor {
       return 'CI runs are unavailable in this context.';
     }
     final workflowPath = (args['workflow_path'] as String? ?? '').trim();
-    if (workflowPath.isEmpty) return 'run_workflow failed: workflow_path is required.';
+    if (workflowPath.isEmpty)
+      return 'run_workflow failed: workflow_path is required.';
     final taskPk = _asInt(args['task_id']);
     final clientPk = await _clientPk();
     if (clientPk == null) return 'run_workflow failed: project not found.';
@@ -2074,7 +2617,9 @@ class CoordinatorToolExecutor {
         triggeredBy: agentName,
         taskPk: taskPk,
       );
-      final gate = taskPk != null ? ' Task $taskPk will auto-complete on success (or return to the board on failure).' : '';
+      final gate = taskPk != null
+          ? ' Task $taskPk will auto-complete on success (or return to the board on failure).'
+          : '';
       return 'Started workflow run from "$workflowPath" (run id: ${started.runPk}). Call get_ci_run with run_id ${started.runPk} to follow its jobs, steps, and logs.$gate';
     } catch (e) {
       return 'run_workflow failed: $e';
@@ -2084,7 +2629,8 @@ class CoordinatorToolExecutor {
   Future<String> _scaffoldCiWorkflow(Map<String, dynamic> args) async {
     if (workspace == null) return 'File access is unavailable in this context.';
     final kind = (args['kind'] as String? ?? 'flutter').trim().toLowerCase();
-    final path = (args['path'] as String? ?? '/.github/workflows/ci.yml').trim();
+    final path = (args['path'] as String? ?? '/.github/workflows/ci.yml')
+        .trim();
     final yaml = _ciWorkflowTemplate(kind);
     try {
       final existed = await workspace!.exists(path);
@@ -2150,9 +2696,9 @@ jobs:
   Future<String> _listCiRuns() async {
     final clientPk = await _clientPk();
     if (clientPk == null) return 'Project not found.';
-    final runs = (await db.getCiRunsForClient(clientPk))
-        .where((r) => r.project_fk == projectId)
-        .toList();
+    final runs = (await db.getCiRunsForClient(
+      clientPk,
+    )).where((r) => r.project_fk == projectId).toList();
     if (runs.isEmpty) return 'No build / CI runs for this project yet.';
     final b = StringBuffer('Build / CI runs (${runs.length}):\n');
     for (final r in runs) {
@@ -2167,14 +2713,19 @@ jobs:
     final tail = _asInt(args['tail']) ?? 200;
     final run = await db.getCiRun(runPk);
     if (run == null) return 'Run $runPk not found.';
-    if (run.project_fk != projectId) return 'Run $runPk does not belong to this project.';
+    if (run.project_fk != projectId)
+      return 'Run $runPk does not belong to this project.';
 
     final b = StringBuffer();
-    b.writeln('Run id=${run.ci_run_pk} "${run.name}" [${run.kind}] — ${run.status}');
+    b.writeln(
+      'Run id=${run.ci_run_pk} "${run.name}" [${run.kind}] — ${run.status}',
+    );
     if ((run.errorText ?? '').isNotEmpty) b.writeln('Error: ${run.errorText}');
     final jobs = await db.getCiJobsForRun(runPk);
     for (final job in jobs) {
-      b.writeln('Job "${job.name}" — ${job.status}${job.runsOn != null ? ' (runs-on: ${job.runsOn})' : ''}');
+      b.writeln(
+        'Job "${job.name}" — ${job.status}${job.runsOn != null ? ' (runs-on: ${job.runsOn})' : ''}',
+      );
       final steps = await db.getCiStepsForJob(job.ci_job_pk);
       for (final step in steps) {
         final code = step.exitCode != null ? ' exit=${step.exitCode}' : '';
@@ -2182,8 +2733,12 @@ jobs:
         final log = step.logText.trim();
         if (log.isNotEmpty) {
           final lines = log.split('\n');
-          final shown = lines.length > tail ? lines.sublist(lines.length - tail) : lines;
-          b.writeln('    log${lines.length > tail ? ' (last $tail of ${lines.length} lines)' : ''}:');
+          final shown = lines.length > tail
+              ? lines.sublist(lines.length - tail)
+              : lines;
+          b.writeln(
+            '    log${lines.length > tail ? ' (last $tail of ${lines.length} lines)' : ''}:',
+          );
           for (final l in shown) {
             b.writeln('    | $l');
           }

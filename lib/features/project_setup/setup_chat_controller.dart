@@ -13,10 +13,12 @@ import '../../core/providers/lean_context_provider.dart';
 import '../../infrastructure/registry/verification_service.dart';
 import '../../infrastructure/workspace/workspace_provider.dart';
 import '../../services/audio/audio_recorder_service.dart';
-import '../../services/audio/coordinator_duplex_voice_session.dart' show VoiceState;
+import '../../services/audio/coordinator_duplex_voice_session.dart'
+    show VoiceState;
 import '../../services/audio/setup_voice_session.dart';
 import '../../services/audio/tts_service.dart';
 import '../project_plans/plan_store.dart';
+import '../projects/planning/project_planning_run.dart';
 import 'config/setup_flow.dart';
 import 'config/setup_flow_catalog.dart';
 import 'plan_task_sync.dart';
@@ -111,8 +113,9 @@ class SetupChatController extends ChangeNotifier {
     if (_restored) return;
     _restored = true;
     try {
-      final project =
-          await _ref.read(nexusDatabaseProvider).getProjectById(projectId);
+      final project = await _ref
+          .read(nexusDatabaseProvider)
+          .getProjectById(projectId);
       // Reopening a project that was mid-refinement resumes that stage.
       if (project?.setupStatus == 'refining') refining = true;
       final raw = project?.setupTranscriptJson;
@@ -122,10 +125,12 @@ class SetupChatController extends ChangeNotifier {
         final role = t['role']?.toString();
         final content = t['content']?.toString() ?? '';
         if (content.isEmpty) continue;
-        messages.add(SetupMsg(
-          kind: role == 'user' ? SetupMsgKind.user : SetupMsgKind.assistant,
-          text: content,
-        ));
+        messages.add(
+          SetupMsg(
+            kind: role == 'user' ? SetupMsgKind.user : SetupMsgKind.assistant,
+            text: content,
+          ),
+        );
       }
       notifyListeners();
     } catch (_) {
@@ -135,9 +140,12 @@ class SetupChatController extends ChangeNotifier {
 
   Future<SetupSession?> _ensureSession() async {
     if (_session != null) return _session;
-    final resolved = await _ref.read(projectInferenceProvider(
-      (projectId: projectId, clientId: clientId),
-    ).future);
+    final resolved = await _ref.read(
+      projectInferenceProvider((
+        projectId: projectId,
+        clientId: clientId,
+      )).future,
+    );
     if (resolved == null) {
       error =
           'No inference server configured. Add one in Agents Hub to use the AI interview — you can still edit tags manually.';
@@ -163,7 +171,8 @@ class SetupChatController extends ChangeNotifier {
     final flowJson = await db.resolveSetupFlowJson(flowType, flowSub);
     final flow = flowJson != null
         ? SetupFlowDefinition.fromJson(
-            jsonDecode(flowJson) as Map<String, dynamic>)
+            jsonDecode(flowJson) as Map<String, dynamic>,
+          )
         : resolveBuiltinSetupFlow(flowType, flowSub);
     _session = SetupSession(
       client: resolved.backend,
@@ -188,7 +197,10 @@ class SetupChatController extends ChangeNotifier {
   /// Presents a bounded question inline and returns the user's pick(s). The
   /// future completes when they answer/skip — nothing is lost by looking away.
   Future<SetupAnswer> _askQuestion(
-      String question, List<String> options, bool multi) {
+    String question,
+    List<String> options,
+    bool multi,
+  ) {
     final completer = Completer<SetupAnswer>();
     final msg = SetupMsg(
       kind: SetupMsgKind.question,
@@ -202,13 +214,15 @@ class SetupChatController extends ChangeNotifier {
     // In call mode, speak the question and let the next utterance answer it.
     // The on-screen picker stays live, so a tap still works (whichever first).
     if (_voice?.isActive ?? false) {
-      unawaited(_voice!.armQuestion(
-        question: question,
-        options: options,
-        multi: multi,
-        onResolved: (picks) => answerQuestion(msg, picks),
-        isAnswered: () => msg.answered,
-      ));
+      unawaited(
+        _voice!.armQuestion(
+          question: question,
+          options: options,
+          multi: multi,
+          onResolved: (picks) => answerQuestion(msg, picks),
+          isAnswered: () => msg.answered,
+        ),
+      );
     }
     return completer.future;
   }
@@ -280,8 +294,12 @@ class SetupChatController extends ChangeNotifier {
           _append(SetupMsg(kind: SetupMsgKind.assistant, text: t));
           if (_voice?.isActive ?? false) unawaited(_voice!.speak(t));
         },
-        onToolCall: (name, args) => _append(SetupMsg(
-            kind: SetupMsgKind.tool, text: _describeToolCall(name, args))),
+        onToolCall: (name, args) => _append(
+          SetupMsg(
+            kind: SetupMsgKind.tool,
+            text: _describeToolCall(name, args),
+          ),
+        ),
         onToolResult: (name, result) =>
             _append(SetupMsg(kind: SetupMsgKind.system, text: '✓ $result')),
       );
@@ -294,8 +312,12 @@ class SetupChatController extends ChangeNotifier {
       }
       if (reply.trim().isEmpty &&
           (messages.isEmpty || messages.last.kind != SetupMsgKind.assistant)) {
-        _append(SetupMsg(
-            kind: SetupMsgKind.system, text: 'Updated your tags on the board.'));
+        _append(
+          SetupMsg(
+            kind: SetupMsgKind.system,
+            text: 'Updated your tags on the board.',
+          ),
+        );
       }
     } catch (e) {
       error = 'Interview failed: $e';
@@ -342,46 +364,98 @@ class SetupChatController extends ChangeNotifier {
   void _enterRefineUi() {
     if (refining) return;
     refining = true;
-    _append(SetupMsg(
-      kind: SetupMsgKind.assistant,
-      text: 'Your plans are generated — check the Plan tab to see them. '
-          "Now let's flesh them out. Tell me how you picture the UI: the key "
-          'screens, how they\'re laid out, and what each one does. I\'ll fold '
-          'your descriptions into the right plan. When you\'re happy, hit '
-          '"Done refining" to start turning the plans into tasks.',
-    ));
+    _append(
+      SetupMsg(
+        kind: SetupMsgKind.assistant,
+        text:
+            'Your plans are generated — check the Plan tab to see them. '
+            "Now let's flesh them out. Tell me how you picture the UI: the key "
+            'screens, how they\'re laid out, and what each one does. I\'ll fold '
+            'your descriptions into the right plan. When you\'re happy, hit '
+            '"Done refining" to start turning the plans into tasks.',
+      ),
+    );
     notifyListeners();
   }
 
-  /// Ends refinement: turns every plan outline item into a task (idempotently —
-  /// see [PlanTaskSync]) and marks setup `complete`. The caller (the Setup tab's
-  /// "Done Refining - Finish" action) then closes the wizard and advances to the
-  /// Tasks workflow.
+  /// Ends refinement and kicks off the deep planning run: a planning agent
+  /// expands the brief into a granular plan, the engineer agents review it until
+  /// a majority sign off, the outline items become small tasks, and the
+  /// orchestrator starts. Progress streams into the interview chat. Marks setup
+  /// `complete`. Falls back to a plain deterministic plan→task sync when no
+  /// inference server is configured (so setup still completes offline).
   Future<void> completeSetup() async {
     refining = false;
     final db = _ref.read(nexusDatabaseProvider);
+    busy = true;
+    notifyListeners();
     try {
       final planStore = await _ref.read(planStoreProvider(projectId).future);
-      final result = await PlanTaskSync(
-        db: db,
-        planStore: planStore,
-        projectId: projectId,
-      ).sync();
-      _bumpWorkspace();
-      _append(SetupMsg(
-        kind: SetupMsgKind.assistant,
-        text: '${result.describe()} You can keep refining the breakdown with '
-            'the coordinator in the Chat tab.',
-      ));
+      await _ensureSession();
+      final resolved = _resolved;
+      if (resolved != null) {
+        final proj = await db.getProjectById(projectId);
+        await ProjectPlanningRun(
+          db: db,
+          planStore: planStore,
+          backend: resolved.backend,
+          projectId: projectId,
+          projectName: proj?.name ?? 'Project',
+          model: resolved.model,
+          enableThinking: resolved.enableThinking,
+          brief: _buildBrief(),
+          onProgress: (line) =>
+              _append(SetupMsg(kind: SetupMsgKind.system, text: line)),
+        ).run();
+        _bumpWorkspace();
+      } else {
+        // No inference: keep the old deterministic behavior.
+        final result = await PlanTaskSync(
+          db: db,
+          planStore: planStore,
+          projectId: projectId,
+        ).sync();
+        _bumpWorkspace();
+        _append(
+          SetupMsg(
+            kind: SetupMsgKind.assistant,
+            text:
+                '${result.describe()} Add an inference server to have the '
+                'planning agent flesh this out automatically.',
+          ),
+        );
+      }
     } catch (e) {
-      _append(SetupMsg(
-        kind: SetupMsgKind.system,
-        text: 'Could not auto-generate tasks from the plans ($e). You can ask '
-            'the coordinator to create them in the Chat tab.',
-      ));
+      _append(
+        SetupMsg(
+          kind: SetupMsgKind.system,
+          text:
+              'Could not build the plan automatically ($e). You can ask the '
+              'coordinator to create tasks in the Chat tab.',
+        ),
+      );
+    } finally {
+      busy = false;
     }
     await db.setProjectSetupStatus(projectId, 'complete');
     notifyListeners();
+  }
+
+  /// The visible interview transcript flattened to text — the "brief" the
+  /// planning agent expands from (every word the PM gave).
+  String _buildBrief() {
+    final b = StringBuffer();
+    for (final m in messages) {
+      final who = switch (m.kind) {
+        SetupMsgKind.user => 'PM',
+        SetupMsgKind.assistant => 'Host',
+        _ => null,
+      };
+      if (who != null && m.text.trim().isNotEmpty) {
+        b.writeln('$who: ${m.text.trim()}');
+      }
+    }
+    return b.toString().trim();
   }
 
   Future<void> skip() async {
@@ -456,19 +530,27 @@ class SetupChatController extends ChangeNotifier {
     }
     if (pendingQuestion != null) {
       final q = pendingQuestion;
-      unawaited(voice.armQuestion(
-        question: q.text,
-        options: q.options,
-        multi: q.multi,
-        onResolved: (picks) => answerQuestion(q, picks),
-        isAnswered: () => q.answered,
-      ));
+      unawaited(
+        voice.armQuestion(
+          question: q.text,
+          options: q.options,
+          multi: q.multi,
+          onResolved: (picks) => answerQuestion(q, picks),
+          isAnswered: () => q.answered,
+        ),
+      );
     } else {
-      final started = messages.any((m) =>
-          m.kind == SetupMsgKind.assistant || m.kind == SetupMsgKind.question);
-      unawaited(voice.speak(started
-          ? 'Call started. Say "go ahead" to continue, or tell me more about your project.'
-          : 'Call started. Tell me about your project and I\'ll start the interview.'));
+      final started = messages.any(
+        (m) =>
+            m.kind == SetupMsgKind.assistant || m.kind == SetupMsgKind.question,
+      );
+      unawaited(
+        voice.speak(
+          started
+              ? 'Call started. Say "go ahead" to continue, or tell me more about your project.'
+              : 'Call started. Tell me about your project and I\'ll start the interview.',
+        ),
+      );
     }
   }
 
@@ -526,7 +608,10 @@ class SetupChatController extends ChangeNotifier {
 }
 
 /// Project-scoped interview controller, shared by the board and the chat panel.
-final setupChatControllerProvider = ChangeNotifierProvider.family<
-    SetupChatController, ({int projectId, int clientId})>((ref, key) {
-  return SetupChatController(ref, key.projectId, key.clientId);
-});
+final setupChatControllerProvider =
+    ChangeNotifierProvider.family<
+      SetupChatController,
+      ({int projectId, int clientId})
+    >((ref, key) {
+      return SetupChatController(ref, key.projectId, key.clientId);
+    });

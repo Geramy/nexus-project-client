@@ -61,8 +61,9 @@ class AccountDashboard extends ConsumerWidget {
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
-                onPressed: () =>
-                    openExternalUrl(_websiteDashboardUrl(ref.read(nexusGatewayBaseUrlProvider))),
+                onPressed: () => openExternalUrl(
+                  _websiteDashboardUrl(ref.read(nexusGatewayBaseUrlProvider)),
+                ),
                 icon: const Icon(Icons.history, size: 18),
                 label: const Text('View usage history on website'),
               ),
@@ -71,7 +72,8 @@ class AccountDashboard extends ConsumerWidget {
 
             // Subscription summary.
             accountAsync.when(
-              data: (account) => _SubscriptionCard(subscription: account.subscription),
+              data: (account) =>
+                  _SubscriptionCard(subscription: account.subscription),
               loading: () => const _LoadingCard(label: 'Loading subscription…'),
               error: (e, _) => _ErrorCard(
                 label: 'Subscription unavailable',
@@ -102,16 +104,22 @@ String _messageOf(Object e) =>
 
 /// Maps the API gateway base URL to the customer website's usage-history page.
 /// The API is served from the `api.` host (e.g. api.nexus-projects.ai) while the
-/// site dashboard lives at the root host, so we drop a leading `api.` and point
+/// site dashboard lives at the `www.` host, so we swap `api.` → `www.` and point
 /// at `/dashboard`. Falls back to the production site for bare/odd inputs.
 String _websiteDashboardUrl(String gatewayBaseUrl) {
   var raw = gatewayBaseUrl.trim();
   if (!raw.contains('://')) raw = 'https://$raw';
   final uri = Uri.tryParse(raw);
   if (uri == null || uri.host.isEmpty) {
-    return 'https://nexus-projects.ai/dashboard';
+    return 'https://www.nexus-projects.ai/dashboard';
   }
-  final host = uri.host.startsWith('api.') ? uri.host.substring(4) : uri.host;
+  // Normalize to the `www.` site host: drop a leading `api.`, then ensure a
+  // `www.` prefix on real (dotted) domains. Bare hosts like `localhost` are
+  // left as-is so dev overrides still work.
+  var host = uri.host.startsWith('api.') ? uri.host.substring(4) : uri.host;
+  if (host.contains('.') && !host.startsWith('www.')) {
+    host = 'www.$host';
+  }
   return Uri(
     scheme: uri.scheme,
     host: host,
@@ -161,10 +169,16 @@ class _IdentityHeader extends StatelessWidget {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     if (user?.role != null)
-                      StatusChip(user!.role, intent: ChipIntent.accent, dense: true),
+                      StatusChip(
+                        user!.role,
+                        intent: ChipIntent.accent,
+                        dense: true,
+                      ),
                     if (client?.name != null && client!.name.isNotEmpty)
-                      Text(client!.name,
-                          style: Theme.of(context).textTheme.bodySmall),
+                      Text(
+                        client!.name,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                   ],
                 ),
               ],
@@ -258,8 +272,7 @@ class _SubscriptionCard extends StatelessWidget {
             child: Text(k, style: Theme.of(context).textTheme.bodySmall),
           ),
           Expanded(
-            child: Text(v,
-                style: const TextStyle(fontWeight: FontWeight.w500)),
+            child: Text(v, style: const TextStyle(fontWeight: FontWeight.w500)),
           ),
         ],
       ),
@@ -297,8 +310,7 @@ class _ManageBillingButtonState extends ConsumerState<_ManageBillingButton> {
   }
 
   void _snack(String msg) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   @override
@@ -309,7 +321,8 @@ class _ManageBillingButtonState extends ConsumerState<_ManageBillingButton> {
           ? const SizedBox(
               width: 16,
               height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2))
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
           : const Icon(Icons.credit_card, size: 18),
       label: const Text('Manage billing'),
     );
@@ -362,11 +375,12 @@ class _ErrorCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label,
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  label,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 2),
-                Text(message,
-                    style: Theme.of(context).textTheme.bodySmall),
+                Text(message, style: Theme.of(context).textTheme.bodySmall),
               ],
             ),
           ),

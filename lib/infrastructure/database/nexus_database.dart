@@ -13,7 +13,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
 import '../inference/routed_server.dart' show kRoutedProviderType;
-import '../lemonade/services/persona_model_resolver.dart' show kDefaultOmniCollection;
+import '../lemonade/services/persona_model_resolver.dart'
+    show kDefaultOmniCollection;
 import '../models/database/tables/client.dart';
 import '../models/database/tables/project.dart';
 import '../models/database/tables/task.dart';
@@ -33,7 +34,8 @@ import '../models/database/tables/call_system.dart';
 import '../models/database/tables/setup_flow.dart';
 import '../models/database/tables/setup_scope.dart';
 import '../models/database/tables/setup_scope_option.dart';
-import '../../features/project_setup/config/setup_flow_catalog.dart' as setup_cat;
+import '../../features/project_setup/config/setup_flow_catalog.dart'
+    as setup_cat;
 import '../../features/agents/agent_role.dart';
 import '../../features/agents/agent_role_policy.dart';
 import '../../features/agents/packs/agent_pack.dart';
@@ -62,7 +64,29 @@ class TaskCompletedEvent {
 /// All tables use integer auto-increment primary keys named `<entity>_pk`
 /// (client_pk, project_pk, task_pk, agent_pk, server_pk, session_pk, …) and
 /// foreign keys named `<ref>_fk` (client_fk, project_fk, task_parent_fk, …).
-@DriftDatabase(tables: [Clients, Projects, Tasks, InferenceServers, AgentPersonas, Skills, Deployments, ActivityLogs, CiRuns, CiJobs, CiSteps, ChatSessions, ChatMessages, ProjectTags, LibraryVerifications, CallSystems, SetupFlows, SetupScopes, SetupScopeOptions])
+@DriftDatabase(
+  tables: [
+    Clients,
+    Projects,
+    Tasks,
+    InferenceServers,
+    AgentPersonas,
+    Skills,
+    Deployments,
+    ActivityLogs,
+    CiRuns,
+    CiJobs,
+    CiSteps,
+    ChatSessions,
+    ChatMessages,
+    ProjectTags,
+    LibraryVerifications,
+    CallSystems,
+    SetupFlows,
+    SetupScopes,
+    SetupScopeOptions,
+  ],
+)
 class NexusDatabase extends _$NexusDatabase {
   NexusDatabase() : super(_openConnection()) {
     _initDriftOptions();
@@ -98,7 +122,9 @@ class NexusDatabase extends _$NexusDatabase {
         // reset (no real plan/file data existed yet).
         if (from < 17) {
           for (final table in allTables) {
-            await customStatement('DROP TABLE IF EXISTS "${table.actualTableName}"');
+            await customStatement(
+              'DROP TABLE IF EXISTS "${table.actualTableName}"',
+            );
           }
           await m.createAll();
           return;
@@ -199,19 +225,23 @@ class NexusDatabase extends _$NexusDatabase {
   /// Editable in the DB afterward; safe to call on every launch.
   Future<void> seedSetupFlows() async {
     for (final flow in setup_cat.kBuiltinSetupFlows) {
-      final existing = await (select(setupFlows)
-            ..where((f) =>
-                f.projectType.equals(flow.projectType) &
-                (flow.subCategory == null
-                    ? f.subCategory.isNull()
-                    : f.subCategory.equals(flow.subCategory!))))
-          .getSingleOrNull();
+      final existing =
+          await (select(setupFlows)..where(
+                (f) =>
+                    f.projectType.equals(flow.projectType) &
+                    (flow.subCategory == null
+                        ? f.subCategory.isNull()
+                        : f.subCategory.equals(flow.subCategory!)),
+              ))
+              .getSingleOrNull();
       if (existing != null) continue;
-      await into(setupFlows).insert(SetupFlowsCompanion.insert(
-        projectType: flow.projectType,
-        subCategory: Value(flow.subCategory),
-        json: jsonEncode(flow.toJson()),
-      ));
+      await into(setupFlows).insert(
+        SetupFlowsCompanion.insert(
+          projectType: flow.projectType,
+          subCategory: Value(flow.subCategory),
+          json: jsonEncode(flow.toJson()),
+        ),
+      );
     }
   }
 
@@ -219,43 +249,59 @@ class NexusDatabase extends _$NexusDatabase {
   /// generic → null if neither stored). The provider layer falls back to the
   /// built-in catalog when this returns null.
   Future<String?> resolveSetupFlowJson(
-      String projectType, String? subCategory) async {
+    String projectType,
+    String? subCategory,
+  ) async {
     if (subCategory != null) {
-      final exact = await (select(setupFlows)
-            ..where((f) =>
-                f.projectType.equals(projectType) &
-                f.subCategory.equals(subCategory)))
-          .getSingleOrNull();
+      final exact =
+          await (select(setupFlows)..where(
+                (f) =>
+                    f.projectType.equals(projectType) &
+                    f.subCategory.equals(subCategory),
+              ))
+              .getSingleOrNull();
       if (exact != null) return exact.json;
     }
-    final generic = await (select(setupFlows)
-          ..where((f) =>
-              f.projectType.equals(projectType) & f.subCategory.isNull()))
-        .getSingleOrNull();
+    final generic =
+        await (select(setupFlows)..where(
+              (f) => f.projectType.equals(projectType) & f.subCategory.isNull(),
+            ))
+            .getSingleOrNull();
     return generic?.json;
   }
 
   /// Persist/override a setup flow definition (upsert on type+subCategory).
   Future<void> upsertSetupFlow(
-      String projectType, String? subCategory, String json) async {
-    final existing = await (select(setupFlows)
-          ..where((f) =>
-              f.projectType.equals(projectType) &
-              (subCategory == null
-                  ? f.subCategory.isNull()
-                  : f.subCategory.equals(subCategory))))
-        .getSingleOrNull();
+    String projectType,
+    String? subCategory,
+    String json,
+  ) async {
+    final existing =
+        await (select(setupFlows)..where(
+              (f) =>
+                  f.projectType.equals(projectType) &
+                  (subCategory == null
+                      ? f.subCategory.isNull()
+                      : f.subCategory.equals(subCategory)),
+            ))
+            .getSingleOrNull();
     if (existing == null) {
-      await into(setupFlows).insert(SetupFlowsCompanion.insert(
-        projectType: projectType,
-        subCategory: Value(subCategory),
-        json: json,
-      ));
+      await into(setupFlows).insert(
+        SetupFlowsCompanion.insert(
+          projectType: projectType,
+          subCategory: Value(subCategory),
+          json: json,
+        ),
+      );
     } else {
-      await (update(setupFlows)
-            ..where((f) => f.setup_flow_pk.equals(existing.setup_flow_pk)))
-          .write(SetupFlowsCompanion(
-              json: Value(json), updatedAt: Value(DateTime.now())));
+      await (update(
+        setupFlows,
+      )..where((f) => f.setup_flow_pk.equals(existing.setup_flow_pk))).write(
+        SetupFlowsCompanion(
+          json: Value(json),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
     }
   }
 
@@ -267,10 +313,11 @@ class NexusDatabase extends _$NexusDatabase {
   static const String _scopeMetaAxis = '__catalog_meta__';
 
   Future<int?> scopedCatalogVersion() async {
-    final row = await (select(setupScopes)
-          ..where((s) => s.axis.equals(_scopeMetaAxis))
-          ..limit(1))
-        .getSingleOrNull();
+    final row =
+        await (select(setupScopes)
+              ..where((s) => s.axis.equals(_scopeMetaAxis))
+              ..limit(1))
+            .getSingleOrNull();
     return row == null ? null : int.tryParse(row.value);
   }
 
@@ -280,8 +327,10 @@ class NexusDatabase extends _$NexusDatabase {
   /// bumped catalog propagates to existing installs. The caller version-gates
   /// this (see the seeder), so on an unchanged launch it never runs and nothing
   /// is wiped; only a changed catalog triggers the upsert.
-  Future<void> seedSetupScopes(List<dynamic> packs,
-      {required int version}) async {
+  Future<void> seedSetupScopes(
+    List<dynamic> packs, {
+    required int version,
+  }) async {
     await transaction(() async {
       for (final raw in packs) {
         if (raw is! Map) continue;
@@ -327,37 +376,43 @@ class NexusDatabase extends _$NexusDatabase {
       }
 
       // Stamp the catalog version so unchanged launches skip re-seeding.
-      await (delete(setupScopes)..where((s) => s.axis.equals(_scopeMetaAxis)))
-          .go();
-      await into(setupScopes).insert(SetupScopesCompanion.insert(
-        axis: _scopeMetaAxis,
-        value: version.toString(),
-      ));
+      await (delete(
+        setupScopes,
+      )..where((s) => s.axis.equals(_scopeMetaAxis))).go();
+      await into(setupScopes).insert(
+        SetupScopesCompanion.insert(
+          axis: _scopeMetaAxis,
+          value: version.toString(),
+        ),
+      );
     });
   }
 
   /// Delete an industry scope, its child (sub-axis) scopes, and every option row
   /// belonging to any of them. Used to replace an industry on a catalog update.
   Future<void> _deleteIndustrySubtree(String industry) async {
-    final ind = await (select(setupScopes)
-          ..where((s) =>
-              s.axis.equals('industry') &
-              s.value.equals(industry) &
-              s.parent_scope_fk.isNull()))
-        .getSingleOrNull();
+    final ind =
+        await (select(setupScopes)..where(
+              (s) =>
+                  s.axis.equals('industry') &
+                  s.value.equals(industry) &
+                  s.parent_scope_fk.isNull(),
+            ))
+            .getSingleOrNull();
     if (ind == null) return;
-    final children = await (select(setupScopes)
-          ..where((s) => s.parent_scope_fk.equals(ind.setup_scope_pk)))
-        .get();
+    final children = await (select(
+      setupScopes,
+    )..where((s) => s.parent_scope_fk.equals(ind.setup_scope_pk))).get();
     final pks = [ind.setup_scope_pk, ...children.map((c) => c.setup_scope_pk)];
-    await (delete(setupScopeOptions)..where((o) => o.setup_scope_fk.isIn(pks)))
-        .go();
-    await (delete(setupScopes)
-          ..where((s) => s.parent_scope_fk.equals(ind.setup_scope_pk)))
-        .go();
-    await (delete(setupScopes)
-          ..where((s) => s.setup_scope_pk.equals(ind.setup_scope_pk)))
-        .go();
+    await (delete(
+      setupScopeOptions,
+    )..where((o) => o.setup_scope_fk.isIn(pks))).go();
+    await (delete(
+      setupScopes,
+    )..where((s) => s.parent_scope_fk.equals(ind.setup_scope_pk))).go();
+    await (delete(
+      setupScopes,
+    )..where((s) => s.setup_scope_pk.equals(ind.setup_scope_pk))).go();
   }
 
   /// Insert the option rows for one scope from its catalog map: plain
@@ -365,10 +420,16 @@ class NexusDatabase extends _$NexusDatabase {
   /// platform-conditional `stacks` (languages/frameworks/libraries tagged with
   /// their platform).
   Future<void> _insertScopeOptions(
-      int scopePk, Map<String, dynamic> map) async {
+    int scopePk,
+    Map<String, dynamic> map,
+  ) async {
     var sort = 0;
-    Future<void> add(String category, String value,
-        {String? platform, String? forLanguage}) async {
+    Future<void> add(
+      String category,
+      String value, {
+      String? platform,
+      String? forLanguage,
+    }) async {
       final v = value.trim();
       if (v.isEmpty) return;
       await into(setupScopeOptions).insert(
@@ -391,8 +452,11 @@ class NexusDatabase extends _$NexusDatabase {
     }
     for (final lib in (map['libraries'] as List?) ?? const []) {
       if (lib is Map) {
-        await add('libraries', (lib['value'] ?? '').toString(),
-            forLanguage: lib['forLanguage']?.toString());
+        await add(
+          'libraries',
+          (lib['value'] ?? '').toString(),
+          forLanguage: lib['forLanguage']?.toString(),
+        );
       } else {
         await add('libraries', lib.toString());
       }
@@ -409,8 +473,12 @@ class NexusDatabase extends _$NexusDatabase {
       }
       for (final lib in (stack['libraries'] as List?) ?? const []) {
         if (lib is Map) {
-          await add('libraries', (lib['value'] ?? '').toString(),
-              platform: platform, forLanguage: lib['forLanguage']?.toString());
+          await add(
+            'libraries',
+            (lib['value'] ?? '').toString(),
+            platform: platform,
+            forLanguage: lib['forLanguage']?.toString(),
+          );
         } else {
           await add('libraries', lib.toString(), platform: platform);
         }
@@ -421,20 +489,23 @@ class NexusDatabase extends _$NexusDatabase {
   /// The sub-axes (e.g. Genre) introduced by the given selected [industries],
   /// each with its display name, category key, and the available values.
   Future<List<({String name, String key, List<String> values})>>
-      subAxesForIndustries(List<String> industries) async {
+  subAxesForIndustries(List<String> industries) async {
     if (industries.isEmpty) return const [];
-    final inds = await (select(setupScopes)
-          ..where((s) =>
-              s.axis.equals('industry') &
-              s.value.isIn(industries) &
-              s.subAxisKey.isNotNull()))
-        .get();
+    final inds =
+        await (select(setupScopes)..where(
+              (s) =>
+                  s.axis.equals('industry') &
+                  s.value.isIn(industries) &
+                  s.subAxisKey.isNotNull(),
+            ))
+            .get();
     final out = <({String name, String key, List<String> values})>[];
     for (final ind in inds) {
-      final values = await (select(setupScopes)
-            ..where((s) => s.parent_scope_fk.equals(ind.setup_scope_pk))
-            ..orderBy([(s) => OrderingTerm(expression: s.value)]))
-          .get();
+      final values =
+          await (select(setupScopes)
+                ..where((s) => s.parent_scope_fk.equals(ind.setup_scope_pk))
+                ..orderBy([(s) => OrderingTerm(expression: s.value)]))
+              .get();
       out.add((
         name: ind.subAxisName ?? ind.subAxisKey!,
         key: ind.subAxisKey!,
@@ -457,26 +528,30 @@ class NexusDatabase extends _$NexusDatabase {
     String? platform,
   }) async {
     if (industries.isEmpty) return const [];
-    final industryScopes = await (select(setupScopes)
-          ..where((s) => s.axis.equals('industry') & s.value.isIn(industries)))
-        .get();
+    final industryScopes =
+        await (select(setupScopes)..where(
+              (s) => s.axis.equals('industry') & s.value.isIn(industries),
+            ))
+            .get();
     if (industryScopes.isEmpty) return const [];
     final industryPks = industryScopes.map((s) => s.setup_scope_pk).toList();
 
     // Child (sub-axis) scopes under those industries whose value is selected.
     final childScopes = subValues.isEmpty
         ? <SetupScope>[]
-        : await (select(setupScopes)
-              ..where((s) =>
-                  s.parent_scope_fk.isIn(industryPks) &
-                  s.value.isIn(subValues)))
-            .get();
+        : await (select(setupScopes)..where(
+                (s) =>
+                    s.parent_scope_fk.isIn(industryPks) &
+                    s.value.isIn(subValues),
+              ))
+              .get();
     final childPks = childScopes.map((s) => s.setup_scope_pk).toList();
 
     Future<List<SetupScopeOption>> opts(List<int> pks) async {
       if (pks.isEmpty) return const [];
-      final q = select(setupScopeOptions)
-        ..where((o) => o.setup_scope_fk.isIn(pks) & o.category.equals(category));
+      final q = select(
+        setupScopeOptions,
+      )..where((o) => o.setup_scope_fk.isIn(pks) & o.category.equals(category));
       if (platform != null) {
         q.where((o) => o.platform.equals(platform) | o.platform.isNull());
       } else {
@@ -496,23 +571,27 @@ class NexusDatabase extends _$NexusDatabase {
 
   /// True once any scoped vocabulary has been seeded.
   Future<bool> hasSetupScopes() async {
-    final row = await (selectOnly(setupScopes)..addColumns([setupScopes.setup_scope_pk]))
-        .get();
+    final row = await (selectOnly(
+      setupScopes,
+    )..addColumns([setupScopes.setup_scope_pk])).get();
     return row.isNotEmpty;
   }
 
   // ==================== Clients ====================
   Future<List<Client>> getAllClients() => select(clients).get();
 
-  Stream<List<Client>> watchAllClients() => (select(clients)
-        ..orderBy([
-          (c) => OrderingTerm(expression: c.isDefault, mode: OrderingMode.desc),
-          (c) => OrderingTerm(expression: c.name),
-        ]))
-      .watch();
+  Stream<List<Client>> watchAllClients() =>
+      (select(clients)..orderBy([
+            (c) =>
+                OrderingTerm(expression: c.isDefault, mode: OrderingMode.desc),
+            (c) => OrderingTerm(expression: c.name),
+          ]))
+          .watch();
 
   Future<Client?> getDefaultClient() {
-    return (select(clients)..where((c) => c.isDefault.equals(true))).getSingleOrNull();
+    return (select(
+      clients,
+    )..where((c) => c.isDefault.equals(true))).getSingleOrNull();
   }
 
   /// Heuristic for "this install has already been used": any project exists, or
@@ -527,27 +606,48 @@ class NexusDatabase extends _$NexusDatabase {
   }
 
   /// Inserts a client and returns its new integer pk.
-  Future<int> createClient(ClientsCompanion entry) => into(clients).insert(entry);
+  Future<int> createClient(ClientsCompanion entry) =>
+      into(clients).insert(entry);
 
   /// Deletes a client and all its dependent data.
   Future<bool> deleteClient(int clientPk) async {
-    await (delete(deployments)..where((d) => d.client_fk.equals(clientPk))).go();
-    await (delete(activityLogs)..where((a) => a.client_fk.equals(clientPk))).go();
+    await (delete(
+      deployments,
+    )..where((d) => d.client_fk.equals(clientPk))).go();
+    await (delete(
+      activityLogs,
+    )..where((a) => a.client_fk.equals(clientPk))).go();
     await (delete(ciRuns)..where((c) => c.client_fk.equals(clientPk))).go();
-    final projectRows = await (select(projects)..where((p) => p.client_fk.equals(clientPk))).get();
+    final projectRows = await (select(
+      projects,
+    )..where((p) => p.client_fk.equals(clientPk))).get();
     for (final proj in projectRows) {
-      final sessions = await (select(chatSessions)..where((s) => s.project_fk.equals(proj.project_pk))).get();
+      final sessions = await (select(
+        chatSessions,
+      )..where((s) => s.project_fk.equals(proj.project_pk))).get();
       for (final s in sessions) {
-        await (delete(chatMessages)..where((m) => m.session_fk.equals(s.session_pk))).go();
+        await (delete(
+          chatMessages,
+        )..where((m) => m.session_fk.equals(s.session_pk))).go();
       }
-      await (delete(chatSessions)..where((s) => s.project_fk.equals(proj.project_pk))).go();
-      await (delete(tasks)..where((t) => t.task_project_fk.equals(proj.project_pk))).go();
+      await (delete(
+        chatSessions,
+      )..where((s) => s.project_fk.equals(proj.project_pk))).go();
+      await (delete(
+        tasks,
+      )..where((t) => t.task_project_fk.equals(proj.project_pk))).go();
     }
     await (delete(projects)..where((p) => p.client_fk.equals(clientPk))).go();
-    await (delete(agentPersonas)..where((p) => p.client_fk.equals(clientPk))).go();
-    await (delete(inferenceServers)..where((s) => s.client_fk.equals(clientPk))).go();
+    await (delete(
+      agentPersonas,
+    )..where((p) => p.client_fk.equals(clientPk))).go();
+    await (delete(
+      inferenceServers,
+    )..where((s) => s.client_fk.equals(clientPk))).go();
     await (delete(skills)..where((s) => s.client_fk.equals(clientPk))).go();
-    final result = await (delete(clients)..where((c) => c.client_pk.equals(clientPk))).go();
+    final result = await (delete(
+      clients,
+    )..where((c) => c.client_pk.equals(clientPk))).go();
     return result > 0;
   }
 
@@ -602,9 +702,13 @@ class NexusDatabase extends _$NexusDatabase {
           description: Value(meta?.description),
           category: Value(meta?.category ?? 'general'),
           riskLevel: Value(meta?.riskLevel ?? 'medium'),
-          configJson: Value(jsonEncode({
-            'tools': {for (final t in entry.value.entries) t.key: t.value.name},
-          })),
+          configJson: Value(
+            jsonEncode({
+              'tools': {
+                for (final t in entry.value.entries) t.key: t.value.name,
+              },
+            }),
+          ),
           isPrefab: const Value(true),
         ),
       );
@@ -617,9 +721,9 @@ class NexusDatabase extends _$NexusDatabase {
   /// agent. Each persona defaults to the product Omni Collection so voice/
   /// vision/image work out of the box (it decomposes into per-modality models).
   Future<void> provisionAgentPack(int clientPk, List<PackAgent> agents) async {
-    final existing = await (select(agentPersonas)
-          ..where((p) => p.client_fk.equals(clientPk)))
-        .get();
+    final existing = await (select(
+      agentPersonas,
+    )..where((p) => p.client_fk.equals(clientPk))).get();
     final titles = <String?>{for (final p in existing) p.title};
     for (final a in agents) {
       if (titles.contains(a.title)) continue;
@@ -647,20 +751,23 @@ class NexusDatabase extends _$NexusDatabase {
   }
 
   Stream<List<Project>> watchProjectsForClient(int clientPk) {
-    return (select(projects)..where((p) => p.client_fk.equals(clientPk))).watch();
+    return (select(
+      projects,
+    )..where((p) => p.client_fk.equals(clientPk))).watch();
   }
 
-  Future<int> createProject(ProjectsCompanion entry) => into(projects).insert(entry);
+  Future<int> createProject(ProjectsCompanion entry) =>
+      into(projects).insert(entry);
 
   // ==================== Call Systems (IVR) ====================
   /// Reactive call-system document for a project (null until first saved).
-  Stream<CallSystem?> watchCallSystem(int projectPk) =>
-      (select(callSystems)..where((c) => c.project_fk.equals(projectPk)))
-          .watchSingleOrNull();
+  Stream<CallSystem?> watchCallSystem(int projectPk) => (select(
+    callSystems,
+  )..where((c) => c.project_fk.equals(projectPk))).watchSingleOrNull();
 
-  Future<CallSystem?> getCallSystem(int projectPk) =>
-      (select(callSystems)..where((c) => c.project_fk.equals(projectPk)))
-          .getSingleOrNull();
+  Future<CallSystem?> getCallSystem(int projectPk) => (select(
+    callSystems,
+  )..where((c) => c.project_fk.equals(projectPk))).getSingleOrNull();
 
   /// Insert-or-update the portable call-system JSON for a project (one per
   /// project; upsert keyed on project_fk).
@@ -671,37 +778,50 @@ class NexusDatabase extends _$NexusDatabase {
         CallSystemsCompanion.insert(project_fk: projectPk, json: Value(json)),
       );
     } else {
-      await (update(callSystems)
-            ..where((c) => c.call_system_pk.equals(existing.call_system_pk)))
-          .write(CallSystemsCompanion(
-        json: Value(json),
-        updatedAt: Value(DateTime.now()),
-      ));
+      await (update(
+        callSystems,
+      )..where((c) => c.call_system_pk.equals(existing.call_system_pk))).write(
+        CallSystemsCompanion(
+          json: Value(json),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
     }
   }
 
   /// Deletes a project and all its tasks + chat sessions.
   Future<bool> deleteProject(int projectPk) async {
-    final sessions = await (select(chatSessions)..where((s) => s.project_fk.equals(projectPk))).get();
+    final sessions = await (select(
+      chatSessions,
+    )..where((s) => s.project_fk.equals(projectPk))).get();
     for (final s in sessions) {
-      await (delete(chatMessages)..where((m) => m.session_fk.equals(s.session_pk))).go();
+      await (delete(
+        chatMessages,
+      )..where((m) => m.session_fk.equals(s.session_pk))).go();
     }
-    await (delete(chatSessions)..where((s) => s.project_fk.equals(projectPk))).go();
-    await (delete(tasks)..where((t) => t.task_project_fk.equals(projectPk))).go();
-    final result = await (delete(projects)..where((p) => p.project_pk.equals(projectPk))).go();
+    await (delete(
+      chatSessions,
+    )..where((s) => s.project_fk.equals(projectPk))).go();
+    await (delete(
+      tasks,
+    )..where((t) => t.task_project_fk.equals(projectPk))).go();
+    final result = await (delete(
+      projects,
+    )..where((p) => p.project_pk.equals(projectPk))).go();
     return result > 0;
   }
 
   /// The agent persona assigned to a project's Coordinator (or null).
   Future<int?> getProjectAgentPersonaId(int projectPk) async {
-    final row = await (select(projects)..where((p) => p.project_pk.equals(projectPk))).getSingleOrNull();
+    final row = await (select(
+      projects,
+    )..where((p) => p.project_pk.equals(projectPk))).getSingleOrNull();
     return row?.agent_persona_fk;
   }
 
   Future<void> setProjectAgentPersona(int projectPk, int? personaPk) async {
-    await (update(projects)..where((p) => p.project_pk.equals(projectPk))).write(
-      ProjectsCompanion(agent_persona_fk: Value(personaPk)),
-    );
+    await (update(projects)..where((p) => p.project_pk.equals(projectPk)))
+        .write(ProjectsCompanion(agent_persona_fk: Value(personaPk)));
   }
 
   /// The persona id the project's Coordinator should use: the explicitly
@@ -712,15 +832,20 @@ class NexusDatabase extends _$NexusDatabase {
     final existing = await getProjectAgentPersonaId(projectPk);
     if (existing != null) return existing;
 
-    final proj = await (select(projects)..where((p) => p.project_pk.equals(projectPk))).getSingleOrNull();
+    final proj = await (select(
+      projects,
+    )..where((p) => p.project_pk.equals(projectPk))).getSingleOrNull();
     if (proj == null) return null;
 
-    final pm = await (select(agentPersonas)
-          ..where((p) =>
-              p.client_fk.equals(proj.client_fk) &
-              p.title.equals(AgentRole.projectManager.key))
-          ..limit(1))
-        .getSingleOrNull();
+    final pm =
+        await (select(agentPersonas)
+              ..where(
+                (p) =>
+                    p.client_fk.equals(proj.client_fk) &
+                    p.title.equals(AgentRole.projectManager.key),
+              )
+              ..limit(1))
+            .getSingleOrNull();
     if (pm == null) return null;
 
     await setProjectAgentPersona(projectPk, pm.agent_pk);
@@ -730,13 +855,20 @@ class NexusDatabase extends _$NexusDatabase {
   /// Reactive single-project query — the project controls watch this so the
   /// Start/Pause state and working-hours edits reflect immediately.
   Stream<Project?> watchProject(int projectPk) {
-    return (select(projects)..where((p) => p.project_pk.equals(projectPk))).watchSingleOrNull();
+    return (select(
+      projects,
+    )..where((p) => p.project_pk.equals(projectPk))).watchSingleOrNull();
   }
 
   /// Set the orchestration run state: 'stopped' | 'running' | 'paused'.
   Future<void> setProjectOrchestrationState(int projectPk, String state) async {
-    await (update(projects)..where((p) => p.project_pk.equals(projectPk))).write(
-      ProjectsCompanion(orchestrationState: Value(state), updatedAt: Value(DateTime.now())),
+    await (update(
+      projects,
+    )..where((p) => p.project_pk.equals(projectPk))).write(
+      ProjectsCompanion(
+        orchestrationState: Value(state),
+        updatedAt: Value(DateTime.now()),
+      ),
     );
   }
 
@@ -749,28 +881,41 @@ class NexusDatabase extends _$NexusDatabase {
     int? end,
     int? daysMask,
   }) async {
-    await (update(projects)..where((p) => p.project_pk.equals(projectPk))).write(ProjectsCompanion(
-      workHoursEnabled: Value(enabled),
-      workHoursStart: Value(start),
-      workHoursEnd: Value(end),
-      workDaysMask: Value(daysMask),
-      updatedAt: Value(DateTime.now()),
-    ));
+    await (update(
+      projects,
+    )..where((p) => p.project_pk.equals(projectPk))).write(
+      ProjectsCompanion(
+        workHoursEnabled: Value(enabled),
+        workHoursStart: Value(start),
+        workHoursEnd: Value(end),
+        workDaysMask: Value(daysMask),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   // ==================== Tasks (tree + full provenance) ====================
   Future<List<Task>> getTasksForProject(int projectPk) {
-    return (select(tasks)..where((t) => t.task_project_fk.equals(projectPk))).get();
+    return (select(
+      tasks,
+    )..where((t) => t.task_project_fk.equals(projectPk))).get();
   }
 
   Future<Project?> getProjectById(int projectPk) {
-    return (select(projects)..where((p) => p.project_pk.equals(projectPk))).getSingleOrNull();
+    return (select(
+      projects,
+    )..where((p) => p.project_pk.equals(projectPk))).getSingleOrNull();
   }
 
   /// Persist a project's orchestrator prompt-template overrides (JSON), or null
   /// to clear all overrides back to the built-in defaults.
-  Future<void> setProjectOrchestratorPrompts(int projectPk, String? json) async {
-    await (update(projects)..where((p) => p.project_pk.equals(projectPk))).write(
+  Future<void> setProjectOrchestratorPrompts(
+    int projectPk,
+    String? json,
+  ) async {
+    await (update(
+      projects,
+    )..where((p) => p.project_pk.equals(projectPk))).write(
       ProjectsCompanion(
         orchestratorPromptsJson: Value(json),
         updatedAt: Value(DateTime.now()),
@@ -781,21 +926,33 @@ class NexusDatabase extends _$NexusDatabase {
   // ==================== Project Setup ====================
   /// Update a project's setup workflow state (notStarted|inProgress|skipped|complete).
   Future<void> setProjectSetupStatus(int projectPk, String status) async {
-    await (update(projects)..where((p) => p.project_pk.equals(projectPk))).write(
-      ProjectsCompanion(setupStatus: Value(status), updatedAt: Value(DateTime.now())),
+    await (update(
+      projects,
+    )..where((p) => p.project_pk.equals(projectPk))).write(
+      ProjectsCompanion(
+        setupStatus: Value(status),
+        updatedAt: Value(DateTime.now()),
+      ),
     );
   }
 
   /// Persist the setup interview transcript (JSON), or null to clear it.
   Future<void> setProjectSetupTranscript(int projectPk, String? json) async {
-    await (update(projects)..where((p) => p.project_pk.equals(projectPk))).write(
-      ProjectsCompanion(setupTranscriptJson: Value(json), updatedAt: Value(DateTime.now())),
+    await (update(
+      projects,
+    )..where((p) => p.project_pk.equals(projectPk))).write(
+      ProjectsCompanion(
+        setupTranscriptJson: Value(json),
+        updatedAt: Value(DateTime.now()),
+      ),
     );
   }
 
   /// Persist the AI-compiled project summary (markdown) + its timestamp.
   Future<void> setProjectSummary(int projectPk, String? markdown) async {
-    await (update(projects)..where((p) => p.project_pk.equals(projectPk))).write(
+    await (update(
+      projects,
+    )..where((p) => p.project_pk.equals(projectPk))).write(
       ProjectsCompanion(
         projectSummaryMd: Value(markdown),
         summaryUpdatedAt: Value(markdown == null ? null : DateTime.now()),
@@ -817,7 +974,9 @@ class NexusDatabase extends _$NexusDatabase {
   }
 
   Future<List<ProjectTag>> getTagsForProject(int projectPk) {
-    return (select(projectTags)..where((t) => t.project_fk.equals(projectPk))).get();
+    return (select(
+      projectTags,
+    )..where((t) => t.project_fk.equals(projectPk))).get();
   }
 
   /// Insert a tag if (project, category, value) is new; returns the existing or
@@ -827,15 +986,19 @@ class NexusDatabase extends _$NexusDatabase {
   /// interleave their select+insert and produce a duplicate row.
   Future<int> upsertTag(ProjectTagsCompanion entry) async {
     return transaction(() async {
-      final existing = await (select(projectTags)
-            ..where((t) =>
-                t.project_fk.equals(entry.project_fk.value) &
-                t.category.equals(entry.category.value) &
-                t.value.equals(entry.value.value)))
-          .get();
+      final existing =
+          await (select(projectTags)..where(
+                (t) =>
+                    t.project_fk.equals(entry.project_fk.value) &
+                    t.category.equals(entry.category.value) &
+                    t.value.equals(entry.value.value),
+              ))
+              .get();
       if (existing.isNotEmpty) {
         final pk = existing.first.tag_pk;
-        await (update(projectTags)..where((t) => t.tag_pk.equals(pk))).write(entry);
+        await (update(
+          projectTags,
+        )..where((t) => t.tag_pk.equals(pk))).write(entry);
         return pk;
       }
       return into(projectTags).insert(entry);
@@ -843,8 +1006,9 @@ class NexusDatabase extends _$NexusDatabase {
   }
 
   Future<void> setTagStatus(int tagPk, String status) async {
-    await (update(projectTags)..where((t) => t.tag_pk.equals(tagPk)))
-        .write(ProjectTagsCompanion(status: Value(status)));
+    await (update(projectTags)..where((t) => t.tag_pk.equals(tagPk))).write(
+      ProjectTagsCompanion(status: Value(status)),
+    );
   }
 
   Future<void> deleteTag(int tagPk) async {
@@ -853,7 +1017,10 @@ class NexusDatabase extends _$NexusDatabase {
 
   // ==================== Library verification cache ====================
   /// Cached freshness check for (ecosystem, name), or null if absent.
-  Future<LibraryVerification?> getCachedVerification(String ecosystem, String name) {
+  Future<LibraryVerification?> getCachedVerification(
+    String ecosystem,
+    String name,
+  ) {
     return (select(libraryVerifications)
           ..where((v) => v.ecosystem.equals(ecosystem) & v.name.equals(name)))
         .getSingleOrNull();
@@ -864,15 +1031,17 @@ class NexusDatabase extends _$NexusDatabase {
   /// propose) can't both insert and duplicate the cache row.
   Future<void> upsertVerification(LibraryVerificationsCompanion entry) async {
     await transaction(() async {
-      final existing = await (select(libraryVerifications)
-            ..where((v) =>
-                v.ecosystem.equals(entry.ecosystem.value) &
-                v.name.equals(entry.name.value)))
-          .get();
+      final existing =
+          await (select(libraryVerifications)..where(
+                (v) =>
+                    v.ecosystem.equals(entry.ecosystem.value) &
+                    v.name.equals(entry.name.value),
+              ))
+              .get();
       if (existing.isNotEmpty) {
-        await (update(libraryVerifications)
-              ..where(
-                  (v) => v.verification_pk.equals(existing.first.verification_pk)))
+        await (update(libraryVerifications)..where(
+              (v) => v.verification_pk.equals(existing.first.verification_pk),
+            ))
             .write(entry);
       } else {
         await into(libraryVerifications).insert(entry);
@@ -888,19 +1057,25 @@ class NexusDatabase extends _$NexusDatabase {
   }
 
   Stream<List<Task>> watchTasksForProject(int projectPk) {
-    return (select(tasks)..where((t) => t.task_project_fk.equals(projectPk))).watch();
+    return (select(
+      tasks,
+    )..where((t) => t.task_project_fk.equals(projectPk))).watch();
   }
 
   /// Watch root tasks (no parent) for a project.
   Stream<List<Task>> watchRootTasksForProject(int projectPk) {
-    return (select(tasks)
-          ..where((t) => t.task_project_fk.equals(projectPk) & t.task_parent_fk.isNull()))
+    return (select(tasks)..where(
+          (t) =>
+              t.task_project_fk.equals(projectPk) & t.task_parent_fk.isNull(),
+        ))
         .watch();
   }
 
   /// Tasks generated from a specific plan file (provenance backtrack).
   Future<List<Task>> getTasksForPlanPath(String planPath) {
-    return (select(tasks)..where((t) => t.task_plan_path.equals(planPath))).get();
+    return (select(
+      tasks,
+    )..where((t) => t.task_plan_path.equals(planPath))).get();
   }
 
   Future<int> createTask(TasksCompanion entry) => into(tasks).insert(entry);
@@ -923,28 +1098,43 @@ class NexusDatabase extends _$NexusDatabase {
     // title in the same project. Returns the existing task's id instead, so a
     // re-run (e.g. re-finalizing setup) is idempotent and can't loop by piling
     // up identical tasks.
-    final dupe = await (select(tasks)
-          ..where((t) =>
-              t.task_project_fk.equals(projectPk) & t.title.equals(title))
-          ..limit(1))
-        .getSingleOrNull();
+    final dupe =
+        await (select(tasks)
+              ..where(
+                (t) =>
+                    t.task_project_fk.equals(projectPk) & t.title.equals(title),
+              )
+              ..limit(1))
+            .getSingleOrNull();
     if (dupe != null) return dupe.task_pk;
 
-    final proj = await (select(projects)..where((p) => p.project_pk.equals(projectPk))).getSingleOrNull();
+    final proj = await (select(
+      projects,
+    )..where((p) => p.project_pk.equals(projectPk))).getSingleOrNull();
     final clientPk = proj?.client_fk ?? 0;
-    return into(tasks).insert(TasksCompanion.insert(
-      task_client_fk: clientPk,
-      task_project_fk: projectPk,
-      title: title,
-      task_parent_fk: parentPk != null ? Value(parentPk) : const Value.absent(),
-      task_plan_path: planPath != null ? Value(planPath) : const Value.absent(),
-      task_chat_session_fk: chatSessionPk != null ? Value(chatSessionPk) : const Value.absent(),
-      task_agent_fk: agentPk != null ? Value(agentPk) : const Value.absent(),
-      description: Value(description),
-      status: Value(status),
-      priority: Value(priority),
-      thinkingMode: thinkingMode != null ? Value(thinkingMode) : const Value.absent(),
-    ));
+    return into(tasks).insert(
+      TasksCompanion.insert(
+        task_client_fk: clientPk,
+        task_project_fk: projectPk,
+        title: title,
+        task_parent_fk: parentPk != null
+            ? Value(parentPk)
+            : const Value.absent(),
+        task_plan_path: planPath != null
+            ? Value(planPath)
+            : const Value.absent(),
+        task_chat_session_fk: chatSessionPk != null
+            ? Value(chatSessionPk)
+            : const Value.absent(),
+        task_agent_fk: agentPk != null ? Value(agentPk) : const Value.absent(),
+        description: Value(description),
+        status: Value(status),
+        priority: Value(priority),
+        thinkingMode: thinkingMode != null
+            ? Value(thinkingMode)
+            : const Value.absent(),
+      ),
+    );
   }
 
   Future<bool> updateTask(TasksCompanion entry) => update(tasks).replace(entry);
@@ -979,23 +1169,34 @@ class NexusDatabase extends _$NexusDatabase {
 
   /// Assign (or clear, with null) the agent persona responsible for a task.
   Future<void> assignTaskAgent(int taskPk, int? personaPk) async {
-    await (update(tasks)..where((t) => t.task_pk.equals(taskPk)))
-        .write(TasksCompanion(task_agent_fk: Value(personaPk), updatedAt: Value(DateTime.now())));
+    await (update(tasks)..where((t) => t.task_pk.equals(taskPk))).write(
+      TasksCompanion(
+        task_agent_fk: Value(personaPk),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   /// Partial update of a task — only fields present in [patch] change.
   Future<void> patchTask(int taskPk, TasksCompanion patch) async {
-    await (update(tasks)..where((t) => t.task_pk.equals(taskPk)))
-        .write(patch.copyWith(updatedAt: Value(DateTime.now())));
+    await (update(tasks)..where((t) => t.task_pk.equals(taskPk))).write(
+      patch.copyWith(updatedAt: Value(DateTime.now())),
+    );
   }
 
   /// Set/clear a task's start and/or due dates.
-  Future<void> setTaskDates(int taskPk, {Value<DateTime?>? start, Value<DateTime?>? due}) async {
-    await (update(tasks)..where((t) => t.task_pk.equals(taskPk))).write(TasksCompanion(
-      startDate: start ?? const Value.absent(),
-      dueDate: due ?? const Value.absent(),
-      updatedAt: Value(DateTime.now()),
-    ));
+  Future<void> setTaskDates(
+    int taskPk, {
+    Value<DateTime?>? start,
+    Value<DateTime?>? due,
+  }) async {
+    await (update(tasks)..where((t) => t.task_pk.equals(taskPk))).write(
+      TasksCompanion(
+        startDate: start ?? const Value.absent(),
+        dueDate: due ?? const Value.absent(),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   Future<void> setTaskBuildConfig(
@@ -1005,17 +1206,21 @@ class NexusDatabase extends _$NexusDatabase {
     Value<String?>? workflowPath,
     Value<String?>? imageTag,
   }) async {
-    await (update(tasks)..where((t) => t.task_pk.equals(taskPk))).write(TasksCompanion(
-      requiresBuild: requiresBuild ?? const Value.absent(),
-      dockerfilePath: dockerfilePath ?? const Value.absent(),
-      workflowPath: workflowPath ?? const Value.absent(),
-      imageTag: imageTag ?? const Value.absent(),
-      updatedAt: Value(DateTime.now()),
-    ));
+    await (update(tasks)..where((t) => t.task_pk.equals(taskPk))).write(
+      TasksCompanion(
+        requiresBuild: requiresBuild ?? const Value.absent(),
+        dockerfilePath: dockerfilePath ?? const Value.absent(),
+        workflowPath: workflowPath ?? const Value.absent(),
+        imageTag: imageTag ?? const Value.absent(),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   Future<Task?> getTaskById(int taskPk) async {
-    return (select(tasks)..where((t) => t.task_pk.equals(taskPk))).getSingleOrNull();
+    return (select(
+      tasks,
+    )..where((t) => t.task_pk.equals(taskPk))).getSingleOrNull();
   }
 
   // ==================== Orchestration state machine ====================
@@ -1026,7 +1231,11 @@ class NexusDatabase extends _$NexusDatabase {
 
   /// Persist the (status, executionStatus) a [TaskEvent] produces, merging any
   /// extra column changes in [extra].
-  Future<void> _applyTaskEvent(int taskPk, TaskEvent event, [TasksCompanion? extra]) async {
+  Future<void> _applyTaskEvent(
+    int taskPk,
+    TaskEvent event, [
+    TasksCompanion? extra,
+  ]) async {
     final next = applyEvent(event);
     var patch = TasksCompanion(
       status: Value(next.status),
@@ -1046,19 +1255,48 @@ class NexusDatabase extends _$NexusDatabase {
     await (update(tasks)..where((t) => t.task_pk.equals(taskPk))).write(patch);
   }
 
-  /// A worker session was spawned and is now executing the task on [workBranch].
-  Future<void> markTaskRunning(int taskPk, {required int workerSessionPk, String? workBranch}) {
-    return _applyTaskEvent(taskPk, TaskEvent.startWork, TasksCompanion(
-      worker_session_fk: Value(workerSessionPk),
-      workBranch: workBranch != null ? Value(workBranch) : const Value.absent(),
-    ));
+  /// The orchestrator picked the task up and is preparing its workspace. Stays
+  /// on the Todo board (exec `queued`) so "In Progress" still means a live agent.
+  Future<void> markTaskQueued(int taskPk) {
+    return _applyTaskEvent(taskPk, TaskEvent.enqueue);
+  }
+
+  /// A worker session is now actively executing the task on [workBranch]. This
+  /// is the moment the task becomes "In Progress" — call it right before the
+  /// worker's first turn, not at pickup.
+  Future<void> markTaskRunning(
+    int taskPk, {
+    required int workerSessionPk,
+    String? workBranch,
+  }) {
+    return _applyTaskEvent(
+      taskPk,
+      TaskEvent.startWork,
+      TasksCompanion(
+        worker_session_fk: Value(workerSessionPk),
+        workBranch: workBranch != null
+            ? Value(workBranch)
+            : const Value.absent(),
+      ),
+    );
+  }
+
+  /// A worker run ended without submitting (turn cap, paused project, error).
+  /// Return the task to the board instead of leaving it stuck "In Progress".
+  Future<void> markTaskYieldedBack(int taskPk) {
+    return _applyTaskEvent(taskPk, TaskEvent.yieldBack);
   }
 
   /// The worker called submit_for_completion; store its submission payload.
-  Future<void> submitTaskForCompletion(int taskPk, {required String submissionJson}) {
-    return _applyTaskEvent(taskPk, TaskEvent.submit, TasksCompanion(
-      submissionJson: Value(submissionJson),
-    ));
+  Future<void> submitTaskForCompletion(
+    int taskPk, {
+    required String submissionJson,
+  }) {
+    return _applyTaskEvent(
+      taskPk,
+      TaskEvent.submit,
+      TasksCompanion(submissionJson: Value(submissionJson)),
+    );
   }
 
   /// The Verification Agent began running the proof.
@@ -1069,32 +1307,43 @@ class NexusDatabase extends _$NexusDatabase {
   /// Record the verifier's verdict. On pass the task waits for the Coordinator
   /// to merge; on fail it returns to the board for the same agent to re-engage.
   Future<void> recordTaskVerdict(int taskPk, {required bool passed}) {
-    return _applyTaskEvent(taskPk, passed ? TaskEvent.verdictPass : TaskEvent.verdictFail);
+    return _applyTaskEvent(
+      taskPk,
+      passed ? TaskEvent.verdictPass : TaskEvent.verdictFail,
+    );
   }
 
   /// The Coordinator merged the branch — task is fully done. Clears the live
   /// worker session so its (ephemeral) context can be torn down.
   Future<void> approveTask(int taskPk) async {
     final t = await getTaskById(taskPk);
-    await _applyTaskEvent(taskPk, TaskEvent.approve, const TasksCompanion(
-      worker_session_fk: Value(null),
-    ));
+    await _applyTaskEvent(
+      taskPk,
+      TaskEvent.approve,
+      const TasksCompanion(worker_session_fk: Value(null)),
+    );
     if (t != null) {
-      _taskCompletedController.add(TaskCompletedEvent(
-        taskPk: taskPk,
-        projectPk: t.task_project_fk,
-        title: t.title,
-      ));
+      _taskCompletedController.add(
+        TaskCompletedEvent(
+          taskPk: taskPk,
+          projectPk: t.task_project_fk,
+          title: t.title,
+        ),
+      );
     }
   }
 
   /// Send a task back to the board (PM/Coordinator reject), clearing its live
   /// worker session and submission.
   Future<void> reopenTask(int taskPk) {
-    return _applyTaskEvent(taskPk, TaskEvent.reject, const TasksCompanion(
-      worker_session_fk: Value(null),
-      submissionJson: Value(null),
-    ));
+    return _applyTaskEvent(
+      taskPk,
+      TaskEvent.reject,
+      const TasksCompanion(
+        worker_session_fk: Value(null),
+        submissionJson: Value(null),
+      ),
+    );
   }
 
   /// Pipeline build gate started running on this task.
@@ -1105,7 +1354,10 @@ class NexusDatabase extends _$NexusDatabase {
   /// Record the pipeline build gate's outcome: green advances the task to
   /// `built` (awaiting merge); red sends it back to the board for rework.
   Future<void> recordTaskBuildOutcome(int taskPk, {required bool passed}) {
-    return _applyTaskEvent(taskPk, passed ? TaskEvent.buildPass : TaskEvent.buildFail);
+    return _applyTaskEvent(
+      taskPk,
+      passed ? TaskEvent.buildPass : TaskEvent.buildFail,
+    );
   }
 
   /// The Coordinator started merging this task's branch into main.
@@ -1130,29 +1382,47 @@ class NexusDatabase extends _$NexusDatabase {
 
   /// Set the Project-Manager-authored definition of done and the runnable proof
   /// the Verification Agent will execute.
-  Future<void> setTaskAcceptance(int taskPk, {String? acceptanceCriteria, String? verification}) async {
-    await (update(tasks)..where((t) => t.task_pk.equals(taskPk))).write(TasksCompanion(
-      acceptanceCriteria: acceptanceCriteria != null ? Value(acceptanceCriteria) : const Value.absent(),
-      verification: verification != null ? Value(verification) : const Value.absent(),
-      updatedAt: Value(DateTime.now()),
-    ));
+  Future<void> setTaskAcceptance(
+    int taskPk, {
+    String? acceptanceCriteria,
+    String? verification,
+  }) async {
+    await (update(tasks)..where((t) => t.task_pk.equals(taskPk))).write(
+      TasksCompanion(
+        acceptanceCriteria: acceptanceCriteria != null
+            ? Value(acceptanceCriteria)
+            : const Value.absent(),
+        verification: verification != null
+            ? Value(verification)
+            : const Value.absent(),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   // ==================== Inference Servers (AI Providers) ====================
   Future<List<InferenceServer>> getInferenceServersForClient(int clientPk) {
-    return (select(inferenceServers)..where((s) => s.client_fk.equals(clientPk))).get();
+    return (select(
+      inferenceServers,
+    )..where((s) => s.client_fk.equals(clientPk))).get();
   }
 
   Stream<List<InferenceServer>> watchInferenceServersForClient(int clientPk) {
-    return (select(inferenceServers)..where((s) => s.client_fk.equals(clientPk))).watch();
+    return (select(
+      inferenceServers,
+    )..where((s) => s.client_fk.equals(clientPk))).watch();
   }
 
-  Future<int> createInferenceServer(InferenceServersCompanion entry) => into(inferenceServers).insert(entry);
+  Future<int> createInferenceServer(InferenceServersCompanion entry) =>
+      into(inferenceServers).insert(entry);
 
-  Future<bool> updateInferenceServer(InferenceServersCompanion entry) => update(inferenceServers).replace(entry);
+  Future<bool> updateInferenceServer(InferenceServersCompanion entry) =>
+      update(inferenceServers).replace(entry);
 
   Future<int> deleteInferenceServer(int serverPk) {
-    return (delete(inferenceServers)..where((s) => s.server_pk.equals(serverPk))).go();
+    return (delete(
+      inferenceServers,
+    )..where((s) => s.server_pk.equals(serverPk))).go();
   }
 
   /// Upserts the managed Nexus Router (subscription) server for a client. The
@@ -1170,11 +1440,13 @@ class NexusDatabase extends _$NexusDatabase {
     int? maxAgents,
     int? maxConcurrency,
   }) async {
-    final existing = await (select(inferenceServers)
-          ..where((s) =>
-              s.client_fk.equals(clientPk) &
-              s.providerType.equals(kRoutedProviderType)))
-        .get();
+    final existing =
+        await (select(inferenceServers)..where(
+              (s) =>
+                  s.client_fk.equals(clientPk) &
+                  s.providerType.equals(kRoutedProviderType),
+            ))
+            .get();
     if (existing.isEmpty) {
       await createInferenceServer(
         InferenceServersCompanion.insert(
@@ -1183,9 +1455,12 @@ class NexusDatabase extends _$NexusDatabase {
           baseUrl: baseUrl,
           apiKey: Value(apiKey),
           providerType: const Value(kRoutedProviderType),
-          maxAgents: maxAgents == null ? const Value.absent() : Value(maxAgents),
-          maxConcurrency:
-              maxConcurrency == null ? const Value.absent() : Value(maxConcurrency),
+          maxAgents: maxAgents == null
+              ? const Value.absent()
+              : Value(maxAgents),
+          maxConcurrency: maxConcurrency == null
+              ? const Value.absent()
+              : Value(maxConcurrency),
         ),
       );
       return;
@@ -1195,107 +1470,155 @@ class NexusDatabase extends _$NexusDatabase {
     for (final extra in existing.skip(1)) {
       await deleteInferenceServer(extra.server_pk);
     }
-    final unchanged = row.name == name &&
+    final unchanged =
+        row.name == name &&
         row.baseUrl == baseUrl &&
         row.apiKey == apiKey &&
         (maxAgents == null || row.maxAgents == maxAgents) &&
         (maxConcurrency == null || row.maxConcurrency == maxConcurrency);
     if (unchanged) return;
-    await (update(inferenceServers)..where((s) => s.server_pk.equals(row.server_pk)))
-        .write(InferenceServersCompanion(
-      name: Value(name),
-      baseUrl: Value(baseUrl),
-      apiKey: Value(apiKey),
-      maxAgents: maxAgents == null ? const Value.absent() : Value(maxAgents),
-      maxConcurrency:
-          maxConcurrency == null ? const Value.absent() : Value(maxConcurrency),
-      updatedAt: Value(DateTime.now()),
-    ));
+    await (update(
+      inferenceServers,
+    )..where((s) => s.server_pk.equals(row.server_pk))).write(
+      InferenceServersCompanion(
+        name: Value(name),
+        baseUrl: Value(baseUrl),
+        apiKey: Value(apiKey),
+        maxAgents: maxAgents == null ? const Value.absent() : Value(maxAgents),
+        maxConcurrency: maxConcurrency == null
+            ? const Value.absent()
+            : Value(maxConcurrency),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   /// Removes the managed Nexus Router server(s) for a client (on sign-out).
   Future<int> removeRoutedServersForClient(int clientPk) {
-    return (delete(inferenceServers)
-          ..where((s) =>
+    return (delete(inferenceServers)..where(
+          (s) =>
               s.client_fk.equals(clientPk) &
-              s.providerType.equals(kRoutedProviderType)))
+              s.providerType.equals(kRoutedProviderType),
+        ))
         .go();
   }
 
-  Future<void> updateInferenceServerSelectedModel(int serverPk, String? modelId) async {
+  Future<void> updateInferenceServerSelectedModel(
+    int serverPk,
+    String? modelId,
+  ) async {
     await (update(inferenceServers)..where((s) => s.server_pk.equals(serverPk)))
         .write(InferenceServersCompanion(selectedModel: Value(modelId)));
   }
 
-  Future<void> updateInferenceServerAvailableModels(int serverPk, List<String> models) async {
-    await (update(inferenceServers)..where((s) => s.server_pk.equals(serverPk)))
-        .write(InferenceServersCompanion(availableModelsJson: Value(json.encode(models))));
+  Future<void> updateInferenceServerAvailableModels(
+    int serverPk,
+    List<String> models,
+  ) async {
+    await (update(
+      inferenceServers,
+    )..where((s) => s.server_pk.equals(serverPk))).write(
+      InferenceServersCompanion(
+        availableModelsJson: Value(json.encode(models)),
+      ),
+    );
   }
 
   // ==================== Agent Personas ====================
   Future<List<AgentPersona>> getAgentPersonasForClient(int clientPk) {
-    return (select(agentPersonas)..where((p) => p.client_fk.equals(clientPk))).get();
+    return (select(
+      agentPersonas,
+    )..where((p) => p.client_fk.equals(clientPk))).get();
   }
 
   Stream<List<AgentPersona>> watchAgentPersonasForClient(int clientPk) {
-    return (select(agentPersonas)..where((p) => p.client_fk.equals(clientPk))).watch();
+    return (select(
+      agentPersonas,
+    )..where((p) => p.client_fk.equals(clientPk))).watch();
   }
 
-  Future<int> createAgentPersona(AgentPersonasCompanion entry) => into(agentPersonas).insert(entry);
+  Future<int> createAgentPersona(AgentPersonasCompanion entry) =>
+      into(agentPersonas).insert(entry);
 
-  Future<bool> updateAgentPersona(AgentPersonasCompanion entry) => update(agentPersonas).replace(entry);
+  Future<bool> updateAgentPersona(AgentPersonasCompanion entry) =>
+      update(agentPersonas).replace(entry);
 
   Future<int> deleteAgentPersona(int agentPk) {
-    return (delete(agentPersonas)..where((p) => p.agent_pk.equals(agentPk))).go();
+    return (delete(
+      agentPersonas,
+    )..where((p) => p.agent_pk.equals(agentPk))).go();
   }
 
   Future<AgentPersona?> resolveAgentPersona(int agentPk) async {
-    return (select(agentPersonas)..where((p) => p.agent_pk.equals(agentPk))).getSingleOrNull();
+    return (select(
+      agentPersonas,
+    )..where((p) => p.agent_pk.equals(agentPk))).getSingleOrNull();
   }
 
   // ==================== Deployments (placeholder) ====================
   Future<List<Deployment>> getDeploymentsForClient(int clientPk) {
-    return (select(deployments)..where((d) => d.client_fk.equals(clientPk))).get();
+    return (select(
+      deployments,
+    )..where((d) => d.client_fk.equals(clientPk))).get();
   }
 
   Stream<List<Deployment>> watchDeploymentsForClient(int clientPk) {
-    return (select(deployments)..where((d) => d.client_fk.equals(clientPk))).watch();
+    return (select(
+      deployments,
+    )..where((d) => d.client_fk.equals(clientPk))).watch();
   }
 
-  Future<int> createDeployment(DeploymentsCompanion entry) => into(deployments).insert(entry);
+  Future<int> createDeployment(DeploymentsCompanion entry) =>
+      into(deployments).insert(entry);
 
   // ==================== Coordinator Chat Sessions ====================
   Stream<List<ChatSession>> watchChatSessionsForProject(int projectPk) {
     return (select(chatSessions)
           ..where((s) => s.project_fk.equals(projectPk))
-          ..orderBy([(s) => OrderingTerm(expression: s.updatedAt, mode: OrderingMode.desc)]))
+          ..orderBy([
+            (s) =>
+                OrderingTerm(expression: s.updatedAt, mode: OrderingMode.desc),
+          ]))
         .watch();
   }
 
   Future<List<ChatSession>> getChatSessionsForProject(int projectPk) {
     return (select(chatSessions)
           ..where((s) => s.project_fk.equals(projectPk))
-          ..orderBy([(s) => OrderingTerm(expression: s.updatedAt, mode: OrderingMode.desc)]))
+          ..orderBy([
+            (s) =>
+                OrderingTerm(expression: s.updatedAt, mode: OrderingMode.desc),
+          ]))
         .get();
   }
 
   /// Inserts a session and returns its new integer pk.
-  Future<int> createChatSession(ChatSessionsCompanion entry) => into(chatSessions).insert(entry);
+  Future<int> createChatSession(ChatSessionsCompanion entry) =>
+      into(chatSessions).insert(entry);
 
   /// Resolves the chat session for a project — and, when [planPath] is given, the
   /// session tied to that specific plan file (creating one if none exists yet).
   /// This keeps a plan's conversation distinct from the general project chat and
   /// records the plan link so work can be backtracked to it. Returns its pk.
   Future<int> getOrCreateChatSession(int projectPk, {String? planPath}) async {
-    final query = select(chatSessions)..where((s) => s.project_fk.equals(projectPk));
-    query.where((s) => planPath == null ? s.plan_path.isNull() : s.plan_path.equals(planPath));
-    query.orderBy([(s) => OrderingTerm(expression: s.updatedAt, mode: OrderingMode.desc)]);
+    final query = select(chatSessions)
+      ..where((s) => s.project_fk.equals(projectPk));
+    query.where(
+      (s) => planPath == null
+          ? s.plan_path.isNull()
+          : s.plan_path.equals(planPath),
+    );
+    query.orderBy([
+      (s) => OrderingTerm(expression: s.updatedAt, mode: OrderingMode.desc),
+    ]);
     final existing = await query.get();
     if (existing.isNotEmpty) return existing.first.session_pk;
-    return createChatSession(ChatSessionsCompanion.insert(
-      project_fk: projectPk,
-      plan_path: planPath != null ? Value(planPath) : const Value.absent(),
-    ));
+    return createChatSession(
+      ChatSessionsCompanion.insert(
+        project_fk: projectPk,
+        plan_path: planPath != null ? Value(planPath) : const Value.absent(),
+      ),
+    );
   }
 
   /// Scope marker stored in [ChatSessions.plan_path] for an agent's dedicated
@@ -1311,22 +1634,38 @@ class NexusDatabase extends _$NexusDatabase {
   /// every task that agent runs, so the board no longer spawns a fresh session
   /// on each task update. Returns its pk.
   Future<int> getOrCreateAgentChatSession(
-      int projectPk, int agentPk, String agentName) async {
+    int projectPk,
+    int agentPk,
+    String agentName,
+  ) async {
     final scope = agentSessionScope(agentPk);
-    final existing = await (select(chatSessions)
-          ..where((s) => s.project_fk.equals(projectPk) & s.plan_path.equals(scope))
-          ..orderBy([(s) => OrderingTerm(expression: s.updatedAt, mode: OrderingMode.desc)]))
-        .get();
+    final existing =
+        await (select(chatSessions)
+              ..where(
+                (s) =>
+                    s.project_fk.equals(projectPk) & s.plan_path.equals(scope),
+              )
+              ..orderBy([
+                (s) => OrderingTerm(
+                  expression: s.updatedAt,
+                  mode: OrderingMode.desc,
+                ),
+              ]))
+            .get();
     if (existing.isNotEmpty) return existing.first.session_pk;
-    return createChatSession(ChatSessionsCompanion.insert(
-      project_fk: projectPk,
-      plan_path: Value(scope),
-      title: Value(agentName.trim().isEmpty ? 'Agent' : agentName.trim()),
-    ));
+    return createChatSession(
+      ChatSessionsCompanion.insert(
+        project_fk: projectPk,
+        plan_path: Value(scope),
+        title: Value(agentName.trim().isEmpty ? 'Agent' : agentName.trim()),
+      ),
+    );
   }
 
   Future<void> touchChatSession(int sessionPk, {String? title}) async {
-    await (update(chatSessions)..where((s) => s.session_pk.equals(sessionPk))).write(
+    await (update(
+      chatSessions,
+    )..where((s) => s.session_pk.equals(sessionPk))).write(
       ChatSessionsCompanion(
         updatedAt: Value(DateTime.now()),
         title: title != null ? Value(title) : const Value.absent(),
@@ -1335,32 +1674,45 @@ class NexusDatabase extends _$NexusDatabase {
   }
 
   Future<bool> deleteChatSession(int sessionPk) async {
-    await (delete(chatMessages)..where((m) => m.session_fk.equals(sessionPk))).go();
-    final r = await (delete(chatSessions)..where((s) => s.session_pk.equals(sessionPk))).go();
+    await (delete(
+      chatMessages,
+    )..where((m) => m.session_fk.equals(sessionPk))).go();
+    final r = await (delete(
+      chatSessions,
+    )..where((s) => s.session_pk.equals(sessionPk))).go();
     return r > 0;
   }
 
   Stream<List<ChatMessage>> watchChatMessagesForSession(int sessionPk) {
     return (select(chatMessages)
           ..where((m) => m.session_fk.equals(sessionPk))
-          ..orderBy([(m) => OrderingTerm(expression: m.seq), (m) => OrderingTerm(expression: m.createdAt)]))
+          ..orderBy([
+            (m) => OrderingTerm(expression: m.seq),
+            (m) => OrderingTerm(expression: m.createdAt),
+          ]))
         .watch();
   }
 
   Future<List<ChatMessage>> getChatMessagesForSession(int sessionPk) {
     return (select(chatMessages)
           ..where((m) => m.session_fk.equals(sessionPk))
-          ..orderBy([(m) => OrderingTerm(expression: m.seq), (m) => OrderingTerm(expression: m.createdAt)]))
+          ..orderBy([
+            (m) => OrderingTerm(expression: m.seq),
+            (m) => OrderingTerm(expression: m.createdAt),
+          ]))
         .get();
   }
 
   Future<int> countChatMessages(int sessionPk) async {
-    final rows = await (select(chatMessages)..where((m) => m.session_fk.equals(sessionPk))).get();
+    final rows = await (select(
+      chatMessages,
+    )..where((m) => m.session_fk.equals(sessionPk))).get();
     return rows.length;
   }
 
   /// Inserts a chat message and returns its message_pk.
-  Future<int> addChatMessage(ChatMessagesCompanion entry) => into(chatMessages).insert(entry);
+  Future<int> addChatMessage(ChatMessagesCompanion entry) =>
+      into(chatMessages).insert(entry);
 
   /// Removes a single chat message (used to drop a failed turn's user message
   /// so it can't reload as orphaned, role-breaking history).
@@ -1369,57 +1721,81 @@ class NexusDatabase extends _$NexusDatabase {
 
   // ==================== Activity Logs (placeholder) ====================
   Future<List<ActivityLog>> getActivityLogsForClient(int clientPk) {
-    return (select(activityLogs)..where((a) => a.client_fk.equals(clientPk))).get();
+    return (select(
+      activityLogs,
+    )..where((a) => a.client_fk.equals(clientPk))).get();
   }
 
   Stream<List<ActivityLog>> watchActivityLogsForClient(int clientPk) {
-    return (select(activityLogs)..where((a) => a.client_fk.equals(clientPk))).watch();
+    return (select(
+      activityLogs,
+    )..where((a) => a.client_fk.equals(clientPk))).watch();
   }
 
-  Future<int> createActivityLog(ActivityLogsCompanion entry) => into(activityLogs).insert(entry);
+  Future<int> createActivityLog(ActivityLogsCompanion entry) =>
+      into(activityLogs).insert(entry);
 
   // ==================== CI / Build Runs ====================
   Future<List<CiRun>> getCiRunsForClient(int clientPk) {
     return (select(ciRuns)
           ..where((c) => c.client_fk.equals(clientPk))
-          ..orderBy([(c) => OrderingTerm(expression: c.createdAt, mode: OrderingMode.desc)]))
+          ..orderBy([
+            (c) =>
+                OrderingTerm(expression: c.createdAt, mode: OrderingMode.desc),
+          ]))
         .get();
   }
 
   Stream<List<CiRun>> watchCiRunsForClient(int clientPk) {
     return (select(ciRuns)
           ..where((c) => c.client_fk.equals(clientPk))
-          ..orderBy([(c) => OrderingTerm(expression: c.createdAt, mode: OrderingMode.desc)]))
+          ..orderBy([
+            (c) =>
+                OrderingTerm(expression: c.createdAt, mode: OrderingMode.desc),
+          ]))
         .watch();
   }
 
   Stream<List<CiRun>> watchCiRunsForProject(int projectPk) {
     return (select(ciRuns)
           ..where((c) => c.project_fk.equals(projectPk))
-          ..orderBy([(c) => OrderingTerm(expression: c.createdAt, mode: OrderingMode.desc)]))
+          ..orderBy([
+            (c) =>
+                OrderingTerm(expression: c.createdAt, mode: OrderingMode.desc),
+          ]))
         .watch();
   }
 
-  Future<CiRun?> getCiRun(int runPk) =>
-      (select(ciRuns)..where((c) => c.ci_run_pk.equals(runPk))).getSingleOrNull();
+  Future<CiRun?> getCiRun(int runPk) => (select(
+    ciRuns,
+  )..where((c) => c.ci_run_pk.equals(runPk))).getSingleOrNull();
 
-  Stream<CiRun?> watchCiRun(int runPk) =>
-      (select(ciRuns)..where((c) => c.ci_run_pk.equals(runPk))).watchSingleOrNull();
+  Stream<CiRun?> watchCiRun(int runPk) => (select(
+    ciRuns,
+  )..where((c) => c.ci_run_pk.equals(runPk))).watchSingleOrNull();
 
   Future<int> createCiRun(CiRunsCompanion entry) => into(ciRuns).insert(entry);
 
   Future<void> patchCiRun(int runPk, CiRunsCompanion patch) async {
-    await (update(ciRuns)..where((c) => c.ci_run_pk.equals(runPk))).write(patch);
+    await (update(
+      ciRuns,
+    )..where((c) => c.ci_run_pk.equals(runPk))).write(patch);
   }
 
   /// Removes a run and its full jobs→steps subtree.
   Future<bool> deleteCiRun(int runPk) async {
-    final jobs = await (select(ciJobs)..where((j) => j.ci_run_fk.equals(runPk))).get();
+    final jobs = await (select(
+      ciJobs,
+    )..where((j) => j.ci_run_fk.equals(runPk))).get();
     for (final j in jobs) {
-      await (delete(ciSteps)..where((s) => s.ci_job_fk.equals(j.ci_job_pk))).go();
+      await (delete(
+        ciSteps,
+      )..where((s) => s.ci_job_fk.equals(j.ci_job_pk))).go();
     }
     await (delete(ciJobs)..where((j) => j.ci_run_fk.equals(runPk))).go();
-    final r = await (delete(ciRuns)..where((c) => c.ci_run_pk.equals(runPk))).go();
+    final r = await (delete(
+      ciRuns,
+    )..where((c) => c.ci_run_pk.equals(runPk))).go();
     return r > 0;
   }
 
@@ -1441,7 +1817,9 @@ class NexusDatabase extends _$NexusDatabase {
   Future<int> createCiJob(CiJobsCompanion entry) => into(ciJobs).insert(entry);
 
   Future<void> patchCiJob(int jobPk, CiJobsCompanion patch) async {
-    await (update(ciJobs)..where((j) => j.ci_job_pk.equals(jobPk))).write(patch);
+    await (update(
+      ciJobs,
+    )..where((j) => j.ci_job_pk.equals(jobPk))).write(patch);
   }
 
   // ==================== CI Steps ====================
@@ -1459,18 +1837,24 @@ class NexusDatabase extends _$NexusDatabase {
         .watch();
   }
 
-  Future<int> createCiStep(CiStepsCompanion entry) => into(ciSteps).insert(entry);
+  Future<int> createCiStep(CiStepsCompanion entry) =>
+      into(ciSteps).insert(entry);
 
   Future<void> patchCiStep(int stepPk, CiStepsCompanion patch) async {
-    await (update(ciSteps)..where((s) => s.ci_step_pk.equals(stepPk))).write(patch);
+    await (update(
+      ciSteps,
+    )..where((s) => s.ci_step_pk.equals(stepPk))).write(patch);
   }
 
   /// Appends a chunk of captured output to a step's running log.
   Future<void> appendCiStepLog(int stepPk, String chunk) async {
-    final row = await (select(ciSteps)..where((s) => s.ci_step_pk.equals(stepPk))).getSingleOrNull();
+    final row = await (select(
+      ciSteps,
+    )..where((s) => s.ci_step_pk.equals(stepPk))).getSingleOrNull();
     if (row == null) return;
-    await (update(ciSteps)..where((s) => s.ci_step_pk.equals(stepPk)))
-        .write(CiStepsCompanion(logText: Value(row.logText + chunk)));
+    await (update(ciSteps)..where((s) => s.ci_step_pk.equals(stepPk))).write(
+      CiStepsCompanion(logText: Value(row.logText + chunk)),
+    );
   }
 }
 

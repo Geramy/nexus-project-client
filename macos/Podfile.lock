@@ -14,6 +14,8 @@ PODS:
     - onnxruntime-objc/Core (= 1.22.0)
   - onnxruntime-objc/Core (1.22.0):
     - onnxruntime-c (= 1.22.0)
+  - package_info_plus (0.0.1):
+    - FlutterMacOS
   - record_macos (1.2.1):
     - FlutterMacOS
   - shared_preferences_foundation (0.0.1):
@@ -56,6 +58,7 @@ DEPENDENCIES:
   - FlutterMacOS (from `Flutter/ephemeral`)
   - git2dart_binaries (from `Flutter/ephemeral/.symlinks/plugins/git2dart_binaries/macos`)
   - just_audio (from `Flutter/ephemeral/.symlinks/plugins/just_audio/darwin`)
+  - package_info_plus (from `Flutter/ephemeral/.symlinks/plugins/package_info_plus/macos`)
   - record_macos (from `Flutter/ephemeral/.symlinks/plugins/record_macos/macos`)
   - shared_preferences_foundation (from `Flutter/ephemeral/.symlinks/plugins/shared_preferences_foundation/darwin`)
   - sqlite3_flutter_libs (from `Flutter/ephemeral/.symlinks/plugins/sqlite3_flutter_libs/darwin`)
@@ -79,6 +82,8 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/git2dart_binaries/macos
   just_audio:
     :path: Flutter/ephemeral/.symlinks/plugins/just_audio/darwin
+  package_info_plus:
+    :path: Flutter/ephemeral/.symlinks/plugins/package_info_plus/macos
   record_macos:
     :path: Flutter/ephemeral/.symlinks/plugins/record_macos/macos
   shared_preferences_foundation:
@@ -98,6 +103,7 @@ SPEC CHECKSUMS:
   just_audio: 4e391f57b79cad2b0674030a00453ca5ce817eed
   onnxruntime-c: 7f778680e96145956c0a31945f260321eed2611a
   onnxruntime-objc: 83d28b87525bd971259a66e153ea32b5d023de19
+  package_info_plus: f0052d280d17aa382b932f399edf32507174e870
   record_macos: 5d55909f9650314be6424ffd6b123ac75a08c3c1
   shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
   sqlite3: a51c07cf16e023d6c48abd5e5791a61a47354921

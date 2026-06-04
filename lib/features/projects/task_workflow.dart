@@ -56,8 +56,19 @@ class TaskExecStatus {
 
 /// Events that move a task through the loop.
 enum TaskEvent {
-  /// PM assigned the task and a worker session was spawned.
+  /// Orchestrator picked the task up and is preparing the workspace, but no
+  /// agent turn has begun yet — stays on the Todo board, exec `queued`.
+  enqueue,
+
+  /// A worker agent actually began a turn on the task. This is the ONLY thing
+  /// that moves a task to "In Progress" — so the column never lies about a task
+  /// being worked when no agent is on it.
   startWork,
+
+  /// A worker run ended WITHOUT a submission (turn cap, paused project, or an
+  /// error). The task returns to the board for a fresh attempt rather than
+  /// lingering "In Progress" with nobody on it.
+  yieldBack,
 
   /// Worker called submit_for_completion.
   submit,
@@ -95,16 +106,50 @@ enum TaskEvent {
 /// persist the result. Returns the same pair for unknown combinations.
 ({String status, String exec}) applyEvent(TaskEvent event) {
   return switch (event) {
-    TaskEvent.startWork => (status: TaskStatus.inProgress, exec: TaskExecStatus.running),
-    TaskEvent.submit => (status: TaskStatus.review, exec: TaskExecStatus.submitted),
-    TaskEvent.beginVerify => (status: TaskStatus.review, exec: TaskExecStatus.verifying),
-    TaskEvent.verdictPass => (status: TaskStatus.review, exec: TaskExecStatus.verified),
+    TaskEvent.enqueue => (status: TaskStatus.todo, exec: TaskExecStatus.queued),
+    TaskEvent.startWork => (
+      status: TaskStatus.inProgress,
+      exec: TaskExecStatus.running,
+    ),
+    // A run that ended without submitting goes back to the board (queued so the
+    // orchestrator re-picks it), NOT left dangling "In Progress".
+    TaskEvent.yieldBack => (
+      status: TaskStatus.todo,
+      exec: TaskExecStatus.queued,
+    ),
+    TaskEvent.submit => (
+      status: TaskStatus.review,
+      exec: TaskExecStatus.submitted,
+    ),
+    TaskEvent.beginVerify => (
+      status: TaskStatus.review,
+      exec: TaskExecStatus.verifying,
+    ),
+    TaskEvent.verdictPass => (
+      status: TaskStatus.review,
+      exec: TaskExecStatus.verified,
+    ),
     // Failure sends it back to the start of the board; the same agent re-engages.
-    TaskEvent.verdictFail => (status: TaskStatus.todo, exec: TaskExecStatus.failed),
-    TaskEvent.beginBuild => (status: TaskStatus.review, exec: TaskExecStatus.building),
-    TaskEvent.buildPass => (status: TaskStatus.review, exec: TaskExecStatus.built),
-    TaskEvent.buildFail => (status: TaskStatus.todo, exec: TaskExecStatus.failed),
-    TaskEvent.beginMerge => (status: TaskStatus.review, exec: TaskExecStatus.merging),
+    TaskEvent.verdictFail => (
+      status: TaskStatus.todo,
+      exec: TaskExecStatus.failed,
+    ),
+    TaskEvent.beginBuild => (
+      status: TaskStatus.review,
+      exec: TaskExecStatus.building,
+    ),
+    TaskEvent.buildPass => (
+      status: TaskStatus.review,
+      exec: TaskExecStatus.built,
+    ),
+    TaskEvent.buildFail => (
+      status: TaskStatus.todo,
+      exec: TaskExecStatus.failed,
+    ),
+    TaskEvent.beginMerge => (
+      status: TaskStatus.review,
+      exec: TaskExecStatus.merging,
+    ),
     TaskEvent.approve => (status: TaskStatus.done, exec: TaskExecStatus.done),
     TaskEvent.reject => (status: TaskStatus.todo, exec: TaskExecStatus.idle),
   };
