@@ -75,22 +75,48 @@ void main() {
 
   final shotsDir = Platform.environment['NEXUS_SHOTS_DIR'] ?? 'screenshots';
 
-  // The user's side of the conversation — one informative answer per turn. The
-  // host (live AI) decides exactly what it asks; we answer in order and stop
-  // when the host moves to plan generation (refining) or we hit the turn cap.
-  const answers = <String>[
-    'I want to build a small cross-platform to-do / task tracker app for '
-        'personal productivity.',
-    'It is for general consumer / personal use — not a specific regulated '
-        'industry.',
-    'Target platforms: iOS, Android, and Web.',
-    'Core features: create and edit tasks, mark them complete, due dates, and '
-        'local reminders/notifications.',
-    'Use a local on-device database (SQLite). No backend server is needed yet.',
-    'Keep the dependency list minimal — just the essentials for state and '
-        'storage.',
-    'No external third-party services or integrations are needed for now.',
-    'That covers everything — please finalize and generate the plans.',
+  // Walk the setup ONE STAGE AT A TIME: each message targets a single topic so
+  // the host proposes that category's tags, and we screenshot + count after
+  // each. (key = the tag category the stage should populate.) The stack
+  // categories (languages/frameworks) are NOT asked — they're derived by the
+  // deterministic "Resolve stack" step after the intent stages.
+  const stages = <({String key, String message})>[
+    (
+      key: 'industries',
+      message:
+          'Let\'s set up a new app. It is a personal productivity to-do / task '
+          'tracker for general consumer use (not a regulated industry).',
+    ),
+    (
+      key: 'platforms',
+      message:
+          'It must run on these platforms: iOS, Android, and the Web.',
+    ),
+    (
+      key: 'objectives',
+      message:
+          'Objectives: a customer-facing UI, works offline, and syncs data '
+          'when online.',
+    ),
+    (
+      key: 'features',
+      message:
+          'Features it must ship: create and edit tasks, mark complete, set '
+          'due dates, and local reminders/notifications.',
+    ),
+    (
+      key: 'databases',
+      message:
+          'For data storage: keep tasks and user data in a local SQLite '
+          'database on-device, and a PostgreSQL database on the server for '
+          'sync. Please capture those as database tags.',
+    ),
+    (
+      key: 'services',
+      message:
+          'External services: push notifications for reminders, and email for '
+          'account verification. No payments.',
+    ),
   ];
 
   testWidgets(
@@ -248,7 +274,6 @@ void main() {
       await settle();
       await shot('interview_start');
 
-      // ── Steps 2..N: walk the host's questions, timing each turn. ─────────
       final composer = find
           .descendant(
             of: find.byType(SetupInterviewPanel),
@@ -256,78 +281,129 @@ void main() {
           )
           .first;
 
-      // Cap turns AND total interview time: live turns can be slow (a cold
-      // first turn streams a preamble + tool calls before it asks anything), so
-      // give each turn room but stop the whole loop on a wall-clock budget.
-      final interviewDeadline = DateTime.now().add(const Duration(minutes: 9));
-      var turnsRun = 0;
-      String? lastQ; // detect a stalled host (same prompt, no progress)
-      var stall = 0;
-      for (
-        var i = 0;
-        i < answers.length &&
-            !controller.refining &&
-            DateTime.now().isBefore(interviewDeadline);
-        i++
-      ) {
-        // Make sure the composer is actually ready (host idle, or a question is
-        // waiting) before sending — otherwise the send button is a spinner.
+      // Snapshot the tag board straight from the DB: category → non-rejected
+      // values. This is how we VERIFY each stage actually produced tags.
+      Future<Map<String, List<String>>> tagsByCategory() async {
+        final rows = await db.getTagsForProject(projectId);
+        final byCat = <String, List<String>>{};
+        for (final r in rows) {
+          if (r.status == 'rejected') continue;
+          (byCat[r.category] ??= <String>[]).add(r.value);
+        }
+        return byCat;
+      }
+
+      // Send one message through the real composer + wait for the host to settle.
+      Future<bool> sendMessage(String text) async {
         await waitTurn(150);
         final send = find.byIcon(Icons.send);
-        if (send.evaluate().isEmpty) {
-          // Still mid-turn with nothing to answer; capture state and stop.
-          await shot('turn_${(i + 1).toString().padLeft(2, '0')}_busy');
-          break;
-        }
-
-        // If the host keeps showing the SAME prompt, it has stopped advancing
-        // the interview (a weak model) — don't record no-op repeat turns.
-        final qNow = latestHostText();
-        if (qNow == lastQ) {
-          if (++stall >= 2) break;
-        } else {
-          stall = 0;
-        }
-        lastQ = qNow;
-
-        await tester.enterText(composer, answers[i]);
+        if (send.evaluate().isEmpty) return false; // composer busy / no button
+        await tester.enterText(composer, text);
         await tester.pump(const Duration(milliseconds: 120));
-        final sw = Stopwatch()..start();
         await tester.tap(send);
         await tester.pump(const Duration(milliseconds: 120));
-        await waitTurn(150);
-        sw.stop();
-        turnsRun++;
+        await waitTurn(120);
+        return true;
+      }
 
-        final q = latestHostText();
+      // ── Walk each setup STAGE one at a time; screenshot + count tags after. ─
+      final interviewBudget = DateTime.now().add(const Duration(minutes: 8));
+      var stagesRun = 0;
+      for (
+        var i = 0;
+        i < stages.length &&
+            !controller.refining &&
+            DateTime.now().isBefore(interviewBudget);
+        i++
+      ) {
+        final stage = stages[i];
+        final sw = Stopwatch()..start();
+        await sendMessage(stage.message);
+        sw.stop();
+        stagesRun++;
+
+        final byCat = await tagsByCategory();
+        final count = byCat[stage.key]?.length ?? 0;
         metrics.record(
-          'qa_step',
-          'turn ${i + 1}: ${snip(q)}',
+          'stage',
+          '${i + 1}. ${stage.key} ($count tags)',
           sw.elapsed,
+          ok: count > 0,
           extra: {
+            'stage': stage.key,
+            'tags': count,
             'turn': i + 1,
-            'question_len': q.length,
-            'answer': answers[i],
             'model': model,
           },
         );
         transcript
-          ..writeln('\n── turn ${i + 1}  (${sw.elapsed.inMilliseconds} ms) ──')
-          ..writeln('Q: $q')
-          ..writeln('A: ${answers[i]}');
+          ..writeln(
+            '\n── stage ${i + 1}: ${stage.key}  '
+            '(${sw.elapsed.inMilliseconds} ms → $count tags) ──',
+          )
+          ..writeln('User: ${stage.message}')
+          ..writeln('Host: ${snip(latestHostText())}')
+          ..writeln('Tags now: ${(byCat[stage.key] ?? const []).join(', ')}');
 
         await settle(300);
-        await shot('turn_${(i + 1).toString().padLeft(2, '0')}');
+        await shot('stage_${(i + 1).toString().padLeft(2, '0')}_${stage.key}');
       }
 
-      // ── Finalize → generate plans (forces the refine phase). ─────────────
+      // ── Resolve the stack (DETERMINISTIC): derives languages + frameworks
+      //    (Client↔Server↔DB) from the platforms/objectives the host captured.
+      //    This is the step the earlier test skipped — why the stack was empty.
+      final resolveBtn = find.text('Resolve stack');
+      if (resolveBtn.evaluate().isNotEmpty) {
+        final sw = Stopwatch()..start();
+        try {
+          await tester.ensureVisible(resolveBtn);
+        } catch (_) {}
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.tap(resolveBtn);
+        // Wait for the resolver's async upserts to land language+framework tags.
+        final end = DateTime.now().add(const Duration(seconds: 20));
+        while (DateTime.now().isBefore(end)) {
+          final byCat = await tagsByCategory();
+          if ((byCat['languages']?.isNotEmpty ?? false) &&
+              (byCat['frameworks']?.isNotEmpty ?? false)) {
+            break;
+          }
+          await tester.pump(const Duration(milliseconds: 300));
+        }
+        sw.stop();
+        final byCat = await tagsByCategory();
+        metrics.record(
+          'resolve_stack',
+          'derive languages + frameworks',
+          sw.elapsed,
+          ok: (byCat['languages']?.isNotEmpty ?? false),
+          extra: {
+            'languages': byCat['languages']?.length ?? 0,
+            'frameworks': byCat['frameworks']?.length ?? 0,
+            'model': model,
+          },
+        );
+        transcript.writeln(
+          '\n── resolve stack (${sw.elapsed.inMilliseconds} ms) → '
+          'languages=${byCat['languages']?.length ?? 0}, '
+          'frameworks=${byCat['frameworks']?.length ?? 0} ──',
+        );
+      } else {
+        transcript.writeln('\n── "Resolve stack" button not found ──');
+      }
+      await settle(400);
+      await shot('stack_resolved');
+
+      // ── Finalize → generate plans (best-effort). ─────────────────────────
       if (!controller.refining) {
         final fin = find.text('Finalize & generate plans');
         if (fin.evaluate().isNotEmpty) {
           final sw = Stopwatch()..start();
+          try {
+            await tester.ensureVisible(fin);
+          } catch (_) {}
           await tester.tap(fin);
           await tester.pump(const Duration(milliseconds: 150));
-          // Finalize generates the plan files; wait (bounded) for busy to clear.
           final end = DateTime.now().add(const Duration(seconds: 90));
           while (controller.busy && DateTime.now().isBefore(end)) {
             await tester.pump(const Duration(milliseconds: 300));
@@ -347,35 +423,73 @@ void main() {
         }
       }
       await settle(400);
-      await shot('refine_ready');
+      await shot('finalize');
 
-      // ── Persist timing + transcript; assert we navigated the real flow. ──
-      final mDir = await metrics.flush();
-      await File('$shotsDir/transcript.txt').writeAsString(transcript.toString());
-      debugPrint(metrics.renderTable());
-      debugPrint(transcript.toString());
-      debugPrint('screenshots → $shotsDir  •  metrics → ${mDir.path}');
-
-      debugPrint(
-        'interview turns run: $turnsRun • refining=${controller.refining}',
+      // ── Verify EACH required category actually has tags. ─────────────────
+      const allCats = [
+        'industries',
+        'platforms',
+        'objectives',
+        'features',
+        'languages',
+        'frameworks',
+        'databases',
+        'libraries',
+        'services',
+      ];
+      final finalTags = await tagsByCategory();
+      final table = StringBuffer()..writeln('\n── Tag board by category ──');
+      for (final cat in allCats) {
+        final vals = finalTags[cat] ?? const [];
+        table.writeln(
+          '   ${cat.padRight(12)} ${vals.length.toString().padLeft(2)}  '
+          '${vals.take(6).join(', ')}',
+        );
+      }
+      metrics.record(
+        'tags',
+        'final tag board by category',
+        Duration.zero,
+        extra: {
+          for (final cat in allCats) cat: finalTags[cat]?.length ?? 0,
+          'model': model,
+        },
       );
 
-      // The deliverables are the screenshots + the timed transcript: assert we
-      // genuinely drove the live UI (host produced messages, we ran turns, and
-      // every step was screenshotted). `refining` is logged, not required — a
-      // slow model may not finish finalize within budget, but the captured
-      // walkthrough is still the artifact we ship.
+      // ── Persist timing + transcript + tag table. ─────────────────────────
+      final mDir = await metrics.flush();
+      await File(
+        '$shotsDir/transcript.txt',
+      ).writeAsString('$transcript\n$table');
+      debugPrint(metrics.renderTable());
+      debugPrint(table.toString());
+      debugPrint(
+        'stages walked: $stagesRun/${stages.length}  •  '
+        'screenshots → $shotsDir  •  metrics → ${mDir.path}',
+      );
+
+      // The stack (languages/frameworks) is deterministic and MUST be present;
+      // the intent stages the user described MUST have produced their tags.
+      int n(String c) => finalTags[c]?.length ?? 0;
       expect(
         controller.messages.isNotEmpty,
         isTrue,
         reason: 'the live host should have produced interview messages',
       );
-      expect(turnsRun, greaterThanOrEqualTo(1), reason: 'at least one Q&A turn');
-      expect(
-        metrics.metrics.where((m) => m.kind == 'qa_step').length,
-        greaterThanOrEqualTo(1),
-        reason: 'at least one timed Q&A step recorded',
-      );
+      for (final cat in const [
+        'platforms',
+        'objectives',
+        'features',
+        'databases',
+        'languages',
+        'frameworks',
+      ]) {
+        expect(
+          n(cat),
+          greaterThan(0),
+          reason: 'setup produced NO "$cat" tags:\n$table',
+        );
+      }
       final shots = Directory(shotsDir)
           .listSync()
           .whereType<File>()
@@ -383,8 +497,8 @@ void main() {
           .toList();
       expect(
         shots.length,
-        greaterThanOrEqualTo(3),
-        reason: 'each setup step should be screenshotted',
+        greaterThanOrEqualTo(stages.length),
+        reason: 'every setup stage should be screenshotted',
       );
     },
     skip: !hasCreds,
