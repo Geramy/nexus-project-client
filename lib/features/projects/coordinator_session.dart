@@ -15,6 +15,7 @@ import 'package:nexus_projects_client/infrastructure/workspace/workspace.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/git/nxtprj_git_engine.dart';
 import 'package:nexus_projects_client/infrastructure/build/build_service.dart';
 import 'package:nexus_projects_client/core/agents/loop_guard.dart';
+import 'package:nexus_projects_client/features/projects/orchestration/orchestrator_prompts.dart';
 
 /// Manages a conversation with a Project's Coordinator AI (the "main brain").
 /// Now supports real tool execution against the live DB so the AI can adjust
@@ -229,18 +230,13 @@ class ProjectCoordinatorSession {
       return systemPromptOverride!;
     }
     final buffer = StringBuffer();
-    buffer.writeln(
-      'You are the Coordinator AI for the project "$projectName".',
-    );
-    buffer.writeln(
-      'You help the user plan, refine tasks, and make decisions for this project.',
-    );
-    buffer.writeln(
-      'You have FULL ACCESS to live project state via tools. When the user asks to add work, change status, break down plans, or adjust direction — CALL THE TOOLS to do it immediately. Then confirm in natural language what you changed.',
-    );
-    buffer.writeln(
-      'Keep spoken replies short and natural. Use tools proactively.',
-    );
+    // Behavioral preamble: editable via the Prompts tab (coordinatorSystem); the
+    // live context + tool catalog below are still generated in code.
+    final proj = db != null ? await db!.getProjectById(projectId) : null;
+    final preamble = OrchestratorPrompts.fromJson(proj?.orchestratorPromptsJson)
+        .raw(OrchestratorPromptField.coordinatorSystem)
+        .replaceAll('{projectName}', projectName);
+    buffer.writeln(preamble);
 
     final live = currentPlanContext ?? await getRichProjectContext();
     if (live.isNotEmpty) {

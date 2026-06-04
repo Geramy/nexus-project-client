@@ -68,11 +68,12 @@ class _SetupTabState extends ConsumerState<SetupTab> {
     await controller.completeSetup();
     if (!mounted) return;
 
-    // Generate /PLANS in the background — don't make the user wait. (Runs after
-    // completeSetup so they can't both mutate the controller concurrently.)
+    // Generate /PLANS in the background — don't make the user wait. Uses the
+    // plans-only path so it can't revert setupStatus back to 'refining' and
+    // clobber the 'complete' that completeSetup just wrote.
     unawaited(() async {
       try {
-        await controller.finalize();
+        await controller.finalizePlansOnly();
       } catch (_) {
         /* best-effort; the user stories drive tasks now */
       }

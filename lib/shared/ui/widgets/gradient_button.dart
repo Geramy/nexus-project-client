@@ -39,32 +39,51 @@ class _GradientButtonState extends State<GradientButton> {
     final enabled = widget.onPressed != null && !widget.busy;
     final radius = BorderRadius.circular(AppRadius.pill);
 
-    final content = Row(
-      mainAxisSize: widget.expand ? MainAxisSize.max : MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        if (widget.busy)
-          const SizedBox(
-            width: 16,
-            height: 16,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: Colors.white,
-            ),
-          )
-        else if (widget.icon != null)
-          Icon(widget.icon, size: 18, color: Colors.white),
-        if ((widget.icon != null || widget.busy))
-          const SizedBox(width: AppSpacing.sm),
-        Text(
-          widget.label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.2,
-          ),
-        ),
-      ],
+    // The label, made shrink-safe: one line, ellipsized rather than overflowing.
+    Widget labelText() => Text(
+      widget.label,
+      maxLines: 1,
+      softWrap: false,
+      overflow: TextOverflow.ellipsis,
+      textAlign: TextAlign.center,
+      style: const TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.2,
+      ),
+    );
+
+    // Use LayoutBuilder so the label can flex (and ellipsize) ONLY when this
+    // button is given bounded width (e.g. inside an Expanded / full-width slot /
+    // narrow screen). Under unbounded constraints (a Wrap or min-size Row) a
+    // flexible child would crash RenderFlex, so we fall back to intrinsic size.
+    final content = LayoutBuilder(
+      builder: (context, constraints) {
+        final bounded = constraints.hasBoundedWidth;
+        final lbl = bounded ? Flexible(child: labelText()) : labelText();
+        return Row(
+          mainAxisSize: (widget.expand || bounded)
+              ? MainAxisSize.max
+              : MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (widget.busy)
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            else if (widget.icon != null)
+              Icon(widget.icon, size: 18, color: Colors.white),
+            if ((widget.icon != null || widget.busy))
+              const SizedBox(width: AppSpacing.sm),
+            lbl,
+          ],
+        );
+      },
     );
 
     return MouseRegion(

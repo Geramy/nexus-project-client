@@ -644,7 +644,11 @@ class SetupToolExecutor {
     return b.isEmpty ? 'No valid tags to propose.' : b.toString();
   }
 
-  Future<String> _finalize() async {
+  /// Generate the `/PLANS` files from the project's confirmed tags WITHOUT
+  /// touching setupStatus. Shared by [_finalize] (which then flips to refine)
+  /// and the "continue to user stories" button path (which has already set
+  /// setupStatus='complete' and must NOT have it reverted to 'refining').
+  Future<List<String>> generatePlans() async {
     final tags = await db.getTagsForProject(projectPk);
     final uiTags = tags
         .map(
@@ -665,10 +669,12 @@ class SetupToolExecutor {
         .where((t) => !t.isRejected)
         .toList();
 
-    var generated = <String>[];
-    if (planStore != null) {
-      generated = await PlanGenerator(planStore!).generate(uiTags);
-    }
+    if (planStore == null) return const [];
+    return PlanGenerator(planStore!).generate(uiTags);
+  }
+
+  Future<String> _finalize() async {
+    final generated = await generatePlans();
     // Enter the REFINE phase rather than completing outright: the plans now
     // exist, but the user keeps fleshing them out in Setup before tasks.
     await db.setProjectSetupStatus(projectPk, 'refining');

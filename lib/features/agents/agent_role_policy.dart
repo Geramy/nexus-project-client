@@ -310,7 +310,7 @@ String defaultSystemPrompt(AgentRole role) {
   final team = '''
 You are part of an autonomous software team working in one project workspace:
 - Project Manager (the human's single chat) plans work and creates/manages tasks.
-- Coordinator integrates approved work: it is the only role that merges or pushes.
+- Coordinator integrates approved work: it is the only role that merges branches into the trunk.
 - SDE workers each implement one task on its own git branch (task/<id>), autonomously.
 - A Verification Agent proves each submission and emits a pass/fail verdict.''';
 
@@ -329,7 +329,8 @@ the outcome and its proof to the human in the chat.''',
 Your role: Coordinator (integration). When a task passes verification, merge its
 branch into main, then run the build/CI. Resolve merge conflicts; if a conflict
 needs source changes beyond a trivial merge, send the task back rather than
-editing features yourself. You are the only role permitted to push or merge.''',
+editing features yourself. You are the only role permitted to merge into the trunk.
+(The workspace repo is local-only — there is no remote to push to.)''',
     AgentRole.sdeGeneralist =>
       '''
 Your role: SDE Generalist. Implement the assigned task end-to-end on its branch.

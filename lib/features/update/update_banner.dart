@@ -111,9 +111,10 @@ class _UpdateBanner extends StatelessWidget {
               LinearProgressIndicator(value: c.progress, minHeight: 4),
             ],
             if (c.phase == UpdatePhase.available) ...[
-              const SizedBox(height: AppSpacing.md),
-              // Wrap so the actions reflow onto a second line on narrow widths
-              // instead of overflowing the card.
+              const SizedBox(height: AppSpacing.sm),
+              // Secondary actions reflow with Wrap; the primary action gets its
+              // own full-width row so it scales to the card (and ellipsizes)
+              // instead of overflowing on narrow windows / large text scales.
               Wrap(
                 alignment: WrapAlignment.end,
                 spacing: AppSpacing.sm,
@@ -128,12 +129,17 @@ class _UpdateBanner extends StatelessWidget {
                     onPressed: c.openReleaseNotes,
                     child: const Text('What\'s new'),
                   ),
-                  GradientButton(
-                    onPressed: c.startUpdate,
-                    label: 'Update now',
-                    icon: Icons.download,
-                  ),
                 ],
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              SizedBox(
+                width: double.infinity,
+                child: GradientButton(
+                  onPressed: c.startUpdate,
+                  label: 'Update now',
+                  icon: Icons.download,
+                  expand: true,
+                ),
               ),
             ],
           ],

@@ -125,11 +125,26 @@ class TaskGenerator extends ChangeNotifier {
         for (final t in specs) {
           final title = (t['title'] ?? '').toString().trim();
           if (title.isEmpty) continue;
+          final ac = (t['acceptance_criteria'] ?? '').toString().trim();
+          final layer = (t['layer'] ?? '').toString().trim();
+          // Route each task to a layer-appropriate specialist persona when one
+          // exists (UI/UX for client, Database for db, …), else the default worker.
+          final agentPk = await resolveWorkerPersonaForLayer(
+            db,
+            projectId,
+            layer,
+            fallback: worker,
+          );
           await db.createTaskInProject(
             projectPk: projectId,
             title: title,
             description: (t['description'] ?? '').toString().trim(),
-            agentPk: worker,
+            acceptanceCriteria: ac.isEmpty ? null : ac,
+            verification: ac.isEmpty
+                ? null
+                : 'Confirm every acceptance criterion above is satisfied; run '
+                      'the project\'s build/tests where applicable.',
+            agentPk: agentPk,
             storyPk: s.story_pk,
           );
           made++;

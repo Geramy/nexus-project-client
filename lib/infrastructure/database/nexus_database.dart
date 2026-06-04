@@ -1224,6 +1224,8 @@ class NexusDatabase extends _$NexusDatabase {
     int? agentPk,
     int? storyPk,
     String description = '',
+    String? acceptanceCriteria,
+    String? verification,
     String status = 'Todo',
     String priority = 'MED',
     String? thinkingMode,
@@ -1231,12 +1233,19 @@ class NexusDatabase extends _$NexusDatabase {
     // Hard guard against duplicates: never create a second task with the same
     // title in the same project. Returns the existing task's id instead, so a
     // re-run (e.g. re-finalizing setup) is idempotent and can't loop by piling
-    // up identical tasks.
+    // up identical tasks. When the task belongs to a user STORY, scope the
+    // guard to that story — two different stories may each legitimately yield a
+    // generically-titled task (e.g. "Add database migration") without the
+    // second silently collapsing into (and mis-attributing to) the first.
     final dupe =
         await (select(tasks)
               ..where(
                 (t) =>
-                    t.task_project_fk.equals(projectPk) & t.title.equals(title),
+                    t.task_project_fk.equals(projectPk) &
+                    t.title.equals(title) &
+                    (storyPk != null
+                        ? t.task_story_fk.equals(storyPk)
+                        : t.task_story_fk.isNull()),
               )
               ..limit(1))
             .getSingleOrNull();
@@ -1263,6 +1272,13 @@ class NexusDatabase extends _$NexusDatabase {
         task_agent_fk: agentPk != null ? Value(agentPk) : const Value.absent(),
         task_story_fk: storyPk != null ? Value(storyPk) : const Value.absent(),
         description: Value(description),
+        acceptanceCriteria: (acceptanceCriteria != null &&
+                acceptanceCriteria.trim().isNotEmpty)
+            ? Value(acceptanceCriteria.trim())
+            : const Value.absent(),
+        verification: (verification != null && verification.trim().isNotEmpty)
+            ? Value(verification.trim())
+            : const Value.absent(),
         status: Value(status),
         priority: Value(priority),
         thinkingMode: thinkingMode != null
@@ -1420,6 +1436,19 @@ class NexusDatabase extends _$NexusDatabase {
   /// Return the task to the board instead of leaving it stuck "In Progress".
   Future<void> markTaskYieldedBack(int taskPk) {
     return _applyTaskEvent(taskPk, TaskEvent.yieldBack);
+  }
+
+  /// The orchestrator gave up on a task after exhausting its retry budget.
+  /// Move it to the **Blocked** column (exec `failed`) so it surfaces to the
+  /// user for a look instead of silently parking on Todo and being skipped.
+  Future<void> markTaskBlocked(int taskPk) async {
+    await (update(tasks)..where((t) => t.task_pk.equals(taskPk))).write(
+      TasksCompanion(
+        status: const Value(TaskStatus.blocked),
+        executionStatus: const Value(TaskExecStatus.failed),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   /// The worker called submit_for_completion; store its submission payload.

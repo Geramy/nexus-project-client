@@ -149,7 +149,8 @@ class _PromptsTabState extends ConsumerState<PromptsTab> {
               Expanded(
                 child: Text(
                   'These wrap the role\'s system prompt at each pipeline stage. Placeholders: '
-                  '{taskId} {title} {branch} {description} {acceptanceCriteria} {verification}',
+                  '{taskId} {title} {branch} {targetBranch} {description} {acceptanceCriteria} {verification} '
+                  '(Merge stage also uses {targetBranch}; the Exploration prompts use {projectName}).',
                   style: TextStyle(fontSize: 12, color: context.nx.textMuted),
                 ),
               ),

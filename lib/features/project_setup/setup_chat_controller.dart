@@ -375,6 +375,25 @@ class SetupChatController extends ChangeNotifier {
     }
   }
 
+  /// Generate the `/PLANS` files only — NO status flip, NO refine UI. Used by the
+  /// "continue to user stories" button path, which has already called
+  /// [completeSetup] (setupStatus='complete', explorationStatus='active'). The
+  /// old `finalize()` path here would re-write setupStatus to 'refining' and
+  /// clobber that, so this variant runs just the plan generation in the
+  /// background while the user moves on to the Exploration screen.
+  Future<void> finalizePlansOnly() async {
+    final db = _ref.read(nexusDatabaseProvider);
+    final planStore = await _ref.read(planStoreProvider(projectId).future);
+    final executor = SetupToolExecutor(
+      db: db,
+      projectPk: projectId,
+      verification: _ref.read(verificationServiceProvider),
+      planStore: planStore,
+    );
+    await executor.generatePlans();
+    _bumpWorkspace();
+  }
+
   /// Posts the in-chat hand-off message that kicks off refinement and flips the
   /// action bar to "Done refining". Idempotent — safe to call from either the
   /// button path or when the host finalizes on its own.

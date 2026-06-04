@@ -32,3 +32,31 @@ Future<int?> resolveDefaultWorkerPersonaId(
   }
   return generalist ?? anyWorker ?? agents.first.agent_pk;
 }
+
+/// Picks a worker persona suited to a task's [layer] ("client" | "server" |
+/// "db" | "other"), so the per-story task generator routes UI work to a UI/UX
+/// engineer, schema work to a database engineer, etc. — when such a specialist
+/// persona exists on the project. Falls back to [fallback] (the run's default
+/// worker) when no specialist is present, so routing is best-effort and never
+/// leaves a task unassigned.
+Future<int?> resolveWorkerPersonaForLayer(
+  NexusDatabase db,
+  int projectId,
+  String? layer, {
+  required int? fallback,
+}) async {
+  final preferred = switch ((layer ?? '').trim().toLowerCase()) {
+    'client' || 'ui' || 'frontend' => AgentRole.sdeUiUx,
+    'db' || 'database' || 'data' => AgentRole.sdeDatabase,
+    'server' || 'backend' || 'api' || 'network' => AgentRole.sdeNetworking,
+    'devops' || 'ci' || 'infra' => AgentRole.sdeDevOps,
+    _ => null,
+  };
+  if (preferred == null) return fallback;
+
+  final agents = await db.getAgentPersonasForProject(projectId);
+  for (final a in agents) {
+    if (agentRoleFromKey(a.title) == preferred) return a.agent_pk;
+  }
+  return fallback;
+}

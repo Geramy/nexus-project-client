@@ -1758,13 +1758,18 @@ class CoordinatorToolExecutor {
     }
 
     const system =
-        'You split a product/feature description into concrete USER STORIES and '
-        'rephrase each into clean wording. Return ONLY a JSON array (no prose, '
-        'no code fences). Each item: {"title": a short title, "description": the '
-        'story as "As a <role>, I want <goal>, so that <benefit>" rephrased from '
-        'the input, "note": one concise extra detail/constraint/flow step taken '
-        'from the input}. Produce 3–8 items in a sensible order. Keep it faithful '
-        'to the input — do not invent features.';
+        'You split a product/feature description into concrete USER STORIES, '
+        'rephrase each into clean wording, AND nest them into a tree. Return ONLY '
+        'a JSON array (no prose, no code fences). Each item: {"title": a short '
+        'title, "description": the story as "As a <role>, I want <goal>, so that '
+        '<benefit>" rephrased from the input, "note": one concise extra '
+        'detail/constraint/flow step from the input, "parent": the EXACT title of '
+        'another item in this list that this one is a sub-step or sub-feature of '
+        '(its parent in the tree), or null if it sits at the top level}. CHAIN the '
+        'steps of a flow: each step\'s parent is the step it follows from, so a '
+        'linear flow becomes a parent→child→grandchild chain, not a flat row. List '
+        'every parent BEFORE its children. Produce 3–8 items. Keep it faithful to '
+        'the input — do not invent features.';
     final raw = await scopedComplete(
       backend: backend,
       model: mdl,
@@ -1777,31 +1782,48 @@ class CoordinatorToolExecutor {
       return 'Could not draft stories from that text — try add_user_story.';
     }
 
-    // Read the current sibling count ONCE, then append in order.
+    // Build the tree as we go: resolve each item's "parent" (a title within this
+    // batch) to the id we created for it; items with no in-batch parent hang
+    // under the passed-in parentId (the root for this draft). Per-parent order
+    // counters keep siblings in input order; existing siblings under the root
+    // are counted once so the draft appends after them.
     final existing = await db.getUserStoriesForProject(projectId);
-    final base = existing.where((s) => s.parent_story_fk == parentId).length;
+    final created = <String, int>{}; // lowercased title → new story id
+    final orderByParent = <int?, int>{
+      parentId: existing.where((s) => s.parent_story_fk == parentId).length,
+    };
     var made = 0;
     for (final it in items) {
       final title = (it['title'] ?? '').toString().trim();
       if (title.isEmpty) continue;
       final desc = (it['description'] ?? '').toString().trim();
       final note = (it['note'] ?? '').toString().trim();
+      final parentTitle = (it['parent'] ?? '').toString().trim().toLowerCase();
+      // A child references a SIBLING-IN-BATCH by title; fall back to the root
+      // parent if it's empty or its parent hasn't been created (yet).
+      final effectiveParent = parentTitle.isNotEmpty
+          ? (created[parentTitle] ?? parentId)
+          : parentId;
+      final order = orderByParent[effectiveParent] ?? 0;
+      orderByParent[effectiveParent] = order + 1;
       final id = await db.createUserStory(
         UserStoriesCompanion.insert(
           project_fk: projectId,
-          parent_story_fk: Value(parentId),
+          parent_story_fk: Value(effectiveParent),
           title: title,
           narrative: Value(desc),
-          orderIndex: Value(base + made),
+          orderIndex: Value(order),
         ),
       );
+      created[title.toLowerCase()] = id;
       if (note.isNotEmpty) await db.createStoryNote(id, note);
       made++;
     }
     return 'Drafted $made user stor${made == 1 ? 'y' : 'ies'} '
-        '(rephrased descriptions + notes)'
+        '(rephrased + nested into a tree)'
         '${parentId != null ? ' under #$parentId' : ''}. '
-        'Now nest/order them with move_user_story so the tree is correct.';
+        'Check the shape with list_user_stories; fix any nesting with '
+        'move_user_story if needed.';
   }
 
   Future<String> _addUserStory(Map<String, dynamic> args) async {

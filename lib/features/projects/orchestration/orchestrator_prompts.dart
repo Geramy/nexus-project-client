@@ -10,7 +10,10 @@ import 'dart:convert';
 /// the per-stage *framing* and *kickoff* text the orchestrator adds on top.
 ///
 /// Each field supports placeholders that are substituted at run time:
-///   {taskId} {title} {branch} {description} {acceptanceCriteria} {verification}
+///   {taskId} {title} {branch} {targetBranch} {description} {acceptanceCriteria}
+///   {verification}
+/// The Exploration prompts (discoverySystem / coordinatorSystem) substitute
+///   {projectName} instead (applied at their own call sites, not via PromptVars).
 enum OrchestratorPromptField {
   workerFraming,
   workerKickoff,
@@ -31,6 +34,12 @@ enum OrchestratorPromptField {
   /// the "Generate tasks from stories" run, which feeds each story into its own
   /// small scoped AI session with this prompt.
   taskGenSystem,
+
+  /// The behavioral preamble for the interactive Coordinator chat (the "who you
+  /// are / how to behave" lines). The live project context and the available-
+  /// tool catalog are still appended in code; this is the editable opening.
+  /// Supports the {projectName} placeholder.
+  coordinatorSystem,
 }
 
 extension OrchestratorPromptFieldX on OrchestratorPromptField {
@@ -52,6 +61,8 @@ extension OrchestratorPromptFieldX on OrchestratorPromptField {
       'Discovery — system prompt (user-story interview)',
     OrchestratorPromptField.taskGenSystem =>
       'Task generation — system prompt (story → tasks)',
+    OrchestratorPromptField.coordinatorSystem =>
+      'Coordinator chat — behavioral preamble',
   };
 
   /// Which pipeline stage this template belongs to (for UI grouping).
@@ -67,6 +78,7 @@ extension OrchestratorPromptFieldX on OrchestratorPromptField {
     OrchestratorPromptField.mergeContinue => 'Merge',
     OrchestratorPromptField.discoverySystem ||
     OrchestratorPromptField.taskGenSystem => 'Exploration (user stories)',
+    OrchestratorPromptField.coordinatorSystem => 'Coordinator chat',
   };
 
   /// True for the multi-line framing templates (rendered with a taller editor).
@@ -75,7 +87,8 @@ extension OrchestratorPromptFieldX on OrchestratorPromptField {
     OrchestratorPromptField.verifyFraming ||
     OrchestratorPromptField.mergeFraming ||
     OrchestratorPromptField.discoverySystem ||
-    OrchestratorPromptField.taskGenSystem => true,
+    OrchestratorPromptField.taskGenSystem ||
+    OrchestratorPromptField.coordinatorSystem => true,
     _ => false,
   };
 
@@ -142,11 +155,17 @@ Produce the tasks that, together, fully implement THIS story — and ONLY this s
 
 Rules:
 - Each task must be small enough for one focused work session.
-- Each task gets a clear, imperative title and a short description (what to build + the relevant acceptance criteria).
+- Each task gets a clear, imperative title and a short description (what to build).
+- Each task gets its own acceptance_criteria: the concrete, checkable definition of done for THAT task (a short markdown bullet list), drawn from the story's acceptance criteria that this task is responsible for. This is what the Verification Agent proves against, so make it specific and testable.
 - Use the project's actual stack (don't invent technologies not in the profile).
 - Cover every acceptance criterion across the tasks; don't add work the story doesn't imply.
 
-Return ONLY a JSON array (no prose, no code fences). Each item: {"title": string, "description": string, "layer": one of "client"|"server"|"db"|"other"}.''',
+Return ONLY a JSON array (no prose, no code fences). Each item: {"title": string, "description": string, "acceptance_criteria": string, "layer": one of "client"|"server"|"db"|"other"}.''',
+  OrchestratorPromptField.coordinatorSystem: '''
+You are the Coordinator AI for the project "{projectName}".
+You help the user plan, refine tasks, and make decisions for this project.
+You have FULL ACCESS to live project state via tools. When the user asks to add work, change status, break down plans, or adjust direction — CALL THE TOOLS to do it immediately. Then confirm in natural language what you changed.
+Keep spoken replies short and natural. Use tools proactively.''',
 };
 
 /// Values to substitute into a template's placeholders for a given task.

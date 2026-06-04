@@ -98,6 +98,10 @@ class ProjectOrchestrator {
   void start() {
     // Clear any leftover per-task working-tree disks from a previous crash.
     unawaited(pruneTaskDisks(projectId));
+    // Reconcile tasks orphaned mid-run by a crash/quit: our in-memory _active
+    // set is empty on a fresh start, so any task still marked `running` in the
+    // DB would never be re-picked. Return them to the board.
+    unawaited(_reconcileOrphans());
     _projectSub = _db.watchProject(projectId).listen((project) {
       if (project?.orchestrationState == 'running') {
         unawaited(_pump());
@@ -132,8 +136,48 @@ class ProjectOrchestrator {
         _active.add(task.task_pk);
         unawaited(_runStage(task, stage));
       }
+      await _surfaceStalledTasks();
     } finally {
       _pumping = false;
+    }
+  }
+
+  /// Return tasks left `running` by a prior crash/quit (not tracked in [_active])
+  /// to the board so they get re-picked. Safe to call repeatedly.
+  Future<void> _reconcileOrphans() async {
+    try {
+      final tasks = await _db.getTasksForProject(projectId);
+      for (final t in tasks) {
+        if (t.executionStatus == TaskExecStatus.running &&
+            !_active.contains(t.task_pk)) {
+          await _db.markTaskYieldedBack(t.task_pk);
+        }
+      }
+    } catch (e) {
+      debugPrint('[Orchestrator p$projectId] orphan reconcile failed: $e');
+    }
+  }
+
+  /// Surface tasks that have exhausted their retry budget: move them to the
+  /// Blocked column so they're visible to the user instead of silently sitting
+  /// on Todo and being skipped every pump. Idempotent — a Blocked task is no
+  /// longer on Todo, so it isn't re-evaluated here.
+  Future<void> _surfaceStalledTasks() async {
+    try {
+      final tasks = await _db.getTasksForProject(projectId);
+      for (final t in tasks) {
+        if ((_attempts[t.task_pk] ?? 0) >= _maxAttemptsPerTask &&
+            t.status == TaskStatus.todo &&
+            !_active.contains(t.task_pk)) {
+          debugPrint(
+            '[Orchestrator p$projectId] task ${t.task_pk} exhausted '
+            '$_maxAttemptsPerTask attempts → Blocked.',
+          );
+          await _db.markTaskBlocked(t.task_pk);
+        }
+      }
+    } catch (e) {
+      debugPrint('[Orchestrator p$projectId] stall surface failed: $e');
     }
   }
 

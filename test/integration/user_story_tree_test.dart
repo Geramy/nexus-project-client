@@ -100,4 +100,43 @@ void main() {
     all = await db.getUserStoriesForProject(projectId);
     expect(all, isEmpty);
   });
+
+  test('task dedup is scoped per-story: same title under two stories both exist',
+      () async {
+    final storyA = await db.createUserStory(
+      UserStoriesCompanion.insert(project_fk: projectId, title: 'Story A'),
+    );
+    final storyB = await db.createUserStory(
+      UserStoriesCompanion.insert(project_fk: projectId, title: 'Story B'),
+    );
+
+    // Two DIFFERENT stories each yield a generically-titled task. The second
+    // must NOT collapse into the first (which would mis-attribute it).
+    final a = await db.createTaskInProject(
+      projectPk: projectId,
+      title: 'Add database migration',
+      acceptanceCriteria: 'Migration applies cleanly on a fresh DB.',
+      storyPk: storyA,
+    );
+    final b = await db.createTaskInProject(
+      projectPk: projectId,
+      title: 'Add database migration',
+      storyPk: storyB,
+    );
+    expect(a, isNot(b), reason: 'distinct stories → distinct tasks');
+    expect((await db.getTasksForStory(storyA)).single.task_pk, a);
+    expect((await db.getTasksForStory(storyB)).single.task_pk, b);
+
+    // Acceptance criteria is stamped onto the task (drives the verify gate).
+    final ta = await db.getTaskById(a);
+    expect(ta!.acceptanceCriteria, 'Migration applies cleanly on a fresh DB.');
+
+    // Within the SAME story, an identical title is still idempotent.
+    final aAgain = await db.createTaskInProject(
+      projectPk: projectId,
+      title: 'Add database migration',
+      storyPk: storyA,
+    );
+    expect(aAgain, a, reason: 're-run within a story collapses to the same task');
+  });
 }
