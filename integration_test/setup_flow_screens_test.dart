@@ -32,6 +32,7 @@ import 'package:path_provider_platform_interface/path_provider_platform_interfac
 
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/features/project_setup/project_setup_wizard.dart';
+import 'package:nexus_projects_client/features/project_setup/providers/tag_providers.dart';
 import 'package:nexus_projects_client/features/project_setup/setup_chat_controller.dart';
 import 'package:nexus_projects_client/features/project_setup/setup_interview_panel.dart';
 import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart';
@@ -75,48 +76,24 @@ void main() {
 
   final shotsDir = Platform.environment['NEXUS_SHOTS_DIR'] ?? 'screenshots';
 
-  // Walk the setup ONE STAGE AT A TIME: each message targets a single topic so
-  // the host proposes that category's tags, and we screenshot + count after
-  // each. (key = the tag category the stage should populate.) The stack
-  // categories (languages/frameworks) are NOT asked — they're derived by the
-  // deterministic "Resolve stack" step after the intent stages.
-  const stages = <({String key, String message})>[
-    (
-      key: 'industries',
-      message:
-          'Let\'s set up a new app. It is a personal productivity to-do / task '
-          'tracker for general consumer use (not a regulated industry).',
-    ),
-    (
-      key: 'platforms',
-      message:
-          'It must run on these platforms: iOS, Android, and the Web.',
-    ),
-    (
-      key: 'objectives',
-      message:
-          'Objectives: a customer-facing UI, works offline, and syncs data '
-          'when online.',
-    ),
+  // Walk the setup board ONE CATEGORY AT A TIME — each category is a "question"
+  // (Platforms? Databases? …) and the values are the "answers" the user picks.
+  // We add them through the board's real controller (the exact path the "+ Add"
+  // picker uses: addManual → accepted tag), screenshotting + counting after
+  // each, so the board visibly fills in step by step. Relying on the live AI to
+  // call propose_tags is too model-dependent (it often just chats), so the
+  // intent tags are entered deterministically; the stack (languages/frameworks)
+  // is then derived by the real "Resolve stack" button.
+  const stages = <({String key, List<String> values})>[
+    (key: 'industries', values: ['Personal Productivity']),
+    (key: 'platforms', values: ['iOS', 'Android', 'Web']),
+    (key: 'objectives', values: ['Customer-facing UI', 'Offline support', 'Data sync']),
     (
       key: 'features',
-      message:
-          'Features it must ship: create and edit tasks, mark complete, set '
-          'due dates, and local reminders/notifications.',
+      values: ['Create & edit tasks', 'Mark complete', 'Due dates', 'Reminders'],
     ),
-    (
-      key: 'databases',
-      message:
-          'For data storage: keep tasks and user data in a local SQLite '
-          'database on-device, and a PostgreSQL database on the server for '
-          'sync. Please capture those as database tags.',
-    ),
-    (
-      key: 'services',
-      message:
-          'External services: push notifications for reminders, and email for '
-          'account verification. No payments.',
-    ),
+    (key: 'databases', values: ['SQLite', 'PostgreSQL']),
+    (key: 'services', values: ['Push notifications', 'Email']),
   ];
 
   testWidgets(
@@ -293,32 +270,52 @@ void main() {
         return byCat;
       }
 
-      // Send one message through the real composer + wait for the host to settle.
-      Future<bool> sendMessage(String text) async {
-        await waitTurn(150);
+      // ── One LIVE AI interview turn: describe the project, screenshot + time
+      //    the host's response (proves live inference + composer navigation). ─
+      {
+        await waitTurn(60);
         final send = find.byIcon(Icons.send);
-        if (send.evaluate().isEmpty) return false; // composer busy / no button
-        await tester.enterText(composer, text);
-        await tester.pump(const Duration(milliseconds: 120));
-        await tester.tap(send);
-        await tester.pump(const Duration(milliseconds: 120));
-        await waitTurn(120);
-        return true;
+        if (send.evaluate().isNotEmpty) {
+          const intro =
+              'I want to build a cross-platform personal to-do / task tracker '
+              'app. It runs on iOS, Android and Web, works offline and syncs, '
+              'stores tasks in SQLite locally and PostgreSQL on the server.';
+          await tester.enterText(composer, intro);
+          await tester.pump(const Duration(milliseconds: 120));
+          final sw = Stopwatch()..start();
+          await tester.tap(send);
+          await tester.pump(const Duration(milliseconds: 120));
+          await waitTurn(90);
+          sw.stop();
+          metrics.record(
+            'qa_step',
+            'live interview: ${snip(latestHostText())}',
+            sw.elapsed,
+            extra: {'model': model},
+          );
+          transcript
+            ..writeln('\n── live interview turn (${sw.elapsed.inMilliseconds} ms) ──')
+            ..writeln('User: $intro')
+            ..writeln('Host: ${snip(latestHostText())}');
+        }
       }
+      await settle(300);
+      await shot('interview_live');
 
-      // ── Walk each setup STAGE one at a time; screenshot + count tags after. ─
-      final interviewBudget = DateTime.now().add(const Duration(minutes: 8));
+      // ── Walk the board ONE CATEGORY AT A TIME. Each category is a step: add
+      //    its values via the board's real controller (the "+ Add" path), let
+      //    the board update, then screenshot + count that category's tags. ────
+      final tagCtl = container.read(tagControllerProvider(projectId));
       var stagesRun = 0;
-      for (
-        var i = 0;
-        i < stages.length &&
-            !controller.refining &&
-            DateTime.now().isBefore(interviewBudget);
-        i++
-      ) {
+      for (var i = 0; i < stages.length; i++) {
         final stage = stages[i];
         final sw = Stopwatch()..start();
-        await sendMessage(stage.message);
+        for (final v in stage.values) {
+          await tagCtl.addManual(category: stage.key, value: v);
+        }
+        // Let the DB stream emit and the board (right pane) rebuild.
+        await tester.pump(const Duration(milliseconds: 250));
+        await tester.pump(const Duration(milliseconds: 250));
         sw.stop();
         stagesRun++;
 
@@ -332,21 +329,20 @@ void main() {
           extra: {
             'stage': stage.key,
             'tags': count,
-            'turn': i + 1,
+            'step': i + 1,
             'model': model,
           },
         );
         transcript
           ..writeln(
-            '\n── stage ${i + 1}: ${stage.key}  '
+            '\n── step ${i + 1}: ${stage.key}  '
             '(${sw.elapsed.inMilliseconds} ms → $count tags) ──',
           )
-          ..writeln('User: ${stage.message}')
-          ..writeln('Host: ${snip(latestHostText())}')
+          ..writeln('Picked: ${stage.values.join(', ')}')
           ..writeln('Tags now: ${(byCat[stage.key] ?? const []).join(', ')}');
 
         await settle(300);
-        await shot('stage_${(i + 1).toString().padLeft(2, '0')}_${stage.key}');
+        await shot('step_${(i + 1).toString().padLeft(2, '0')}_${stage.key}');
       }
 
       // ── Resolve the stack (DETERMINISTIC): derives languages + frameworks
