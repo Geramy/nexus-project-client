@@ -35,6 +35,7 @@ import '../models/database/tables/setup_flow.dart';
 import '../models/database/tables/setup_scope.dart';
 import '../models/database/tables/setup_scope_option.dart';
 import '../models/database/tables/user_story.dart';
+import '../models/database/tables/story_note.dart';
 import '../../features/project_setup/config/setup_flow_catalog.dart'
     as setup_cat;
 import '../../features/agents/agent_role.dart';
@@ -87,6 +88,7 @@ class TaskCompletedEvent {
     SetupScopes,
     SetupScopeOptions,
     UserStories,
+    StoryNotes,
   ],
 )
 class NexusDatabase extends _$NexusDatabase {
@@ -110,7 +112,7 @@ class NexusDatabase extends _$NexusDatabase {
       _taskCompletedController.stream;
 
   @override
-  int get schemaVersion => 31;
+  int get schemaVersion => 32;
 
   @override
   MigrationStrategy get migration {
@@ -224,6 +226,10 @@ class NexusDatabase extends _$NexusDatabase {
           await m.createTable(userStories);
           await m.addColumn(tasks, tasks.task_story_fk);
           await m.addColumn(projects, projects.explorationStatus);
+        }
+        if (from < 32) {
+          // Descriptive notes attached to user-story items.
+          await m.createTable(storyNotes);
         }
       },
     );
@@ -1083,7 +1089,7 @@ class NexusDatabase extends _$NexusDatabase {
     );
   }
 
-  /// Delete a story and all of its descendants (depth-first).
+  /// Delete a story and all of its descendants (depth-first), plus their notes.
   Future<void> deleteUserStory(int storyPk) async {
     final kids = await (select(
       userStories,
@@ -1091,7 +1097,44 @@ class NexusDatabase extends _$NexusDatabase {
     for (final k in kids) {
       await deleteUserStory(k.story_pk);
     }
+    await (delete(storyNotes)..where((n) => n.story_fk.equals(storyPk))).go();
     await (delete(userStories)..where((s) => s.story_pk.equals(storyPk))).go();
+  }
+
+  // ── Story notes (descriptive notes attached to a story item) ──────────────
+  Future<int> createStoryNote(int storyPk, String body) =>
+      into(storyNotes).insert(
+        StoryNotesCompanion.insert(story_fk: storyPk, body: body),
+      );
+
+  Future<List<StoryNote>> getNotesForStory(int storyPk) {
+    return (select(storyNotes)
+          ..where((n) => n.story_fk.equals(storyPk))
+          ..orderBy([(n) => OrderingTerm(expression: n.note_pk)]))
+        .get();
+  }
+
+  Stream<List<StoryNote>> watchNotesForStory(int storyPk) {
+    return (select(storyNotes)
+          ..where((n) => n.story_fk.equals(storyPk))
+          ..orderBy([(n) => OrderingTerm(expression: n.note_pk)]))
+        .watch();
+  }
+
+  Future<StoryNote?> getStoryNote(int notePk) {
+    return (select(
+      storyNotes,
+    )..where((n) => n.note_pk.equals(notePk))).getSingleOrNull();
+  }
+
+  Future<void> updateStoryNote(int notePk, String body) async {
+    await (update(storyNotes)..where((n) => n.note_pk.equals(notePk))).write(
+      StoryNotesCompanion(body: Value(body), updatedAt: Value(DateTime.now())),
+    );
+  }
+
+  Future<void> deleteStoryNote(int notePk) async {
+    await (delete(storyNotes)..where((n) => n.note_pk.equals(notePk))).go();
   }
 
   /// Tasks generated from a given story item (story → task(s)).

@@ -4550,7 +4550,7 @@ class UserStory extends DataClass implements Insertable<UserStory> {
   /// Short node title shown on the canvas.
   final String title;
 
-  /// The story narrative — "As a <role>, I want <goal>, so that <benefit>".
+  /// The story narrative — `As a <role>, I want <goal>, so that <benefit>`.
   final String narrative;
 
   /// Acceptance criteria (markdown bullet list), if captured.
@@ -14537,6 +14537,363 @@ class SetupScopeOptionsCompanion extends UpdateCompanion<SetupScopeOption> {
   }
 }
 
+class $StoryNotesTable extends StoryNotes
+    with TableInfo<$StoryNotesTable, StoryNote> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $StoryNotesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _note_pkMeta = const VerificationMeta(
+    'note_pk',
+  );
+  @override
+  late final GeneratedColumn<int> note_pk = GeneratedColumn<int>(
+    'note_pk',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _story_fkMeta = const VerificationMeta(
+    'story_fk',
+  );
+  @override
+  late final GeneratedColumn<int> story_fk = GeneratedColumn<int>(
+    'story_fk',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES user_stories (story_pk)',
+    ),
+  );
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  @override
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+    'body',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    note_pk,
+    story_fk,
+    body,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'story_notes';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StoryNote> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('note_pk')) {
+      context.handle(
+        _note_pkMeta,
+        note_pk.isAcceptableOrUnknown(data['note_pk']!, _note_pkMeta),
+      );
+    }
+    if (data.containsKey('story_fk')) {
+      context.handle(
+        _story_fkMeta,
+        story_fk.isAcceptableOrUnknown(data['story_fk']!, _story_fkMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_story_fkMeta);
+    }
+    if (data.containsKey('body')) {
+      context.handle(
+        _bodyMeta,
+        body.isAcceptableOrUnknown(data['body']!, _bodyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bodyMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {note_pk};
+  @override
+  StoryNote map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StoryNote(
+      note_pk: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}note_pk'],
+      )!,
+      story_fk: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}story_fk'],
+      )!,
+      body: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}body'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $StoryNotesTable createAlias(String alias) {
+    return $StoryNotesTable(attachedDatabase, alias);
+  }
+}
+
+class StoryNote extends DataClass implements Insertable<StoryNote> {
+  final int note_pk;
+  final int story_fk;
+
+  /// The note text.
+  final String body;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const StoryNote({
+    required this.note_pk,
+    required this.story_fk,
+    required this.body,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['note_pk'] = Variable<int>(note_pk);
+    map['story_fk'] = Variable<int>(story_fk);
+    map['body'] = Variable<String>(body);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  StoryNotesCompanion toCompanion(bool nullToAbsent) {
+    return StoryNotesCompanion(
+      note_pk: Value(note_pk),
+      story_fk: Value(story_fk),
+      body: Value(body),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory StoryNote.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StoryNote(
+      note_pk: serializer.fromJson<int>(json['note_pk']),
+      story_fk: serializer.fromJson<int>(json['story_fk']),
+      body: serializer.fromJson<String>(json['body']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'note_pk': serializer.toJson<int>(note_pk),
+      'story_fk': serializer.toJson<int>(story_fk),
+      'body': serializer.toJson<String>(body),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  StoryNote copyWith({
+    int? note_pk,
+    int? story_fk,
+    String? body,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => StoryNote(
+    note_pk: note_pk ?? this.note_pk,
+    story_fk: story_fk ?? this.story_fk,
+    body: body ?? this.body,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  StoryNote copyWithCompanion(StoryNotesCompanion data) {
+    return StoryNote(
+      note_pk: data.note_pk.present ? data.note_pk.value : this.note_pk,
+      story_fk: data.story_fk.present ? data.story_fk.value : this.story_fk,
+      body: data.body.present ? data.body.value : this.body,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoryNote(')
+          ..write('note_pk: $note_pk, ')
+          ..write('story_fk: $story_fk, ')
+          ..write('body: $body, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(note_pk, story_fk, body, createdAt, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StoryNote &&
+          other.note_pk == this.note_pk &&
+          other.story_fk == this.story_fk &&
+          other.body == this.body &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class StoryNotesCompanion extends UpdateCompanion<StoryNote> {
+  final Value<int> note_pk;
+  final Value<int> story_fk;
+  final Value<String> body;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  const StoryNotesCompanion({
+    this.note_pk = const Value.absent(),
+    this.story_fk = const Value.absent(),
+    this.body = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  StoryNotesCompanion.insert({
+    this.note_pk = const Value.absent(),
+    required int story_fk,
+    required String body,
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  }) : story_fk = Value(story_fk),
+       body = Value(body);
+  static Insertable<StoryNote> custom({
+    Expression<int>? note_pk,
+    Expression<int>? story_fk,
+    Expression<String>? body,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (note_pk != null) 'note_pk': note_pk,
+      if (story_fk != null) 'story_fk': story_fk,
+      if (body != null) 'body': body,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  StoryNotesCompanion copyWith({
+    Value<int>? note_pk,
+    Value<int>? story_fk,
+    Value<String>? body,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return StoryNotesCompanion(
+      note_pk: note_pk ?? this.note_pk,
+      story_fk: story_fk ?? this.story_fk,
+      body: body ?? this.body,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (note_pk.present) {
+      map['note_pk'] = Variable<int>(note_pk.value);
+    }
+    if (story_fk.present) {
+      map['story_fk'] = Variable<int>(story_fk.value);
+    }
+    if (body.present) {
+      map['body'] = Variable<String>(body.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoryNotesCompanion(')
+          ..write('note_pk: $note_pk, ')
+          ..write('story_fk: $story_fk, ')
+          ..write('body: $body, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$NexusDatabase extends GeneratedDatabase {
   _$NexusDatabase(QueryExecutor e) : super(e);
   $NexusDatabaseManager get managers => $NexusDatabaseManager(this);
@@ -14564,6 +14921,7 @@ abstract class _$NexusDatabase extends GeneratedDatabase {
   late final $SetupScopesTable setupScopes = $SetupScopesTable(this);
   late final $SetupScopeOptionsTable setupScopeOptions =
       $SetupScopeOptionsTable(this);
+  late final $StoryNotesTable storyNotes = $StoryNotesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -14589,6 +14947,7 @@ abstract class _$NexusDatabase extends GeneratedDatabase {
     setupFlows,
     setupScopes,
     setupScopeOptions,
+    storyNotes,
   ];
 }
 
@@ -19520,6 +19879,26 @@ final class $$UserStoriesTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$StoryNotesTable, List<StoryNote>>
+  _storyNotesRefsTable(_$NexusDatabase db) => MultiTypedResultKey.fromTable(
+    db.storyNotes,
+    aliasName: $_aliasNameGenerator(
+      db.userStories.story_pk,
+      db.storyNotes.story_fk,
+    ),
+  );
+
+  $$StoryNotesTableProcessedTableManager get storyNotesRefs {
+    final manager = $$StoryNotesTableTableManager($_db, $_db.storyNotes).filter(
+      (f) => f.story_fk.story_pk.sqlEquals($_itemColumn<int>('story_pk')!),
+    );
+
+    final cache = $_typedResult.readTableOrNull(_storyNotesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$UserStoriesTableFilterComposer
@@ -19648,6 +20027,31 @@ class $$UserStoriesTableFilterComposer
           }) => $$TasksTableFilterComposer(
             $db: $db,
             $table: $db.tasks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> storyNotesRefs(
+    Expression<bool> Function($$StoryNotesTableFilterComposer f) f,
+  ) {
+    final $$StoryNotesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.story_pk,
+      referencedTable: $db.storyNotes,
+      getReferencedColumn: (t) => t.story_fk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoryNotesTableFilterComposer(
+            $db: $db,
+            $table: $db.storyNotes,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -19885,6 +20289,31 @@ class $$UserStoriesTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> storyNotesRefs<T extends Object>(
+    Expression<T> Function($$StoryNotesTableAnnotationComposer a) f,
+  ) {
+    final $$StoryNotesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.story_pk,
+      referencedTable: $db.storyNotes,
+      getReferencedColumn: (t) => t.story_fk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoryNotesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.storyNotes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$UserStoriesTableTableManager
@@ -19904,6 +20333,7 @@ class $$UserStoriesTableTableManager
             bool project_fk,
             bool parent_story_fk,
             bool tasksRefs,
+            bool storyNotesRefs,
           })
         > {
   $$UserStoriesTableTableManager(_$NexusDatabase db, $UserStoriesTable table)
@@ -19990,10 +20420,14 @@ class $$UserStoriesTableTableManager
                 project_fk = false,
                 parent_story_fk = false,
                 tasksRefs = false,
+                storyNotesRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
-                  explicitlyWatchedTables: [if (tasksRefs) db.tasks],
+                  explicitlyWatchedTables: [
+                    if (tasksRefs) db.tasks,
+                    if (storyNotesRefs) db.storyNotes,
+                  ],
                   addJoins:
                       <
                         T extends TableManagerState<
@@ -20066,6 +20500,27 @@ class $$UserStoriesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (storyNotesRefs)
+                        await $_getPrefetchedData<
+                          UserStory,
+                          $UserStoriesTable,
+                          StoryNote
+                        >(
+                          currentTable: table,
+                          referencedTable: $$UserStoriesTableReferences
+                              ._storyNotesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$UserStoriesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).storyNotesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.story_fk == item.story_pk,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -20090,6 +20545,7 @@ typedef $$UserStoriesTableProcessedTableManager =
         bool project_fk,
         bool parent_story_fk,
         bool tasksRefs,
+        bool storyNotesRefs,
       })
     >;
 typedef $$TasksTableCreateCompanionBuilder =
@@ -27339,6 +27795,319 @@ typedef $$SetupScopeOptionsTableProcessedTableManager =
       SetupScopeOption,
       PrefetchHooks Function({bool setup_scope_fk})
     >;
+typedef $$StoryNotesTableCreateCompanionBuilder =
+    StoryNotesCompanion Function({
+      Value<int> note_pk,
+      required int story_fk,
+      required String body,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+typedef $$StoryNotesTableUpdateCompanionBuilder =
+    StoryNotesCompanion Function({
+      Value<int> note_pk,
+      Value<int> story_fk,
+      Value<String> body,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+
+final class $$StoryNotesTableReferences
+    extends BaseReferences<_$NexusDatabase, $StoryNotesTable, StoryNote> {
+  $$StoryNotesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $UserStoriesTable _story_fkTable(_$NexusDatabase db) =>
+      db.userStories.createAlias(
+        $_aliasNameGenerator(db.storyNotes.story_fk, db.userStories.story_pk),
+      );
+
+  $$UserStoriesTableProcessedTableManager get story_fk {
+    final $_column = $_itemColumn<int>('story_fk')!;
+
+    final manager = $$UserStoriesTableTableManager(
+      $_db,
+      $_db.userStories,
+    ).filter((f) => f.story_pk.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_story_fkTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$StoryNotesTableFilterComposer
+    extends Composer<_$NexusDatabase, $StoryNotesTable> {
+  $$StoryNotesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get note_pk => $composableBuilder(
+    column: $table.note_pk,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$UserStoriesTableFilterComposer get story_fk {
+    final $$UserStoriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.story_fk,
+      referencedTable: $db.userStories,
+      getReferencedColumn: (t) => t.story_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UserStoriesTableFilterComposer(
+            $db: $db,
+            $table: $db.userStories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$StoryNotesTableOrderingComposer
+    extends Composer<_$NexusDatabase, $StoryNotesTable> {
+  $$StoryNotesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get note_pk => $composableBuilder(
+    column: $table.note_pk,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$UserStoriesTableOrderingComposer get story_fk {
+    final $$UserStoriesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.story_fk,
+      referencedTable: $db.userStories,
+      getReferencedColumn: (t) => t.story_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UserStoriesTableOrderingComposer(
+            $db: $db,
+            $table: $db.userStories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$StoryNotesTableAnnotationComposer
+    extends Composer<_$NexusDatabase, $StoryNotesTable> {
+  $$StoryNotesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get note_pk =>
+      $composableBuilder(column: $table.note_pk, builder: (column) => column);
+
+  GeneratedColumn<String> get body =>
+      $composableBuilder(column: $table.body, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$UserStoriesTableAnnotationComposer get story_fk {
+    final $$UserStoriesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.story_fk,
+      referencedTable: $db.userStories,
+      getReferencedColumn: (t) => t.story_pk,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UserStoriesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.userStories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$StoryNotesTableTableManager
+    extends
+        RootTableManager<
+          _$NexusDatabase,
+          $StoryNotesTable,
+          StoryNote,
+          $$StoryNotesTableFilterComposer,
+          $$StoryNotesTableOrderingComposer,
+          $$StoryNotesTableAnnotationComposer,
+          $$StoryNotesTableCreateCompanionBuilder,
+          $$StoryNotesTableUpdateCompanionBuilder,
+          (StoryNote, $$StoryNotesTableReferences),
+          StoryNote,
+          PrefetchHooks Function({bool story_fk})
+        > {
+  $$StoryNotesTableTableManager(_$NexusDatabase db, $StoryNotesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$StoryNotesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$StoryNotesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$StoryNotesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> note_pk = const Value.absent(),
+                Value<int> story_fk = const Value.absent(),
+                Value<String> body = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => StoryNotesCompanion(
+                note_pk: note_pk,
+                story_fk: story_fk,
+                body: body,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> note_pk = const Value.absent(),
+                required int story_fk,
+                required String body,
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => StoryNotesCompanion.insert(
+                note_pk: note_pk,
+                story_fk: story_fk,
+                body: body,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$StoryNotesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({story_fk = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (story_fk) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.story_fk,
+                                referencedTable: $$StoryNotesTableReferences
+                                    ._story_fkTable(db),
+                                referencedColumn: $$StoryNotesTableReferences
+                                    ._story_fkTable(db)
+                                    .story_pk,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$StoryNotesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$NexusDatabase,
+      $StoryNotesTable,
+      StoryNote,
+      $$StoryNotesTableFilterComposer,
+      $$StoryNotesTableOrderingComposer,
+      $$StoryNotesTableAnnotationComposer,
+      $$StoryNotesTableCreateCompanionBuilder,
+      $$StoryNotesTableUpdateCompanionBuilder,
+      (StoryNote, $$StoryNotesTableReferences),
+      StoryNote,
+      PrefetchHooks Function({bool story_fk})
+    >;
 
 class $NexusDatabaseManager {
   final _$NexusDatabase _db;
@@ -27383,4 +28152,6 @@ class $NexusDatabaseManager {
       $$SetupScopesTableTableManager(_db, _db.setupScopes);
   $$SetupScopeOptionsTableTableManager get setupScopeOptions =>
       $$SetupScopeOptionsTableTableManager(_db, _db.setupScopeOptions);
+  $$StoryNotesTableTableManager get storyNotes =>
+      $$StoryNotesTableTableManager(_db, _db.storyNotes);
 }

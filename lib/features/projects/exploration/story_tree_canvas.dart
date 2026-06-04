@@ -373,6 +373,24 @@ class _StoryInspectorState extends ConsumerState<_StoryInspector> {
     _criteria.text = s.acceptanceCriteria ?? '';
   }
 
+  /// Stories that may legally become [story]'s parent: all except itself and its
+  /// own descendants (nesting under your own subtree would create a cycle).
+  List<UserStory> _parentCandidates(List<UserStory> all, UserStory story) {
+    final banned = <int>{story.story_pk};
+    var changed = true;
+    while (changed) {
+      changed = false;
+      for (final s in all) {
+        final p = s.parent_story_fk;
+        if (p != null && banned.contains(p) && !banned.contains(s.story_pk)) {
+          banned.add(s.story_pk);
+          changed = true;
+        }
+      }
+    }
+    return all.where((s) => !banned.contains(s.story_pk)).toList();
+  }
+
   Future<void> _save() async {
     await _db.updateUserStory(
       widget.storyPk,
@@ -464,6 +482,39 @@ class _StoryInspectorState extends ConsumerState<_StoryInspector> {
             ),
           ),
           const SizedBox(height: 10),
+          // Re-parent: nest this story under another (or make it a root). Excludes
+          // itself and its own descendants so you can't create a cycle.
+          DropdownButtonFormField<int?>(
+            initialValue: story.parent_story_fk,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Parent (nest under)',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            items: [
+              const DropdownMenuItem<int?>(
+                value: null,
+                child: Text('— None (root) —'),
+              ),
+              for (final s in _parentCandidates(
+                async.valueOrNull ?? const [],
+                story,
+              ))
+                DropdownMenuItem<int?>(
+                  value: s.story_pk,
+                  child: Text(
+                    '#${s.story_pk}  ${s.title}',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: (v) => _db.updateUserStory(
+              widget.storyPk,
+              UserStoriesCompanion(parent_story_fk: Value(v)),
+            ),
+          ),
+          const SizedBox(height: 10),
           TextField(
             controller: _narrative,
             maxLines: 3,
@@ -519,10 +570,162 @@ class _StoryInspectorState extends ConsumerState<_StoryInspector> {
             ],
           ),
           const SizedBox(height: 16),
+          _NotesSection(storyPk: widget.storyPk),
+          const SizedBox(height: 16),
           _LinkedTasks(storyPk: widget.storyPk),
         ],
       ),
     );
+  }
+}
+
+/// Descriptive notes on a story, shown as clickable pills; tap to view/edit.
+class _NotesSection extends ConsumerWidget {
+  const _NotesSection({required this.storyPk});
+  final int storyPk;
+
+  String _pill(String body) {
+    final one = body.replaceAll('\n', ' ').trim();
+    return one.length > 26 ? '${one.substring(0, 26)}…' : one;
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final db = ref.watch(nexusDatabaseProvider);
+    final notes = ref.watch(storyNotesProvider(storyPk)).valueOrNull ?? const [];
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text(
+              'Notes',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+            const Spacer(),
+            TextButton.icon(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('Add note', style: TextStyle(fontSize: 12)),
+              onPressed: () => _editNote(context, db, storyPk, null),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        if (notes.isEmpty)
+          Text(
+            'No notes yet.',
+            style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+          )
+        else
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final n in notes)
+                ActionChip(
+                  visualDensity: VisualDensity.compact,
+                  avatar: const Icon(Icons.sticky_note_2_outlined, size: 14),
+                  label: Text(_pill(n.body)),
+                  onPressed: () => _viewNote(context, db, n),
+                ),
+            ],
+          ),
+      ],
+    );
+  }
+}
+
+/// View a note full-size with Edit / Delete.
+Future<void> _viewNote(
+  BuildContext context,
+  NexusDatabase db,
+  StoryNote note,
+) async {
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Note'),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(child: Text(note.body)),
+      ),
+      actions: [
+        TextButton.icon(
+          style: TextButton.styleFrom(
+            foregroundColor: Theme.of(ctx).colorScheme.error,
+          ),
+          icon: const Icon(Icons.delete_outline, size: 16),
+          label: const Text('Delete'),
+          onPressed: () async {
+            await db.deleteStoryNote(note.note_pk);
+            if (ctx.mounted) Navigator.pop(ctx);
+          },
+        ),
+        TextButton.icon(
+          icon: const Icon(Icons.edit_outlined, size: 16),
+          label: const Text('Edit'),
+          onPressed: () {
+            Navigator.pop(ctx);
+            _editNote(context, db, note.story_fk, note);
+          },
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Close'),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Add a new note (note == null) or edit an existing one.
+Future<void> _editNote(
+  BuildContext context,
+  NexusDatabase db,
+  int storyPk,
+  StoryNote? note,
+) async {
+  final ctrl = TextEditingController(text: note?.body ?? '');
+  final body = await showDialog<String>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(note == null ? 'Add note' : 'Edit note'),
+      content: SizedBox(
+        width: 420,
+        child: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLines: 6,
+          minLines: 3,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            hintText: 'A detail, decision, constraint, or open question…',
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
+  if (body == null || body.isEmpty) return;
+  if (note == null) {
+    await db.createStoryNote(storyPk, body);
+  } else {
+    await db.updateStoryNote(note.note_pk, body);
   }
 }
 

@@ -21,6 +21,11 @@ enum OrchestratorPromptField {
   mergeFraming,
   mergeKickoff,
   mergeContinue,
+
+  /// The system prompt for the post-setup Exploration (discovery) coordinator —
+  /// how it interviews the user and builds the user-story TREE. Configurable
+  /// here so the hierarchy behavior is a system setting, not buried in code.
+  discoverySystem,
 }
 
 extension OrchestratorPromptFieldX on OrchestratorPromptField {
@@ -38,6 +43,8 @@ extension OrchestratorPromptFieldX on OrchestratorPromptField {
     OrchestratorPromptField.mergeFraming => 'Merge — task framing',
     OrchestratorPromptField.mergeKickoff => 'Merge — first message',
     OrchestratorPromptField.mergeContinue => 'Merge — continue message',
+    OrchestratorPromptField.discoverySystem =>
+      'Discovery — system prompt (user-story interview)',
   };
 
   /// Which pipeline stage this template belongs to (for UI grouping).
@@ -51,13 +58,15 @@ extension OrchestratorPromptFieldX on OrchestratorPromptField {
     OrchestratorPromptField.mergeFraming ||
     OrchestratorPromptField.mergeKickoff ||
     OrchestratorPromptField.mergeContinue => 'Merge',
+    OrchestratorPromptField.discoverySystem => 'Exploration (user stories)',
   };
 
   /// True for the multi-line framing templates (rendered with a taller editor).
   bool get isMultiline => switch (this) {
     OrchestratorPromptField.workerFraming ||
     OrchestratorPromptField.verifyFraming ||
-    OrchestratorPromptField.mergeFraming => true,
+    OrchestratorPromptField.mergeFraming ||
+    OrchestratorPromptField.discoverySystem => true,
     _ => false,
   };
 
@@ -99,6 +108,23 @@ Merge "{branch}" into "{targetBranch}" with git_merge, then call approve_task wi
       'Integrate task #{taskId}: merge "{branch}" into "{targetBranch}", then approve_task to finish it.',
   OrchestratorPromptField.mergeContinue:
       'Finish integrating task #{taskId}: complete the merge of "{branch}" into "{targetBranch}" and call approve_task (or reject_task on conflict).',
+  OrchestratorPromptField.discoverySystem: '''
+You are the project Coordinator running the post-setup DISCOVERY interview for "{projectName}". Setup is done; NO tasks exist yet. Your job is to flesh the idea out into a well-structured USER-STORY TREE before any work is created.
+
+HOW TO INTERVIEW
+- Have a natural conversation: ask ONE focused question at a time and build on the user's answers. Don't interrogate.
+- As the idea takes shape, capture each distinct piece as a user story via `add_user_story` — a clear title and a narrative "As a <role>, I want <goal>, so that <benefit>", with acceptance_criteria when known.
+
+BUILD A REAL TREE (this is your responsibility — the user should NEVER have to tell you how to structure it):
+- The single root is the overall product/epic. Everything else hangs UNDER something meaningful.
+- Group related work under intermediate parent stories (feature areas / user flows), and nest sub-stories under THOSE. Do NOT put every story directly under the root — a flat list is wrong.
+- CHAIN the steps of a flow: each step's `parent_story_id` is the story it follows from, so a linear flow becomes a parent→child→grandchild chain, not a row of siblings. (e.g. "Home" → "Map & Location" → "Find Closest Stand" → "Stand Detail" → "Start Order" — each the CHILD of the previous.)
+- `add_user_story` returns the new id — reuse that id as the `parent_story_id` for its children. Use `list_user_stories` whenever you're unsure of an id or the current shape.
+- Keep sibling ORDER meaningful (the order you add them, or set it explicitly). If the tree comes out wrong, FIX it with `move_user_story` to re-parent/re-order — never leave it flat or out of order.
+
+DO NOT BE EAGER
+- You CANNOT and MUST NOT create tasks — there are no task tools here on purpose.
+- When the tree is solid, well-nested, and covers the idea, tell the user it looks ready and that they can press "Generate tasks from stories" when happy — the tasks are built from these stories.''',
 };
 
 /// Values to substitute into a template's placeholders for a given task.

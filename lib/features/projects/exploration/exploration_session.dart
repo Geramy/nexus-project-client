@@ -9,6 +9,7 @@ library;
 
 import '../../../infrastructure/database/nexus_database.dart';
 import '../agent_assignment.dart';
+import '../orchestration/orchestrator_prompts.dart';
 
 /// A hidden kickoff (sent as the first turn) so the coordinator speaks first.
 const String kDiscoveryAutoOpen =
@@ -36,8 +37,15 @@ Future<String> buildDiscoveryPrompt(
   final proj = await db.getProjectById(projectId);
   final summary = (proj?.projectSummaryMd ?? '').trim();
 
+  // The discovery system prompt is a SYSTEM SETTING (editable in the Prompts
+  // tab, per project) — the hierarchy/chaining behavior lives there, not buried
+  // in code. We append the dynamic project profile so it's grounded.
+  final instructions = OrchestratorPrompts.fromJson(proj?.orchestratorPromptsJson)
+      .raw(OrchestratorPromptField.discoverySystem)
+      .replaceAll('{projectName}', projectName);
+
   return '''
-You are the project Coordinator running the post-setup DISCOVERY interview for "$projectName". Setup is done; NO tasks exist yet. Your job is to flesh the idea out into concrete USER STORIES before any work is created.
+$instructions
 
 PROJECT PROFILE (captured during setup):
 - Industries: ${cat('industries')}
@@ -47,20 +55,7 @@ PROJECT PROFILE (captured during setup):
 - Databases: ${cat('databases')}
 - Services: ${cat('services')}
 ${summary.isEmpty ? '' : '\nSummary:\n$summary\n'}
-Infer from the industry/profile WHAT this is and tailor your questions:
-- If it reads like a GAME (e.g. a Gaming industry / genre), ask about the core loop, genre, mechanics, player goals, progression, and win/lose conditions.
-- If it's an APPLICATION, ask about the target users, their key workflows, the main screens, and the data involved.
-
-HOW TO RUN THE INTERVIEW:
-- Ask ONE focused question at a time and build on the user's answers — have a real conversation, do not interrogate.
-- As the idea takes shape, capture each distinct piece as a USER STORY by calling `add_user_story` with a clear title and a narrative in the form "As a <role>, I want <goal>, so that <benefit>", plus acceptance_criteria when known.
-- Build a TREE: create epics for big areas, then nest stories and sub-stories under them via `parent_story_id` (epic → story → sub-story). Use multiple stories — break the idea down.
-- Call `list_user_stories` to stay grounded; use `update_user_story` to refine titles/narratives/acceptance/status as you learn more.
-
-IMPORTANT — DO NOT BE EAGER:
-- You CANNOT and MUST NOT create tasks. There are no task tools here on purpose.
-- When the story tree is solid and covers the idea, tell the user it looks ready and that they can press the "Generate tasks from stories" button when they're happy — the tasks are built from these stories.
-''';
+Tailor your questions to this profile: if the industry/genre reads like a GAME, ask about the core loop, mechanics, progression, and win/lose; if an APPLICATION, ask about the target users, their key workflows, the main screens, and the data involved.''';
 }
 
 /// Turns the discovery story tree into tasks: each LEAF story becomes a worker

@@ -217,7 +217,18 @@ const List<ToolSpec> kCoordinatorToolSpecs = [
     'Update a user story',
     ToolPerm.grant,
   ),
+  ToolSpec(
+    'move_user_story',
+    'Stories',
+    'Re-parent / re-order a story',
+    ToolPerm.grant,
+  ),
   ToolSpec('list_user_stories', 'Stories', 'List user stories', ToolPerm.grant),
+  ToolSpec('add_note', 'Stories', 'Add a note to a story', ToolPerm.grant),
+  ToolSpec('update_note', 'Stories', 'Update a story note', ToolPerm.grant),
+  ToolSpec('delete_note', 'Stories', 'Delete a story note', ToolPerm.grant),
+  ToolSpec('get_notes', 'Stories', 'List a story\'s notes', ToolPerm.grant),
+  ToolSpec('get_note', 'Stories', 'Read a story note', ToolPerm.grant),
   // Build / CI
   ToolSpec(
     'build_docker_image',

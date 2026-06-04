@@ -1300,11 +1300,110 @@ class CoordinatorTools {
     {
       'type': 'function',
       'function': {
+        'name': 'move_user_story',
+        'description':
+            'Re-parent and/or re-order an existing story to fix the tree '
+            'hierarchy (e.g. nest a story under another, chain a flow, or pull '
+            'one up to the root). Set parent_story_id to the new parent, or null '
+            'to make it a root. Optionally set order_index for its position '
+            'among its siblings (0 = first).',
+        'parameters': {
+          'type': 'object',
+          'properties': {
+            'story_id': {'type': 'string'},
+            'parent_story_id': {
+              'type': 'string',
+              'description': 'New parent id, or "null"/empty to make it a root.',
+            },
+            'order_index': {'type': 'integer'},
+          },
+          'required': ['story_id'],
+        },
+      },
+    },
+    {
+      'type': 'function',
+      'function': {
         'name': 'list_user_stories',
         'description':
             'List the current user-story tree (ids, titles, parents, status) so '
             'you stay grounded in what has already been captured.',
         'parameters': {'type': 'object', 'properties': {}},
+      },
+    },
+    {
+      'type': 'function',
+      'function': {
+        'name': 'add_note',
+        'description':
+            'Attach a descriptive note to a user story (e.g. a detail, decision, '
+            'constraint, or open question). Notes show as clickable pills on the '
+            'story.',
+        'parameters': {
+          'type': 'object',
+          'properties': {
+            'story_id': {'type': 'string'},
+            'body': {'type': 'string', 'description': 'The note text.'},
+          },
+          'required': ['story_id', 'body'],
+        },
+      },
+    },
+    {
+      'type': 'function',
+      'function': {
+        'name': 'update_note',
+        'description': 'Replace the text of an existing note.',
+        'parameters': {
+          'type': 'object',
+          'properties': {
+            'note_id': {'type': 'string'},
+            'body': {'type': 'string'},
+          },
+          'required': ['note_id', 'body'],
+        },
+      },
+    },
+    {
+      'type': 'function',
+      'function': {
+        'name': 'delete_note',
+        'description': 'Delete a note by id.',
+        'parameters': {
+          'type': 'object',
+          'properties': {
+            'note_id': {'type': 'string'},
+          },
+          'required': ['note_id'],
+        },
+      },
+    },
+    {
+      'type': 'function',
+      'function': {
+        'name': 'get_notes',
+        'description': 'List all notes (ids + text) on a story.',
+        'parameters': {
+          'type': 'object',
+          'properties': {
+            'story_id': {'type': 'string'},
+          },
+          'required': ['story_id'],
+        },
+      },
+    },
+    {
+      'type': 'function',
+      'function': {
+        'name': 'get_note',
+        'description': 'Read a single note by id.',
+        'parameters': {
+          'type': 'object',
+          'properties': {
+            'note_id': {'type': 'string'},
+          },
+          'required': ['note_id'],
+        },
       },
     },
   ];
@@ -1441,8 +1540,20 @@ class CoordinatorToolExecutor {
           return await _addUserStory(args);
         case 'update_user_story':
           return await _updateUserStory(args);
+        case 'move_user_story':
+          return await _moveUserStory(args);
         case 'list_user_stories':
           return await _listUserStories();
+        case 'add_note':
+          return await _addNote(args);
+        case 'update_note':
+          return await _updateNote(args);
+        case 'delete_note':
+          return await _deleteNote(args);
+        case 'get_notes':
+          return await _getNotes(args);
+        case 'get_note':
+          return await _getNote(args);
         case 'create_task':
           return await _createTask(args);
         case 'update_task_status':
@@ -1591,6 +1702,11 @@ class CoordinatorToolExecutor {
       return 'add_user_story failed: parent story #$parentId not found.';
     }
     final kind = (args['kind'] as String? ?? 'story').trim();
+    // Append after existing siblings so creation order is the display order.
+    final existing = await db.getUserStoriesForProject(projectId);
+    final siblingCount = existing
+        .where((s) => s.parent_story_fk == parentId)
+        .length;
     final id = await db.createUserStory(
       UserStoriesCompanion.insert(
         project_fk: projectId,
@@ -1603,10 +1719,63 @@ class CoordinatorToolExecutor {
               : (args['acceptance_criteria'] as String).trim(),
         ),
         kind: Value(kind.isEmpty ? 'story' : kind),
+        orderIndex: Value(siblingCount),
       ),
     );
     return 'Added user story "$title" (id: $id)'
         '${parentId != null ? ' under #$parentId' : ''}.';
+  }
+
+  /// Re-parent / re-order a story to fix the tree (cycle-safe).
+  Future<String> _moveUserStory(Map<String, dynamic> args) async {
+    final id = _asInt(args['story_id']);
+    if (id == null) return 'move_user_story failed: story_id is required.';
+    final all = await db.getUserStoriesForProject(projectId);
+    if (!all.any((s) => s.story_pk == id)) {
+      return 'move_user_story failed: story #$id not found.';
+    }
+
+    // Resolve the new parent: explicit null/empty → root.
+    final rawParent = args['parent_story_id'];
+    final parentStr = rawParent?.toString().trim().toLowerCase();
+    final makeRoot =
+        parentStr == null || parentStr.isEmpty || parentStr == 'null';
+    final newParent = makeRoot ? null : _asInt(rawParent);
+    if (newParent != null) {
+      if (newParent == id) {
+        return 'move_user_story failed: a story can\'t be its own parent.';
+      }
+      if (!all.any((s) => s.story_pk == newParent)) {
+        return 'move_user_story failed: parent story #$newParent not found.';
+      }
+      // Reject cycles: the new parent must not be a descendant of this story.
+      final childrenOf = <int, List<int>>{};
+      for (final s in all) {
+        if (s.parent_story_fk != null) {
+          (childrenOf[s.parent_story_fk!] ??= []).add(s.story_pk);
+        }
+      }
+      final stack = <int>[id];
+      while (stack.isNotEmpty) {
+        final cur = stack.removeLast();
+        if (cur == newParent) {
+          return 'move_user_story failed: #$newParent is below #$id — that '
+              'would create a cycle.';
+        }
+        stack.addAll(childrenOf[cur] ?? const []);
+      }
+    }
+
+    final order = _asInt(args['order_index']);
+    await db.updateUserStory(
+      id,
+      UserStoriesCompanion(
+        parent_story_fk: Value(newParent),
+        orderIndex: order != null ? Value(order) : const Value.absent(),
+      ),
+    );
+    return 'Moved story #$id ${makeRoot ? 'to root' : 'under #$newParent'}'
+        '${order != null ? ' at position $order' : ''}.';
   }
 
   Future<String> _updateUserStory(Map<String, dynamic> args) async {
@@ -1649,6 +1818,62 @@ class CoordinatorToolExecutor {
       b.writeln('- #${s.story_pk} [${s.kind}/${s.status}] ${s.title}$parent');
     }
     return b.toString();
+  }
+
+  // ── Story notes ───────────────────────────────────────────────────────────
+
+  Future<String> _addNote(Map<String, dynamic> args) async {
+    final storyId = _asInt(args['story_id']);
+    final body = (args['body'] as String? ?? '').trim();
+    if (storyId == null) return 'add_note failed: story_id is required.';
+    if (body.isEmpty) return 'add_note failed: body is required.';
+    if (await db.getUserStoryById(storyId) == null) {
+      return 'add_note failed: story #$storyId not found.';
+    }
+    final id = await db.createStoryNote(storyId, body);
+    return 'Added note (id: $id) to story #$storyId.';
+  }
+
+  Future<String> _updateNote(Map<String, dynamic> args) async {
+    final id = _asInt(args['note_id']);
+    final body = (args['body'] as String? ?? '').trim();
+    if (id == null) return 'update_note failed: note_id is required.';
+    if (body.isEmpty) return 'update_note failed: body is required.';
+    if (await db.getStoryNote(id) == null) {
+      return 'update_note failed: note #$id not found.';
+    }
+    await db.updateStoryNote(id, body);
+    return 'Updated note #$id.';
+  }
+
+  Future<String> _deleteNote(Map<String, dynamic> args) async {
+    final id = _asInt(args['note_id']);
+    if (id == null) return 'delete_note failed: note_id is required.';
+    if (await db.getStoryNote(id) == null) {
+      return 'delete_note failed: note #$id not found.';
+    }
+    await db.deleteStoryNote(id);
+    return 'Deleted note #$id.';
+  }
+
+  Future<String> _getNotes(Map<String, dynamic> args) async {
+    final storyId = _asInt(args['story_id']);
+    if (storyId == null) return 'get_notes failed: story_id is required.';
+    final notes = await db.getNotesForStory(storyId);
+    if (notes.isEmpty) return 'Story #$storyId has no notes.';
+    final b = StringBuffer('Notes on story #$storyId (${notes.length}):\n');
+    for (final n in notes) {
+      b.writeln('- #${n.note_pk}: ${n.body}');
+    }
+    return b.toString();
+  }
+
+  Future<String> _getNote(Map<String, dynamic> args) async {
+    final id = _asInt(args['note_id']);
+    if (id == null) return 'get_note failed: note_id is required.';
+    final n = await db.getStoryNote(id);
+    if (n == null) return 'get_note failed: note #$id not found.';
+    return 'Note #${n.note_pk} (story #${n.story_fk}): ${n.body}';
   }
 
   Future<String> _createTask(Map<String, dynamic> args) async {

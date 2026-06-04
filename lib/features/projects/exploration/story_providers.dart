@@ -23,3 +23,11 @@ final projectStoriesProvider = StreamProvider.family<List<UserStory>, int>((
 /// The currently-selected story node (its `story_pk`), per project. Drives the
 /// canvas inspector.
 final selectedStoryProvider = StateProvider.family<int?, int>((ref, _) => null);
+
+/// Live descriptive notes attached to a story (shown as pills in the inspector).
+final storyNotesProvider = StreamProvider.family<List<StoryNote>, int>((
+  ref,
+  storyPk,
+) {
+  return ref.watch(nexusDatabaseProvider).watchNotesForStory(storyPk);
+});
