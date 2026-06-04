@@ -11,6 +11,11 @@ import 'package:nexus_projects_client/infrastructure/database/nexus_database.dar
     show Project;
 import 'package:nexus_projects_client/features/project_plans/plan_store.dart';
 import 'package:nexus_projects_client/features/project_setup/setup_inference.dart';
+import 'package:nexus_projects_client/infrastructure/workspace/git/git_engine_provider.dart';
+import 'package:nexus_projects_client/infrastructure/workspace/git/nxtprj_git_engine.dart';
+import 'package:nexus_projects_client/infrastructure/workspace/workspace.dart';
+import 'package:nexus_projects_client/infrastructure/workspace/workspace_provider.dart';
+import 'package:nexus_projects_client/features/projects/planning/planning_progress.dart';
 import 'package:nexus_projects_client/features/projects/planning/project_planning_run.dart';
 import 'package:nexus_projects_client/features/projects/project_working_hours.dart';
 
@@ -68,10 +73,18 @@ class _ProjectOrchestrationControlsState
     }
     final planStore = await ref.read(planStoreProvider(projectId).future);
     final proj = await db.getProjectById(projectId);
+    final progress = ref.read(planningProgressProvider(projectId).notifier);
+    Workspace? ws;
+    NxtprjGitEngine? git;
+    try {
+      ws = await ref.read(workspaceFsProvider(projectId).future);
+      git = await ref.read(gitEngineProvider(projectId).future);
+    } catch (_) {}
     setState(() {
       _building = true;
       _buildStatus = 'Starting…';
     });
+    progress.start();
     try {
       final result = await ProjectPlanningRun(
         db: db,
@@ -81,10 +94,14 @@ class _ProjectOrchestrationControlsState
         projectName: proj?.name ?? 'Project',
         model: resolved.model,
         enableThinking: resolved.enableThinking,
+        workspace: ws,
+        git: git,
+        scaffold: (proj?.projectType ?? '') == 'application-development',
         brief:
             'Deepen and complete the existing /PLANS: cover anything missing '
             'and split any oversized outline items into small ones.',
         onProgress: (line) {
+          progress.add(line);
           if (mounted) setState(() => _buildStatus = line);
         },
       ).run();
@@ -100,6 +117,7 @@ class _ProjectOrchestrationControlsState
         SnackBar(content: Text('Build the plan failed: $e')),
       );
     } finally {
+      progress.finish();
       if (mounted) {
         setState(() {
           _building = false;

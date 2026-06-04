@@ -7,8 +7,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:nexus_projects_client/core/providers/app_shell_provider.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
-import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart' show AgentPersonasCompanion;
+import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart'
+    show AgentPersonasCompanion;
 import 'package:nexus_projects_client/features/agents/persona_bulk_select.dart';
+import 'package:nexus_projects_client/features/projects/task_workflow.dart';
 
 import '../../../shared/ui/nexus_ui.dart';
 
@@ -25,7 +27,9 @@ class _PersonasTabState extends ConsumerState<PersonasTab> {
   @override
   Widget build(BuildContext context) {
     final currentClientId = ref.watch(currentClientIdProvider);
-    final personasAsync = ref.watch(agentPersonasForClientProvider(currentClientId));
+    final personasAsync = ref.watch(
+      agentPersonasForClientProvider(currentClientId),
+    );
     final selectedId = ref.watch(selectedPersonaNotifierProvider)?.id;
     final selection = ref.watch(personaBulkSelectionProvider);
     final selectNotifier = ref.read(personaBulkSelectionProvider.notifier);
@@ -39,13 +43,16 @@ class _PersonasTabState extends ConsumerState<PersonasTab> {
               selectMode: selection.active,
               selectedCount: selection.count,
               totalCount: personas.length,
-              allSelected: selection.count == allIds.length && allIds.isNotEmpty,
+              allSelected:
+                  selection.count == allIds.length && allIds.isNotEmpty,
               onEnter: personas.isEmpty
                   ? null
                   : () {
                       // Drop the single-persona editor so the right outer panel
                       // can host the bulk editor instead.
-                      ref.read(selectedPersonaNotifierProvider.notifier).clear();
+                      ref
+                          .read(selectedPersonaNotifierProvider.notifier)
+                          .clear();
                       selectNotifier.enter();
                     },
               onCancel: selectNotifier.exit,
@@ -68,15 +75,25 @@ class _PersonasTabState extends ConsumerState<PersonasTab> {
                             persona: p,
                             selectMode: selection.active,
                             checked: selection.ids.contains(p.agent_pk),
-                            selected: !selection.active && p.agent_pk == selectedId,
+                            selected:
+                                !selection.active && p.agent_pk == selectedId,
                             onToggle: () => selectNotifier.toggle(p.agent_pk),
                             onClone: () => _showClonePersonaDialog(
-                                context, ref, p, currentClientId),
+                              context,
+                              ref,
+                              p,
+                              currentClientId,
+                            ),
                             onEdit: () {
                               ref
-                                  .read(selectedPersonaNotifierProvider.notifier)
+                                  .read(
+                                    selectedPersonaNotifierProvider.notifier,
+                                  )
                                   .select(
-                                    EditingPersona(id: p.agent_pk, name: p.name),
+                                    EditingPersona(
+                                      id: p.agent_pk,
+                                      name: p.name,
+                                    ),
                                   );
                             },
                           ),
@@ -115,22 +132,30 @@ class _SelectionToolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding:
-          const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 6),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: 6,
+      ),
       child: selectMode
           ? Row(
               children: [
-                Text('$selectedCount selected',
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  '$selectedCount selected',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(width: AppSpacing.sm),
                 TextButton(
                   onPressed: onToggleAll,
                   child: Text(allSelected ? 'Clear all' : 'Select all'),
                 ),
                 const Spacer(),
-                Text('Edit in the right panel →',
-                    style: TextStyle(
-                        fontSize: 12, color: Theme.of(context).hintColor)),
+                Text(
+                  'Edit in the right panel →',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).hintColor,
+                  ),
+                ),
                 const SizedBox(width: AppSpacing.sm),
                 TextButton(onPressed: onCancel, child: const Text('Done')),
               ],
@@ -147,7 +172,23 @@ class _SelectionToolbar extends StatelessWidget {
   }
 }
 
-class _PersonaCard extends StatelessWidget {
+/// Execution phases where an agent is actively doing work right now.
+const _activeExecStatuses = {
+  TaskExecStatus.running,
+  TaskExecStatus.verifying,
+  TaskExecStatus.building,
+  TaskExecStatus.merging,
+};
+
+String _execPhaseLabel(String exec) => switch (exec) {
+  TaskExecStatus.running => 'Implementing',
+  TaskExecStatus.verifying => 'Verifying',
+  TaskExecStatus.building => 'Building',
+  TaskExecStatus.merging => 'Merging',
+  _ => 'Working',
+};
+
+class _PersonaCard extends ConsumerWidget {
   final dynamic persona; // Drift row or UI model
   final bool selected;
   final bool selectMode;
@@ -167,8 +208,22 @@ class _PersonaCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+
+    // Live "currently doing": find this agent's active task in the open project.
+    final projectId = ref.watch(currentProjectIdProvider);
+    final tasks = ref.watch(allTasksForProjectProvider(projectId)).valueOrNull;
+    dynamic activeTask;
+    if (tasks != null) {
+      for (final t in tasks) {
+        if (t.task_agent_fk == persona.agent_pk &&
+            _activeExecStatuses.contains(t.executionStatus)) {
+          activeTask = t;
+          break;
+        }
+      }
+    }
     final highlighted = selectMode ? checked : selected;
     final name = persona.name;
     // Show what the persona is actually configured to use: the Omni Collection
@@ -180,22 +235,23 @@ class _PersonaCard extends StatelessWidget {
     final model = (omni != null && omni.isNotEmpty)
         ? omni
         : (llm != null && llm.isNotEmpty)
-            ? llm
-            : (persona.primaryModel ?? 'Default');
+        ? llm
+        : (persona.primaryModel ?? 'Default');
     final cost = persona.costPerMillionTokens > 0
         ? '\$${persona.costPerMillionTokens.toStringAsFixed(3)}/M'
         : 'Free';
 
     final isPrefab = persona.isPrefab;
     final isInstance = persona.prefab_fk != null;
-    final hasOverrides = persona.overridesJson != '{}' && persona.overridesJson.isNotEmpty;
+    final hasOverrides =
+        persona.overridesJson != '{}' && persona.overridesJson.isNotEmpty;
 
     final nx = context.nx;
     final avatarColor = isPrefab
         ? theme.colorScheme.primary
         : isInstance
-            ? (hasOverrides ? nx.warning : nx.info)
-            : theme.colorScheme.primary;
+        ? (hasOverrides ? nx.warning : nx.info)
+        : theme.colorScheme.primary;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
@@ -213,10 +269,19 @@ class _PersonaCard extends StatelessWidget {
                 ),
           title: Row(
             children: [
-              Expanded(child: Text(name, style: const TextStyle(fontWeight: FontWeight.w600))),
+              Expanded(
+                child: Text(
+                  name,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
               if (isPrefab) ...[
                 const SizedBox(width: AppSpacing.sm),
-                const StatusChip('PREFAB', intent: ChipIntent.accent, dense: true),
+                const StatusChip(
+                  'PREFAB',
+                  intent: ChipIntent.accent,
+                  dense: true,
+                ),
               ] else if (isInstance) ...[
                 const SizedBox(width: AppSpacing.sm),
                 StatusChip(
@@ -231,47 +296,97 @@ class _PersonaCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('$model • $cost'),
+              // Live activity: what this agent is doing right now (if anything).
+              if (activeTask != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.xxs),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      StatusChip(
+                        _execPhaseLabel(activeTask.executionStatus),
+                        intent: ChipIntent.info,
+                        dense: true,
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Flexible(
+                        child: Text(
+                          '#${activeTask.task_pk} ${activeTask.title}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: nx.info,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               if (hasOverrides)
                 Text(
                   'Has local modifications',
-                  style: TextStyle(fontSize: 11, color: nx.warning, fontStyle: FontStyle.italic),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: nx.warning,
+                    fontStyle: FontStyle.italic,
+                  ),
                 ),
             ],
           ),
-          isThreeLine: hasOverrides,
+          isThreeLine: hasOverrides || activeTask != null,
           trailing: selectMode
               ? null
               : Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (isPrefab)
-                Tooltip(
-                  message: 'This is a reusable Prefab. Changes here will affect all instances.',
-                  child: Icon(Icons.link, size: 18, color: theme.colorScheme.primary),
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isPrefab)
+                      Tooltip(
+                        message:
+                            'This is a reusable Prefab. Changes here will affect all instances.',
+                        child: Icon(
+                          Icons.link,
+                          size: 18,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    if (isInstance && hasOverrides)
+                      Tooltip(
+                        message:
+                            'This instance has local overrides (diffable from prefab)',
+                        child: Icon(
+                          Icons.compare_arrows,
+                          size: 18,
+                          color: nx.warning,
+                        ),
+                      ),
+                    IconButton(
+                      icon: const Icon(Icons.copy, size: 18),
+                      tooltip: 'Clone / Instantiate in another Client',
+                      onPressed: onClone,
+                    ),
+                    if (!isPrefab && !isInstance)
+                      IconButton(
+                        icon: Icon(
+                          Icons.link,
+                          size: 18,
+                          color: theme.colorScheme.primary,
+                        ),
+                        tooltip: 'Publish as Prefab',
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Publishing as Prefab will be fully wired soon',
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    const Icon(Icons.edit),
+                  ],
                 ),
-              if (isInstance && hasOverrides)
-                Tooltip(
-                  message: 'This instance has local overrides (diffable from prefab)',
-                  child: Icon(Icons.compare_arrows, size: 18, color: nx.warning),
-                ),
-              IconButton(
-                icon: const Icon(Icons.copy, size: 18),
-                tooltip: 'Clone / Instantiate in another Client',
-                onPressed: onClone,
-              ),
-              if (!isPrefab && !isInstance)
-                IconButton(
-                  icon: Icon(Icons.link, size: 18, color: theme.colorScheme.primary),
-                  tooltip: 'Publish as Prefab',
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Publishing as Prefab will be fully wired soon')),
-                    );
-                  },
-                ),
-              const Icon(Icons.edit),
-            ],
-          ),
           onTap: selectMode ? onToggle : onEdit,
         ),
       ),
@@ -286,11 +401,17 @@ Future<void> _showClonePersonaDialog(
   int currentClientId,
 ) async {
   final clients = await ref.read(nexusDatabaseProvider).getAllClients();
-  final otherClients = clients.where((c) => c.client_pk != currentClientId).toList();
+  final otherClients = clients
+      .where((c) => c.client_pk != currentClientId)
+      .toList();
 
   if (otherClients.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('No other clients to clone to. Create another client first.')),
+      const SnackBar(
+        content: Text(
+          'No other clients to clone to. Create another client first.',
+        ),
+      ),
     );
     return;
   }
@@ -336,7 +457,10 @@ Future<void> _showClonePersonaDialog(
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancel'),
+        ),
       ],
     ),
   );

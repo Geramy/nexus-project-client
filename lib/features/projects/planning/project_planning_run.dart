@@ -4,6 +4,8 @@
 
 import '../../../infrastructure/database/nexus_database.dart';
 import '../../../infrastructure/inference/inference_backend.dart';
+import '../../../infrastructure/workspace/git/nxtprj_git_engine.dart';
+import '../../../infrastructure/workspace/workspace.dart';
 import '../../agents/agent_role.dart';
 import '../../project_plans/plan_store.dart';
 import '../../project_setup/plan_task_sync.dart';
@@ -48,8 +50,12 @@ class ProjectPlanningRun {
     this.brief = '',
     this.chatSessionPk,
     this.onProgress,
+    this.workspace,
+    this.git,
+    this.scaffold = false,
     this.maxPlanningRounds = 6,
     this.maxReviewRounds = 2,
+    this.maxScaffoldRounds = 4,
   });
 
   final NexusDatabase db;
@@ -59,6 +65,15 @@ class ProjectPlanningRun {
   final String projectName;
   final String? model;
   final bool? enableThinking;
+
+  /// Workspace + git handles for the scaffolding phase. When [scaffold] is true
+  /// and these are present, the run writes a base project skeleton to disk and
+  /// commits it to `main` before agents start, so they have files to work in.
+  final Workspace? workspace;
+  final NxtprjGitEngine? git;
+
+  /// Whether to scaffold a base project structure (Application Development only).
+  final bool scaffold;
 
   /// The PM's brief + current project state, seeded into the planner's first
   /// turn so it expands from everything that was said.
@@ -70,6 +85,7 @@ class ProjectPlanningRun {
 
   final int maxPlanningRounds;
   final int maxReviewRounds;
+  final int maxScaffoldRounds;
 
   void _say(String line) => onProgress?.call(line);
 
@@ -121,6 +137,16 @@ class ProjectPlanningRun {
       chatSessionPk: chatSessionPk,
     ).sync();
     _say('✓ Built ${sync.created} task(s) from the plan.');
+
+    // ── 2b. Scaffold the base project skeleton (Application Development) so the
+    // agents have real files to work in, committed to main before they branch.
+    if (scaffold && workspace != null) {
+      try {
+        await _scaffold();
+      } catch (e) {
+        _say('• Scaffolding skipped ($e).');
+      }
+    }
 
     // ── 3. Start the autonomous agents. ──
     await db.setProjectOrchestrationState(projectId, 'running');
@@ -244,6 +270,51 @@ class ProjectPlanningRun {
       gaps: gaps,
       approved: approvals * 2 > total, // strict majority
     );
+  }
+
+  /// Write a base project skeleton (directories, manifests, stub source files
+  /// with namespace/class outlines) to the workspace and commit it to `main`, so
+  /// the engineering agents inherit it on their task branches and the user sees
+  /// the project structure immediately. Best-effort; bounded to
+  /// [maxScaffoldRounds] turns. Application Development only (gated by [scaffold]).
+  Future<void> _scaffold() async {
+    final ws = workspace;
+    if (ws == null) return;
+    _say('🧱 Scaffolding the base project structure…');
+
+    // Scaffold onto main so every task branch (created off main) inherits it.
+    try {
+      await git?.checkoutBranch('main');
+    } catch (_) {
+      // No main yet / git not ready — the agent commits on the current branch.
+    }
+
+    final session = ProjectCoordinatorSession(
+      client: backend,
+      projectId: projectId,
+      projectName: projectName,
+      db: db,
+      model: model,
+      planStore: planStore,
+      workspace: ws,
+      git: git,
+      // The scaffolder needs the file + git tools directly (no progressive
+      // disclosure), and runs autonomously so `ask`-gated ops auto-approve.
+      leanTools: false,
+      confirmAsk: (_, _) async => true,
+      systemPromptOverride: scaffolderSystemPrompt(projectName),
+      enableThinking: enableThinking,
+    );
+
+    for (var i = 0; i < maxScaffoldRounds; i++) {
+      final prompt = i == 0
+          ? 'Read /PLANS, then create the base project skeleton now per your '
+                'instructions and commit it.'
+          : 'Continue creating any remaining base/stub files, then commit. Stop '
+                'once the skeleton compiles and every planned component has a stub.';
+      await for (final _ in session.runTurn(prompt, maxToolRounds: 8)) {}
+    }
+    _say('✓ Base project structure created.');
   }
 }
 

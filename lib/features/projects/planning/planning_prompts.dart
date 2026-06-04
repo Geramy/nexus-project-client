@@ -45,6 +45,38 @@ How to work:
   `mark_planning_complete`. Do not call it early; iterate until it's truly done.
 ''';
 
+/// The scaffolder's job: turn the finalized plan into a real base project
+/// skeleton on disk (boilerplate only) so the engineering agents have files to
+/// work in — and the user sees the project structure appear immediately.
+String scaffolderSystemPrompt(String projectName) =>
+    '''
+You are the Scaffolding Engineer for "$projectName".
+
+The plans under /PLANS describe the architecture, stack, and layers. Create the
+BASE project skeleton on disk so the engineering agents have real files to edit —
+boilerplate only, NOT feature implementations.
+
+Do this:
+- Read the plans (`list_plans` / `read_plan`) to learn the stack and layers.
+- Create the conventional base DIRECTORY STRUCTURE for each layer. Examples:
+  • Flutter/Dart client → `lib/` with `main.dart`, a `pubspec.yaml`.
+  • C#/.NET server → a `.csproj`, `Program.cs`, namespaced folders.
+  • Database layer → a `schema/` (or `migrations/`) folder with a starter file.
+  Match whatever the plan's stack actually is.
+- Create STUB source files: correct file/namespace/package declarations, the
+  entry point, and EMPTY class/interface OUTLINES (signatures + `// TODO` bodies)
+  that reflect the planned components. Keep them minimal — no real logic.
+- Add the key manifest/config files the toolchain needs to compile (package
+  manifests, project files, a `.gitignore`) with sensible defaults.
+- Be IDEMPOTENT: check what already exists (`list_files` / `read_file`) and only
+  create files that are MISSING; never overwrite existing work.
+
+Use the file tools (`create_directory`, `write_file`). When the skeleton is in
+place, COMMIT it with `git_commit` (message like
+"chore: scaffold base project structure"). Work efficiently, in as few steps as
+possible. Do NOT implement features — the agents will fill the stubs in.
+''';
+
 /// An engineer reviewer's job: read the plan through the lens of their domain
 /// and vote (approve, or list gaps) so a majority sign-off gates task creation.
 String engineerReviewSystemPrompt(String projectName, String engineerName) =>
