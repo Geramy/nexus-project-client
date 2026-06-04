@@ -14,6 +14,7 @@ import 'package:nexus_projects_client/features/main/widgets/resizable_divider.da
 import 'package:nexus_projects_client/features/task_detail/task_detail_panel.dart';
 import 'package:nexus_projects_client/features/tasks/tasks_view.dart';
 import 'package:nexus_projects_client/features/projects/project_workspace_view.dart';
+import 'package:nexus_projects_client/features/projects/orchestration/project_orchestrator.dart';
 import 'package:nexus_projects_client/features/project_plans/plan_explorer.dart';
 import 'package:nexus_projects_client/features/project_setup/setup_interview_panel.dart';
 import 'package:nexus_projects_client/features/main/widgets/chat_sessions_sidebar.dart';
@@ -52,6 +53,12 @@ class _MainShellState extends ConsumerState<MainShell> {
   /// Width of the collapsed left navigation rail (icon-only).
   static const double _leftRailWidth = 64;
   bool _leftExpanded = true;
+
+  /// Below this overall width the 3-pane desktop layout can't fit (left 160 +
+  /// center 200 + right 160 + rail/dividers ≈ 553), so we fall back to a single
+  /// column: an icon nav rail + the full-width center view. Catches phones in
+  /// portrait; tablets/desktops stay on the full layout.
+  static const double _narrowBreakpoint = 600;
 
   @override
   void initState() {
@@ -117,12 +124,25 @@ class _MainShellState extends ConsumerState<MainShell> {
     // logout). Result is intentionally ignored; we just keep the provider alive.
     ref.watch(routerServerSyncProvider);
 
+    // Keep the autonomous task orchestrator alive for the open project for the
+    // WHOLE session, on every tab. It used to be watched only by
+    // ProjectWorkspaceView (Plan/Chat/Overview), so switching to the Tasks tab
+    // disposed it — its timer + project-state subscription died and queued work
+    // never ran. The driver only acts when orchestrationState == 'running'.
+    ref.watch(projectOrchestratorProvider(ref.watch(currentProjectIdProvider)));
+
     // Warm every page's data in the background as soon as the client/project is
     // known, so switching tabs shows cached data immediately instead of a blank
     // loading state. The providers are keepAlive, so a one-shot read keeps them
     // populated for the session.
-    ref.listen<int>(currentClientIdProvider, (_, clientId) => _warmClient(clientId));
-    ref.listen<int>(currentProjectIdProvider, (_, projectId) => _warmProject(projectId));
+    ref.listen<int>(
+      currentClientIdProvider,
+      (_, clientId) => _warmClient(clientId),
+    );
+    ref.listen<int>(
+      currentProjectIdProvider,
+      (_, projectId) => _warmProject(projectId),
+    );
 
     // Surface a tappable notification whenever a task is approved (→ Done). The
     // DB broadcasts each completion; tapping "View" deep-links to that task.
@@ -131,18 +151,26 @@ class _MainShellState extends ConsumerState<MainShell> {
       if (ev == null) return;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(
-          duration: const Duration(seconds: 6),
-          content: Text('Task complete: "${ev.title}"'),
-          action: SnackBarAction(
-            label: 'View',
-            onPressed: () {
-              ref.read(currentProjectIdProvider.notifier).selectProject(ev.projectPk);
-              ref.read(selectedTaskIdNotifierProvider.notifier).selectTask(ev.taskPk);
-              ref.read(currentMainViewProvider.notifier).setView(MainView.tasks);
-            },
+        ..showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 6),
+            content: Text('Task complete: "${ev.title}"'),
+            action: SnackBarAction(
+              label: 'View',
+              onPressed: () {
+                ref
+                    .read(currentProjectIdProvider.notifier)
+                    .selectProject(ev.projectPk);
+                ref
+                    .read(selectedTaskIdNotifierProvider.notifier)
+                    .selectTask(ev.taskPk);
+                ref
+                    .read(currentMainViewProvider.notifier)
+                    .setView(MainView.tasks);
+              },
+            ),
           ),
-        ));
+        );
     });
 
     // React to view changes via ref.listen — its callback runs AFTER the frame,
@@ -151,9 +179,13 @@ class _MainShellState extends ConsumerState<MainShell> {
     ref.listen<MainView>(currentMainViewProvider, (prev, next) {
       if (prev == null || prev == next) return;
       if (_sizesInitialized) {
-        _savePanelWidth(prev); // persist the width we were showing for the old view
+        _savePanelWidth(
+          prev,
+        ); // persist the width we were showing for the old view
       }
-      final savedWidth = ref.read(panelLayoutNotifierProvider.notifier).getWidth(next);
+      final savedWidth = ref
+          .read(panelLayoutNotifierProvider.notifier)
+          .getWidth(next);
       setState(() {
         _rightWidth = savedWidth;
         _rightCollapsed = _collapsedByView[next] ?? false; // absent → expanded
@@ -170,10 +202,41 @@ class _MainShellState extends ConsumerState<MainShell> {
               builder: (context, constraints) {
                 final totalWidth = constraints.maxWidth;
 
+                // Narrow screens (phones in portrait) can't fit the three-pane
+                // desktop layout. Collapse to a single column: an icon nav rail
+                // + the full-width center view. The right panel is unavailable
+                // at this size. This also avoids clamping pane widths to an
+                // impossible range (max < min), which would throw.
+                if (totalWidth < _narrowBreakpoint) {
+                  return Row(
+                    children: [
+                      SizedBox(
+                        width: _leftRailWidth,
+                        child: LeftSidebar(
+                          collapsed: true,
+                          currentView: currentView,
+                          onViewChanged: (view) => ref
+                              .read(currentMainViewProvider.notifier)
+                              .setView(view),
+                          onToggleCollapsed: () {},
+                        ),
+                      ),
+                      const VerticalDivider(width: 1),
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.topLeft,
+                          child: _buildCenterContent(currentView, ref),
+                        ),
+                      ),
+                    ],
+                  );
+                }
+
                 // Initialize to user-requested percentages on first layout
                 if (!_sizesInitialized) {
-                  _leftWidth = totalWidth * 0.10;   // 10%
-                  _rightWidth = totalWidth * 0.35;  // 35% (middle gets the remaining 55%)
+                  _leftWidth = totalWidth * 0.10; // 10%
+                  _rightWidth =
+                      totalWidth * 0.35; // 35% (middle gets the remaining 55%)
                   _sizesInitialized = true;
                 }
 
@@ -183,10 +246,15 @@ class _MainShellState extends ConsumerState<MainShell> {
                 // negative (which would overflow the Row to the right).
                 const reserved = 28.0 + 5.0 + 200.0;
                 _leftWidth = _leftWidth.clamp(_minPane, totalWidth * 0.35);
-                final maxRight = (totalWidth - _leftWidth - reserved).clamp(_minPane, totalWidth);
+                final maxRight = (totalWidth - _leftWidth - reserved).clamp(
+                  _minPane,
+                  totalWidth,
+                );
                 _rightWidth = _rightWidth.clamp(_minPane, maxRight);
 
-                final leftPaneWidth = _leftExpanded ? _leftWidth : _leftRailWidth;
+                final leftPaneWidth = _leftExpanded
+                    ? _leftWidth
+                    : _leftRailWidth;
 
                 return Row(
                   children: [
@@ -209,9 +277,12 @@ class _MainShellState extends ConsumerState<MainShell> {
                             collapsed: !_leftExpanded,
                             currentView: currentView,
                             onViewChanged: (view) {
-                              ref.read(currentMainViewProvider.notifier).setView(view);
+                              ref
+                                  .read(currentMainViewProvider.notifier)
+                                  .setView(view);
                             },
-                            onToggleCollapsed: () => setState(() => _leftExpanded = !_leftExpanded),
+                            onToggleCollapsed: () =>
+                                setState(() => _leftExpanded = !_leftExpanded),
                           ),
                         ),
                       ),
@@ -219,9 +290,7 @@ class _MainShellState extends ConsumerState<MainShell> {
 
                     // Draggable divider - Left <-> Center (only resizes the
                     // expanded width; hidden affordance while collapsed).
-                    ResizableDivider(
-                      onDrag: _updateLeftWidth,
-                    ),
+                    ResizableDivider(onDrag: _updateLeftWidth),
 
                     // CENTER / MIDDLE PANE — takes all remaining space, pinned
                     // top-left so content doesn't drift sideways on resize.
@@ -236,7 +305,8 @@ class _MainShellState extends ConsumerState<MainShell> {
                     // so the whole right side — divider, rail and panel — is hidden.
                     if (_hasRightPanel(currentView)) ...[
                       // Draggable divider - Center <-> Right (only when expanded)
-                      if (!_rightCollapsed) ResizableDivider(onDrag: _updateRightWidth),
+                      if (!_rightCollapsed)
+                        ResizableDivider(onDrag: _updateRightWidth),
 
                       // Collapse / expand rail — visible at the right edge.
                       _rightRail(currentView),
@@ -349,14 +419,17 @@ class _MainShellState extends ConsumerState<MainShell> {
         // While Personas select mode is active, the right outer panel hosts the
         // bulk editor (mirrors how Setup mode drives the projectPlans panel).
         if (ref.watch(personaBulkSelectionProvider).active) {
-          return BulkEditPersonasPanel(clientId: ref.watch(currentClientIdProvider));
+          return BulkEditPersonasPanel(
+            clientId: ref.watch(currentClientIdProvider),
+          );
         }
         final editing = ref.watch(selectedPersonaNotifierProvider);
         if (editing != null) {
           return _buildRightPanelHeader(
             title: 'Edit Persona',
             subtitle: editing.name,
-            onClose: () => ref.read(selectedPersonaNotifierProvider.notifier).clear(),
+            onClose: () =>
+                ref.read(selectedPersonaNotifierProvider.notifier).clear(),
             // ValueKey forces a fresh editor State when the selected persona
             // changes, so fields/models never retain the previous persona's data.
             child: PersonaEditor(
@@ -377,7 +450,11 @@ class _MainShellState extends ConsumerState<MainShell> {
         return TaskDetailPanel(taskId: selectedTaskId);
 
       case MainView.activity:
-        return _emptyRightPanel(Icons.history, 'Activity', 'Select an event to see its details here.');
+        return _emptyRightPanel(
+          Icons.history,
+          'Activity',
+          'Select an event to see its details here.',
+        );
       case MainView.launch:
         return _emptyRightPanel(
           Icons.rocket_launch_outlined,
@@ -387,7 +464,9 @@ class _MainShellState extends ConsumerState<MainShell> {
       case MainView.code:
         return const CodeAndGitRightPanel();
       case MainView.callFlow:
-        return CallFlowInspector(projectId: ref.watch(currentProjectIdProvider));
+        return CallFlowInspector(
+          projectId: ref.watch(currentProjectIdProvider),
+        );
       case MainView.account:
         return _emptyRightPanel(
           Icons.account_circle_outlined,
@@ -411,13 +490,17 @@ class _MainShellState extends ConsumerState<MainShell> {
             padding: EdgeInsets.zero,
             visualDensity: VisualDensity.compact,
             constraints: const BoxConstraints(minWidth: 24, minHeight: 28),
-            icon: Icon(_rightCollapsed ? Icons.chevron_left : Icons.chevron_right),
+            icon: Icon(
+              _rightCollapsed ? Icons.chevron_left : Icons.chevron_right,
+            ),
             onPressed: () {
               setState(() {
                 _rightCollapsed = !_rightCollapsed;
                 _collapsedByView[view] = _rightCollapsed;
               });
-              ref.read(panelLayoutNotifierProvider.notifier).setCollapsed(view, _rightCollapsed);
+              ref
+                  .read(panelLayoutNotifierProvider.notifier)
+                  .setCollapsed(view, _rightCollapsed);
             },
           ),
           const SizedBox(height: 8),
@@ -431,27 +514,55 @@ class _MainShellState extends ConsumerState<MainShell> {
     return Container(
       color: Theme.of(context).colorScheme.surface,
       alignment: Alignment.center,
-      child: EmptyState(icon: icon, title: title, message: subtitle, compact: true),
+      child: EmptyState(
+        icon: icon,
+        title: title,
+        message: subtitle,
+        compact: true,
+      ),
     );
   }
 
   /// Shared right-panel header with title, subtitle and close button.
-  Widget _buildRightPanelHeader({required String title, required String? subtitle, required VoidCallback onClose, required Widget child}) {
+  Widget _buildRightPanelHeader({
+    required String title,
+    required String? subtitle,
+    required VoidCallback onClose,
+    required Widget child,
+  }) {
     final nx = context.nx;
-    return Column(children: [
-      Container(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.sm, AppSpacing.sm),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          border: Border(bottom: BorderSide(color: nx.hairline)),
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            AppSpacing.sm,
+            AppSpacing.sm,
+            AppSpacing.sm,
+          ),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            border: Border(bottom: BorderSide(color: nx.hairline)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: SectionHeader(
+                  title: title,
+                  subtitle: subtitle,
+                  dense: true,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, size: 20),
+                onPressed: onClose,
+              ),
+            ],
+          ),
         ),
-        child: Row(children: [
-          Expanded(child: SectionHeader(title: title, subtitle: subtitle, dense: true)),
-          IconButton(icon: const Icon(Icons.close, size: 20), onPressed: onClose),
-        ]),
-      ),
-      Expanded(child: child),
-    ]);
+        Expanded(child: child),
+      ],
+    );
   }
 }
 
@@ -460,5 +571,3 @@ class _MainShellState extends ConsumerState<MainShell> {
 // have been extracted to dedicated files under features/main/widgets/.
 // The old private implementations were removed from this shell coordinator file.
 // All pages, tabs, and widgets for different concerns now live in their own .dart files.
-
-

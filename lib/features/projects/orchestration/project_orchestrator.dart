@@ -10,15 +10,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart';
-import 'package:nexus_projects_client/infrastructure/inference/inference_backend_factory.dart' show backendForServer;
-import 'package:nexus_projects_client/infrastructure/inference/routed_server.dart' show isRoutedProviderType;
-import 'package:nexus_projects_client/infrastructure/inference/inference_client.dart' show InferenceBackend;
-import 'package:nexus_projects_client/infrastructure/models/ui/inference_server.dart' as ui_server;
+import 'package:nexus_projects_client/infrastructure/inference/inference_backend_factory.dart'
+    show backendForServer;
+import 'package:nexus_projects_client/infrastructure/inference/routed_server.dart'
+    show isRoutedProviderType;
+import 'package:nexus_projects_client/infrastructure/inference/inference_client.dart'
+    show InferenceBackend;
+import 'package:nexus_projects_client/infrastructure/models/ui/inference_server.dart'
+    as ui_server;
 import 'package:nexus_projects_client/infrastructure/workspace/workspace.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/workspace_provider.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/git/nxtprj_git_engine.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/git/git_engine_provider.dart';
-import 'package:nexus_projects_client/infrastructure/build/build_models.dart' show CiStatus, CiStatusX;
+import 'package:nexus_projects_client/infrastructure/build/build_models.dart'
+    show CiStatus, CiStatusX;
 import 'package:nexus_projects_client/infrastructure/build/build_service.dart';
 import 'package:nexus_projects_client/infrastructure/build/build_service_provider.dart';
 import 'package:nexus_projects_client/features/agents/thinking_mode.dart';
@@ -126,7 +131,9 @@ class ProjectOrchestrator {
               await _runMergeStage(task);
           }
         } catch (e, st) {
-          debugPrint('[Orchestrator p$projectId] task ${task.task_pk} ${stage.name} errored: $e\n$st');
+          debugPrint(
+            '[Orchestrator p$projectId] task ${task.task_pk} ${stage.name} errored: $e\n$st',
+          );
         } finally {
           _active.remove(task.task_pk);
         }
@@ -145,30 +152,42 @@ class ProjectOrchestrator {
 
     final tasks = await _db.getTasksForProject(projectId);
     Task? firstWhere(bool Function(Task) test) {
-      final matches = tasks.where((t) => !_active.contains(t.task_pk) && test(t)).toList();
+      final matches = tasks
+          .where((t) => !_active.contains(t.task_pk) && test(t))
+          .toList();
       if (matches.isEmpty) return null;
       matches.sort((a, b) {
-        final p = _priorityRank(b.priority).compareTo(_priorityRank(a.priority));
+        final p = _priorityRank(
+          b.priority,
+        ).compareTo(_priorityRank(a.priority));
         if (p != 0) return p;
         return a.createdAt.compareTo(b.createdAt);
       });
       return matches.first;
     }
 
-    final verify = firstWhere((t) =>
-        t.status == TaskStatus.review && t.executionStatus == TaskExecStatus.submitted);
+    final verify = firstWhere(
+      (t) =>
+          t.status == TaskStatus.review &&
+          t.executionStatus == TaskExecStatus.submitted,
+    );
     if (verify != null) return (verify, _Stage.verify);
 
-    final build = firstWhere((t) =>
-        t.status == TaskStatus.review &&
-        t.executionStatus == TaskExecStatus.verified &&
-        t.requiresBuild);
+    final build = firstWhere(
+      (t) =>
+          t.status == TaskStatus.review &&
+          t.executionStatus == TaskExecStatus.verified &&
+          t.requiresBuild,
+    );
     if (build != null) return (build, _Stage.build);
 
-    final merge = firstWhere((t) =>
-        t.status == TaskStatus.review &&
-        (t.executionStatus == TaskExecStatus.built ||
-            (t.executionStatus == TaskExecStatus.verified && !t.requiresBuild)));
+    final merge = firstWhere(
+      (t) =>
+          t.status == TaskStatus.review &&
+          (t.executionStatus == TaskExecStatus.built ||
+              (t.executionStatus == TaskExecStatus.verified &&
+                  !t.requiresBuild)),
+    );
     if (merge != null) return (merge, _Stage.merge);
 
     return (null, null);
@@ -184,7 +203,8 @@ class ProjectOrchestrator {
       if (t.task_agent_fk == null) continue;
       if (_active.contains(t.task_pk)) continue;
       if ((_attempts[t.task_pk] ?? 0) >= _maxAttemptsPerTask) continue;
-      final isStartable = t.status == TaskStatus.todo &&
+      final isStartable =
+          t.status == TaskStatus.todo &&
           (t.executionStatus == TaskExecStatus.idle ||
               t.executionStatus == TaskExecStatus.queued ||
               t.executionStatus == TaskExecStatus.failed);
@@ -201,11 +221,11 @@ class ProjectOrchestrator {
   }
 
   int _priorityRank(String p) => switch (p.toUpperCase()) {
-        'HIGH' || 'HI' || 'URGENT' => 3,
-        'MED' || 'MEDIUM' => 2,
-        'LOW' => 1,
-        _ => 2,
-      };
+    'HIGH' || 'HI' || 'URGENT' => 3,
+    'MED' || 'MEDIUM' => 2,
+    'LOW' => 1,
+    _ => 2,
+  };
 
   /// Spawn an ephemeral worker for [task] and run it until it submits (or the
   /// turn cap is hit, or the project leaves the running state).
@@ -215,7 +235,9 @@ class ProjectOrchestrator {
 
     final persona = await _db.resolveAgentPersona(agentFk);
     if (persona == null) {
-      debugPrint('[Orchestrator p$projectId] task ${task.task_pk}: assigned persona $agentFk not found.');
+      debugPrint(
+        '[Orchestrator p$projectId] task ${task.task_pk}: assigned persona $agentFk not found.',
+      );
       return;
     }
     final role = agentRoleFromKey(persona.title);
@@ -227,7 +249,9 @@ class ProjectOrchestrator {
 
     final resolved = await _resolveBackend(persona);
     if (resolved == null) {
-      debugPrint('[Orchestrator p$projectId] task ${task.task_pk}: no inference server for persona ${persona.name}.');
+      debugPrint(
+        '[Orchestrator p$projectId] task ${task.task_pk}: no inference server for persona ${persona.name}.',
+      );
       return;
     }
 
@@ -252,10 +276,16 @@ class ProjectOrchestrator {
     // One conversation PER AGENT: reuse this worker's dedicated session so all
     // of its tasks land in a single ongoing thread (the person can follow the
     // agent there) instead of a brand-new session on every task update.
-    final workerSessionPk =
-        await _db.getOrCreateAgentChatSession(projectId, agentFk, persona.name);
+    final workerSessionPk = await _db.getOrCreateAgentChatSession(
+      projectId,
+      agentFk,
+      persona.name,
+    );
     _attempts[task.task_pk] = (_attempts[task.task_pk] ?? 0) + 1;
-    await _db.markTaskRunning(task.task_pk, workerSessionPk: workerSessionPk, workBranch: branch);
+    // Picked up & preparing the workspace — the task stays on the Todo board
+    // (exec `queued`). It only flips to "In Progress" once a worker turn truly
+    // begins (below), so the column never shows work nobody is doing.
+    await _db.markTaskQueued(task.task_pk);
 
     final session = ProjectCoordinatorSession(
       client: resolved.client,
@@ -279,18 +309,34 @@ class ProjectOrchestrator {
       systemPromptOverride:
           '${defaultSystemPrompt(role)}\n${prompts.render(OrchestratorPromptField.workerFraming, vars)}',
       enableThinking: resolveEnableThinking(
-        agent: personaThinkingMode(persona.configJson, personaName: persona.name),
+        agent: personaThinkingMode(
+          persona.configJson,
+          personaName: persona.name,
+        ),
         task: ThinkingMode.fromString(task.thinkingMode),
       ),
     );
 
     var kickoff = prompts.render(OrchestratorPromptField.workerKickoff, vars);
     for (var turn = 0; turn < _maxTurnsPerTask && !_disposed; turn++) {
-      // Stop promptly if the human paused/stopped the project mid-task.
+      // Stop promptly if the human paused/stopped the project mid-task — return
+      // the task to the board instead of leaving it parked "In Progress".
       final project = await _db.getProjectById(projectId);
       if (project == null || project.orchestrationState != 'running') {
-        debugPrint('[Orchestrator p$projectId] task ${task.task_pk}: project not running, halting worker.');
+        debugPrint(
+          '[Orchestrator p$projectId] task ${task.task_pk}: project not running, halting worker.',
+        );
+        await _db.markTaskYieldedBack(task.task_pk);
         return;
+      }
+
+      // The task becomes "In Progress" exactly when its agent starts a turn.
+      if (turn == 0) {
+        await _db.markTaskRunning(
+          task.task_pk,
+          workerSessionPk: workerSessionPk,
+          workBranch: branch,
+        );
       }
 
       try {
@@ -298,20 +344,30 @@ class ProjectOrchestrator {
           // Drain the stream; tool effects are applied inside runTurn.
         }
       } catch (e) {
-        debugPrint('[Orchestrator p$projectId] task ${task.task_pk}: turn $turn failed: $e');
+        debugPrint(
+          '[Orchestrator p$projectId] task ${task.task_pk}: turn $turn failed: $e',
+        );
+        await _db.markTaskYieldedBack(task.task_pk);
         return;
       }
 
       final fresh = await _db.getTaskById(task.task_pk);
       if (fresh == null) return;
       if (fresh.executionStatus == TaskExecStatus.submitted) {
-        debugPrint('[Orchestrator p$projectId] task ${task.task_pk}: submitted for review.');
+        debugPrint(
+          '[Orchestrator p$projectId] task ${task.task_pk}: submitted for review.',
+        );
         return;
       }
 
       kickoff = prompts.render(OrchestratorPromptField.workerContinue, vars);
     }
-    debugPrint('[Orchestrator p$projectId] task ${task.task_pk}: hit turn cap without submission.');
+    // Ran out of turns without submitting — back to the board (a fresh attempt
+    // will re-pick it, up to the retry cap) rather than stuck "In Progress".
+    debugPrint(
+      '[Orchestrator p$projectId] task ${task.task_pk}: hit turn cap without submission.',
+    );
+    await _db.markTaskYieldedBack(task.task_pk);
   }
 
   /// Load this project's effective orchestrator prompt templates (per-project
@@ -322,16 +378,19 @@ class ProjectOrchestrator {
   }
 
   /// The placeholder values for [task]'s prompt templates.
-  PromptVars _varsFor(Task task, String branch, {String targetBranch = 'main'}) =>
-      PromptVars(
-        taskId: task.task_pk,
-        title: task.title,
-        branch: branch,
-        targetBranch: targetBranch,
-        description: task.description ?? '',
-        acceptanceCriteria: task.acceptanceCriteria ?? '',
-        verification: task.verification ?? '',
-      );
+  PromptVars _varsFor(
+    Task task,
+    String branch, {
+    String targetBranch = 'main',
+  }) => PromptVars(
+    taskId: task.task_pk,
+    title: task.title,
+    branch: branch,
+    targetBranch: targetBranch,
+    description: task.description ?? '',
+    acceptanceCriteria: task.acceptanceCriteria ?? '',
+    verification: task.verification ?? '',
+  );
 
   /// The branch [task] integrates into: the parent task's work branch when it is
   /// a subtask, otherwise the trunk ("main"). Falls back to "main" if the parent
@@ -355,12 +414,16 @@ class ProjectOrchestrator {
   Future<void> _runVerifyStage(Task task) async {
     final persona = await _findPersonaForRole(AgentRole.verificationAgent);
     if (persona == null) {
-      debugPrint('[Orchestrator p$projectId] task ${task.task_pk}: no Verification Agent persona; leaving submitted.');
+      debugPrint(
+        '[Orchestrator p$projectId] task ${task.task_pk}: no Verification Agent persona; leaving submitted.',
+      );
       return;
     }
     final resolved = await _resolveBackend(persona);
     if (resolved == null) {
-      debugPrint('[Orchestrator p$projectId] task ${task.task_pk}: no inference server for verifier ${persona.name}.');
+      debugPrint(
+        '[Orchestrator p$projectId] task ${task.task_pk}: no inference server for verifier ${persona.name}.',
+      );
       return;
     }
     final handles = await _resolveWorkspaceHandles();
@@ -370,8 +433,11 @@ class ProjectOrchestrator {
     final prompts = await _loadPrompts();
     final vars = _varsFor(task, branch);
     // Reuse the Verification Agent's single per-agent session (see worker stage).
-    final sessionPk =
-        await _db.getOrCreateAgentChatSession(projectId, persona.agent_pk, persona.name);
+    final sessionPk = await _db.getOrCreateAgentChatSession(
+      projectId,
+      persona.agent_pk,
+      persona.name,
+    );
 
     final session = ProjectCoordinatorSession(
       client: resolved.client,
@@ -392,7 +458,10 @@ class ProjectOrchestrator {
       systemPromptOverride:
           '${defaultSystemPrompt(AgentRole.verificationAgent)}\n${prompts.render(OrchestratorPromptField.verifyFraming, vars)}',
       enableThinking: resolveEnableThinking(
-        agent: personaThinkingMode(persona.configJson, personaName: persona.name),
+        agent: personaThinkingMode(
+          persona.configJson,
+          personaName: persona.name,
+        ),
         task: ThinkingMode.fromString(task.thinkingMode),
       ),
     );
@@ -403,19 +472,25 @@ class ProjectOrchestrator {
       try {
         await for (final _ in session.runTurn(kickoff)) {}
       } catch (e) {
-        debugPrint('[Orchestrator p$projectId] task ${task.task_pk}: verify turn $turn failed: $e');
+        debugPrint(
+          '[Orchestrator p$projectId] task ${task.task_pk}: verify turn $turn failed: $e',
+        );
         return;
       }
       final fresh = await _db.getTaskById(task.task_pk);
       if (fresh == null) return;
       if (fresh.executionStatus != TaskExecStatus.submitted &&
           fresh.executionStatus != TaskExecStatus.verifying) {
-        debugPrint('[Orchestrator p$projectId] task ${task.task_pk}: verdict recorded (${fresh.executionStatus}).');
+        debugPrint(
+          '[Orchestrator p$projectId] task ${task.task_pk}: verdict recorded (${fresh.executionStatus}).',
+        );
         return;
       }
       kickoff = prompts.render(OrchestratorPromptField.verifyContinue, vars);
     }
-    debugPrint('[Orchestrator p$projectId] task ${task.task_pk}: verify hit turn cap without a verdict.');
+    debugPrint(
+      '[Orchestrator p$projectId] task ${task.task_pk}: verify hit turn cap without a verdict.',
+    );
   }
 
   // ── Build stage ───────────────────────────────────────────────────────
@@ -432,7 +507,9 @@ class ProjectOrchestrator {
     final ws = handles.ws;
     final build = handles.build;
     if (ws == null || build == null) {
-      debugPrint('[Orchestrator p$projectId] task ${task.task_pk}: workspace/build unavailable; cannot build.');
+      debugPrint(
+        '[Orchestrator p$projectId] task ${task.task_pk}: workspace/build unavailable; cannot build.',
+      );
       return;
     }
     final branch = task.workBranch ?? 'task/${task.task_pk}';
@@ -440,7 +517,9 @@ class ProjectOrchestrator {
     final dockerfilePath = task.dockerfilePath?.trim();
     if ((workflowPath == null || workflowPath.isEmpty) &&
         (dockerfilePath == null || dockerfilePath.isEmpty)) {
-      debugPrint('[Orchestrator p$projectId] task ${task.task_pk}: requiresBuild but no workflow/dockerfile path; treating gate as satisfied.');
+      debugPrint(
+        '[Orchestrator p$projectId] task ${task.task_pk}: requiresBuild but no workflow/dockerfile path; treating gate as satisfied.',
+      );
       await _db.recordTaskBuildOutcome(task.task_pk, passed: true);
       return;
     }
@@ -474,7 +553,9 @@ class ProjectOrchestrator {
         runPk = started.runPk;
       }
     } catch (e) {
-      debugPrint('[Orchestrator p$projectId] task ${task.task_pk}: build failed to start: $e');
+      debugPrint(
+        '[Orchestrator p$projectId] task ${task.task_pk}: build failed to start: $e',
+      );
       await _db.recordTaskBuildOutcome(task.task_pk, passed: false);
       return;
     }
@@ -487,12 +568,16 @@ class ProjectOrchestrator {
       final status = CiStatusX.fromWire(run.status);
       if (status.isTerminal) {
         final passed = status == CiStatus.success;
-        debugPrint('[Orchestrator p$projectId] task ${task.task_pk}: build run $runPk → ${status.wire}.');
+        debugPrint(
+          '[Orchestrator p$projectId] task ${task.task_pk}: build run $runPk → ${status.wire}.',
+        );
         await _db.recordTaskBuildOutcome(task.task_pk, passed: passed);
         return;
       }
     }
-    debugPrint('[Orchestrator p$projectId] task ${task.task_pk}: build run $runPk did not finish in time; failing the gate.');
+    debugPrint(
+      '[Orchestrator p$projectId] task ${task.task_pk}: build run $runPk did not finish in time; failing the gate.',
+    );
     await _db.recordTaskBuildOutcome(task.task_pk, passed: false);
   }
 
@@ -506,12 +591,16 @@ class ProjectOrchestrator {
   Future<void> _runMergeStage(Task task) async {
     final persona = await _findPersonaForRole(AgentRole.coordinator);
     if (persona == null) {
-      debugPrint('[Orchestrator p$projectId] task ${task.task_pk}: no Coordinator persona; leaving for human merge.');
+      debugPrint(
+        '[Orchestrator p$projectId] task ${task.task_pk}: no Coordinator persona; leaving for human merge.',
+      );
       return;
     }
     final resolved = await _resolveBackend(persona);
     if (resolved == null) {
-      debugPrint('[Orchestrator p$projectId] task ${task.task_pk}: no inference server for coordinator ${persona.name}.');
+      debugPrint(
+        '[Orchestrator p$projectId] task ${task.task_pk}: no inference server for coordinator ${persona.name}.',
+      );
       return;
     }
     final handles = await _resolveWorkspaceHandles();
@@ -526,8 +615,11 @@ class ProjectOrchestrator {
     await _db.beginTaskMerge(task.task_pk);
 
     // Reuse the Coordinator's single per-agent session (see worker stage).
-    final sessionPk =
-        await _db.getOrCreateAgentChatSession(projectId, persona.agent_pk, persona.name);
+    final sessionPk = await _db.getOrCreateAgentChatSession(
+      projectId,
+      persona.agent_pk,
+      persona.name,
+    );
 
     final session = ProjectCoordinatorSession(
       client: resolved.client,
@@ -548,7 +640,10 @@ class ProjectOrchestrator {
       systemPromptOverride:
           '${defaultSystemPrompt(AgentRole.coordinator)}\n${prompts.render(OrchestratorPromptField.mergeFraming, vars)}',
       enableThinking: resolveEnableThinking(
-        agent: personaThinkingMode(persona.configJson, personaName: persona.name),
+        agent: personaThinkingMode(
+          persona.configJson,
+          personaName: persona.name,
+        ),
         task: ThinkingMode.fromString(task.thinkingMode),
       ),
     );
@@ -559,19 +654,25 @@ class ProjectOrchestrator {
       try {
         await for (final _ in session.runTurn(kickoff)) {}
       } catch (e) {
-        debugPrint('[Orchestrator p$projectId] task ${task.task_pk}: merge turn $turn failed: $e');
+        debugPrint(
+          '[Orchestrator p$projectId] task ${task.task_pk}: merge turn $turn failed: $e',
+        );
         return;
       }
       final fresh = await _db.getTaskById(task.task_pk);
       if (fresh == null) return;
       if (fresh.executionStatus == TaskExecStatus.done ||
           fresh.status == TaskStatus.todo) {
-        debugPrint('[Orchestrator p$projectId] task ${task.task_pk}: merge stage resolved (${fresh.executionStatus}).');
+        debugPrint(
+          '[Orchestrator p$projectId] task ${task.task_pk}: merge stage resolved (${fresh.executionStatus}).',
+        );
         return;
       }
       kickoff = prompts.render(OrchestratorPromptField.mergeContinue, vars);
     }
-    debugPrint('[Orchestrator p$projectId] task ${task.task_pk}: merge hit turn cap without resolution.');
+    debugPrint(
+      '[Orchestrator p$projectId] task ${task.task_pk}: merge hit turn cap without resolution.',
+    );
   }
 
   // ── Shared helpers ──────────────────────────────────────────────────────
@@ -589,7 +690,8 @@ class ProjectOrchestrator {
 
   /// Resolve the workspace, git engine, and build service for this project.
   /// Any of them may be null if the workspace is unavailable.
-  Future<({Workspace? ws, NxtprjGitEngine? git, BuildService? build})> _resolveWorkspaceHandles() async {
+  Future<({Workspace? ws, NxtprjGitEngine? git, BuildService? build})>
+  _resolveWorkspaceHandles() async {
     Workspace? ws;
     NxtprjGitEngine? git;
     BuildService? build;
@@ -607,8 +709,12 @@ class ProjectOrchestrator {
   /// be created and [base] is given (and exists), the worktree is first switched
   /// to [base] so the new branch diverges from it — this is how a subtask branch
   /// is rooted on its parent's branch. No-op when git is null.
-  Future<void> _checkout(NxtprjGitEngine? git, String branch, int taskPk,
-      {String? base}) async {
+  Future<void> _checkout(
+    NxtprjGitEngine? git,
+    String branch,
+    int taskPk, {
+    String? base,
+  }) async {
     if (git == null) return;
     try {
       final existing = await git.branches();
@@ -622,7 +728,9 @@ class ProjectOrchestrator {
       }
       await git.createBranch(branch, checkout: true);
     } catch (e) {
-      debugPrint('[Orchestrator p$projectId] task $taskPk: checkout "$branch" failed: $e');
+      debugPrint(
+        '[Orchestrator p$projectId] task $taskPk: checkout "$branch" failed: $e',
+      );
     }
   }
 
@@ -635,7 +743,9 @@ class ProjectOrchestrator {
 
   /// Resolve the inference backend + chat model for [persona] from its connected
   /// server (or the client's first server). Returns null when none exist.
-  Future<({InferenceBackend client, String? model})?> _resolveBackend(AgentPersona persona) async {
+  Future<({InferenceBackend client, String? model})?> _resolveBackend(
+    AgentPersona persona,
+  ) async {
     final project = await _db.getProjectById(projectId);
     if (project == null) return null;
     final servers = await _db.getInferenceServersForClient(project.client_fk);
@@ -656,14 +766,16 @@ class ProjectOrchestrator {
       }
     }
 
-    final models = (jsonDecode(chosen.availableModelsJson) as List).cast<String>();
+    final models = (jsonDecode(chosen.availableModelsJson) as List)
+        .cast<String>();
 
     final personaModel = persona.llmModel?.trim();
     final model = (personaModel != null && personaModel.isNotEmpty)
         ? personaModel
-        : ((chosen.selectedModel != null && chosen.selectedModel!.trim().isNotEmpty)
-            ? chosen.selectedModel!.trim()
-            : (models.isNotEmpty ? models.first : null));
+        : ((chosen.selectedModel != null &&
+                  chosen.selectedModel!.trim().isNotEmpty)
+              ? chosen.selectedModel!.trim()
+              : (models.isNotEmpty ? models.first : null));
 
     final uiServer = ui_server.InferenceServer(
       id: chosen.server_pk.toString(),
@@ -674,7 +786,10 @@ class ProjectOrchestrator {
       selectedModel: chosen.selectedModel,
       availableModels: models,
     );
-    return (client: backendForServer(uiServer, agentName: persona.name), model: model);
+    return (
+      client: backendForServer(uiServer, agentName: persona.name),
+      model: model,
+    );
   }
 }
 
@@ -683,7 +798,10 @@ enum _Stage { implement, verify, build, merge }
 
 /// One [ProjectOrchestrator] per project. Kept alive while anything (e.g. the
 /// project workspace view) watches it; it self-starts on creation.
-final projectOrchestratorProvider = Provider.family<ProjectOrchestrator, int>((ref, projectId) {
+final projectOrchestratorProvider = Provider.family<ProjectOrchestrator, int>((
+  ref,
+  projectId,
+) {
   final orchestrator = ProjectOrchestrator(ref, projectId)..start();
   ref.onDispose(orchestrator.dispose);
   return orchestrator;

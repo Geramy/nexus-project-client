@@ -23,7 +23,8 @@ class ProjectCoordinatorSession {
   final InferenceBackend client;
   final int projectId;
   final String projectName;
-  final NexusDatabase? db; // When provided, enables live tool execution + rich context
+  final NexusDatabase?
+  db; // When provided, enables live tool execution + rich context
 
   /// The chat model to use. When null/empty we fall back to a generic id, but
   /// callers should pass the server's selected model so requests don't 404.
@@ -58,6 +59,12 @@ class ProjectCoordinatorSession {
   /// role-specific prompt (defaultSystemPrompt(role)) plus the task brief.
   final String? systemPromptOverride;
 
+  /// Deep-planning signal hooks (see [CoordinatorToolExecutor]). When set, the
+  /// matching planner-only tool is offered: [onPlanningComplete] (planner says
+  /// the plan is done) and [onPlanReview] (an engineer reviewer's verdict).
+  final void Function()? onPlanningComplete;
+  final void Function(bool approved, String gaps)? onPlanReview;
+
   final List<Map<String, dynamic>> _history = [];
 
   /// Detects when the coordinator agent gets stuck repeating the same tool call
@@ -83,6 +90,8 @@ class ProjectCoordinatorSession {
     this.systemPromptOverride,
     this.enableThinking,
     this.leanTools = true,
+    this.onPlanningComplete,
+    this.onPlanReview,
   });
 
   /// When true (default), only the core task/plan tools are offered each turn;
@@ -94,12 +103,22 @@ class ProjectCoordinatorSession {
   /// the default payload; the model unlocks a group when it needs it.
   static const Map<String, Set<String>> _gatedToolGroups = {
     'files': {
-      'list_files', 'read_file', 'write_file', 'create_directory',
-      'move_path', 'delete_path', 'delete_file', 'delete_folder',
+      'list_files',
+      'read_file',
+      'write_file',
+      'create_directory',
+      'move_path',
+      'delete_path',
+      'delete_file',
+      'delete_folder',
     },
     'git': {
-      'git_status', 'git_log', 'git_commit', 'git_branches',
-      'git_create_branch', 'git_checkout_branch',
+      'git_status',
+      'git_log',
+      'git_commit',
+      'git_branches',
+      'git_create_branch',
+      'git_checkout_branch',
     },
     'ci': {'build_docker_image', 'run_workflow', 'list_ci_runs', 'get_ci_run'},
   };
@@ -113,8 +132,9 @@ class ProjectCoordinatorSession {
   final bool? enableThinking;
 
   /// The model id actually sent to the backend.
-  String get _effectiveModel =>
-      (model != null && model!.trim().isNotEmpty) ? model!.trim() : 'default-coordinator';
+  String get _effectiveModel => (model != null && model!.trim().isNotEmpty)
+      ? model!.trim()
+      : 'default-coordinator';
 
   List<Map<String, dynamic>> get history => List.unmodifiable(_history);
 
@@ -141,9 +161,9 @@ class ProjectCoordinatorSession {
       'name': 'request_tools',
       'description':
           'Unlock an additional group of tools for this conversation when you '
-              'need it, then use them on your next step. Groups: "files" '
-              '(read/write project files), "git" (repo status/commit/branches), '
-              '"ci" (build images, run CI workflows, read CI logs).',
+          'need it, then use them on your next step. Groups: "files" '
+          '(read/write project files), "git" (repo status/commit/branches), '
+          '"ci" (build images, run CI workflows, read CI logs).',
       'parameters': {
         'type': 'object',
         'properties': {
@@ -171,10 +191,13 @@ class ProjectCoordinatorSession {
       buffer.writeln('Project: $projectName (id: $projectId)');
       buffer.writeln('Current tasks (${tasks.length} total):');
       for (final t in tasks.take(12)) {
-        final parent = t.task_parent_fk != null ? ' (sub of ${t.task_parent_fk})' : '';
+        final parent = t.task_parent_fk != null
+            ? ' (sub of ${t.task_parent_fk})'
+            : '';
         buffer.writeln('- ${t.title} [${t.priority}] — ${t.status}$parent');
       }
-      if (tasks.length > 12) buffer.writeln('... and ${tasks.length - 12} more.');
+      if (tasks.length > 12)
+        buffer.writeln('... and ${tasks.length - 12} more.');
       return buffer.toString();
     } catch (e) {
       return 'Project "$projectName": context temporarily unavailable ($e).';
@@ -185,14 +208,23 @@ class ProjectCoordinatorSession {
   Future<String> _buildSystemPrompt({String? currentPlanContext}) async {
     // An ephemeral worker/verifier session supplies its own complete prompt
     // (role brief + task context); use it verbatim instead of the Coordinator's.
-    if (systemPromptOverride != null && systemPromptOverride!.trim().isNotEmpty) {
+    if (systemPromptOverride != null &&
+        systemPromptOverride!.trim().isNotEmpty) {
       return systemPromptOverride!;
     }
     final buffer = StringBuffer();
-    buffer.writeln('You are the Coordinator AI for the project "$projectName".');
-    buffer.writeln('You help the user plan, refine tasks, and make decisions for this project.');
-    buffer.writeln('You have FULL ACCESS to live project state via tools. When the user asks to add work, change status, break down plans, or adjust direction — CALL THE TOOLS to do it immediately. Then confirm in natural language what you changed.');
-    buffer.writeln('Keep spoken replies short and natural. Use tools proactively.');
+    buffer.writeln(
+      'You are the Coordinator AI for the project "$projectName".',
+    );
+    buffer.writeln(
+      'You help the user plan, refine tasks, and make decisions for this project.',
+    );
+    buffer.writeln(
+      'You have FULL ACCESS to live project state via tools. When the user asks to add work, change status, break down plans, or adjust direction — CALL THE TOOLS to do it immediately. Then confirm in natural language what you changed.',
+    );
+    buffer.writeln(
+      'Keep spoken replies short and natural. Use tools proactively.',
+    );
 
     final live = currentPlanContext ?? await getRichProjectContext();
     if (live.isNotEmpty) {
@@ -204,30 +236,54 @@ class ProjectCoordinatorSession {
       try {
         final content = await planStore!.read(openPlanPath!);
         final name = _basename(openPlanPath!);
-        buffer.writeln('\nYou are editing the plan document "$name". Its current contents:\n"""\n$content\n"""');
-        buffer.writeln('To change the plan, call update_plan with the full new contents (markdown). To re-read it, call view_plan. Tasks you create from this plan are automatically linked to it.');
+        buffer.writeln(
+          '\nYou are editing the plan document "$name". Its current contents:\n"""\n$content\n"""',
+        );
+        buffer.writeln(
+          'To change the plan, call update_plan with the full new contents (markdown). To re-read it, call view_plan. Tasks you create from this plan are automatically linked to it.',
+        );
       } catch (_) {}
     }
 
     final planFocus = openPlanPath != null ? 'view_plan, update_plan, ' : '';
-    buffer.writeln('\nYou have FULL read/create/update/delete control. Available tools:');
-    buffer.writeln('- Tasks: list_tasks, get_task, create_task (use parent_task_id for subtasks), update_task, update_task_status, set_task_dates, delete_task.');
-    buffer.writeln('  Thinking mode: when you create_task/update_task you may set `thinking_enabled: true`, but ONLY when the task is a small, very specific, cut-and-dry job (one narrow, well-defined feature). Do NOT enable thinking for large, broad, or open-ended tasks — on long/open-ended context, thinking mode degrades the response and outcome by about 15%, making results worse. Default to leaving thinking_enabled off (omit it) unless the job is narrow and clearly scoped.');
-    buffer.writeln('- Agents: list_agents (call this to discover who exists), assign_agent_to_task. ALWAYS list_agents before assigning so you use a real agent id.');
-    buffer.writeln('CRITICAL: every task MUST be assigned to a worker agent. When you create_task, pass agent_persona_id (call list_agents first to pick the best-fit specialist). Never leave a task unassigned — an unassigned task is invisible to the orchestrator and never gets worked. If you create a task without naming an agent, a default worker is auto-assigned, but you should choose the right one.');
-    buffer.writeln('- Plans→tasks: when the user changes the idea, edit the PLAN first — add/adjust "- [ ] …" outline items in the relevant plan doc (update_plan/write_plan). Every plan write AUTOMATICALLY creates tasks for any new outline items (each line is annotated with its task id, so edits never double-create). Tell the user which tasks were created. sync_plans_to_tasks is also available to run the same pass on demand.');
-    buffer.writeln('- Plans: list_plans, create_plan, read_plan, write_plan, rename_plan, delete_plan, link_task_to_plan. ${planFocus.isNotEmpty ? '($planFocus operate on the currently-open plan.) ' : ''}');
+    buffer.writeln(
+      '\nYou have FULL read/create/update/delete control. Available tools:',
+    );
+    buffer.writeln(
+      '- Tasks: list_tasks, get_task, create_task (use parent_task_id for subtasks), update_task, update_task_status, set_task_dates, delete_task.',
+    );
+    buffer.writeln(
+      '  Thinking mode: when you create_task/update_task you may set `thinking_enabled: true`, but ONLY when the task is a small, very specific, cut-and-dry job (one narrow, well-defined feature). Do NOT enable thinking for large, broad, or open-ended tasks — on long/open-ended context, thinking mode degrades the response and outcome by about 15%, making results worse. Default to leaving thinking_enabled off (omit it) unless the job is narrow and clearly scoped.',
+    );
+    buffer.writeln(
+      '- Agents: list_agents (call this to discover who exists), assign_agent_to_task. ALWAYS list_agents before assigning so you use a real agent id.',
+    );
+    buffer.writeln(
+      'CRITICAL: every task MUST be assigned to a worker agent. When you create_task, pass agent_persona_id (call list_agents first to pick the best-fit specialist). Never leave a task unassigned — an unassigned task is invisible to the orchestrator and never gets worked. If you create a task without naming an agent, a default worker is auto-assigned, but you should choose the right one.',
+    );
+    buffer.writeln(
+      '- Plans→tasks: when the user changes the idea, edit the PLAN first — add/adjust "- [ ] …" outline items in the relevant plan doc (update_plan/write_plan). Every plan write AUTOMATICALLY creates tasks for any new outline items (each line is annotated with its task id, so edits never double-create). Tell the user which tasks were created. sync_plans_to_tasks is also available to run the same pass on demand.',
+    );
+    buffer.writeln(
+      '- Plans: list_plans, create_plan, read_plan, write_plan, rename_plan, delete_plan, link_task_to_plan. ${planFocus.isNotEmpty ? '($planFocus operate on the currently-open plan.) ' : ''}',
+    );
     final filesOn = !leanTools || _unlockedToolGroups.contains('files');
     final gitOn = !leanTools || _unlockedToolGroups.contains('git');
     final ciOn = !leanTools || _unlockedToolGroups.contains('ci');
     if (filesOn) {
-      buffer.writeln('- Files (project workspace): list_files, read_file, write_file, create_directory, move_path, delete_path.');
+      buffer.writeln(
+        '- Files (project workspace): list_files, read_file, write_file, create_directory, move_path, delete_path.',
+      );
     }
     if (gitOn) {
-      buffer.writeln('- Git (workspace repo): git_status, git_log, git_commit, git_branches, git_create_branch, git_checkout_branch.');
+      buffer.writeln(
+        '- Git (workspace repo): git_status, git_log, git_commit, git_branches, git_create_branch, git_checkout_branch.',
+      );
     }
     if (ciOn) {
-      buffer.writeln('- Build/CI: build_docker_image, run_workflow (GitHub-Actions YAML, runs locally), list_ci_runs, get_ci_run (read logs/errors to diagnose failures).');
+      buffer.writeln(
+        '- Build/CI: build_docker_image, run_workflow (GitHub-Actions YAML, runs locally), list_ci_runs, get_ci_run (read logs/errors to diagnose failures).',
+      );
     }
     if (!filesOn || !gitOn || !ciOn) {
       final locked = [
@@ -235,11 +291,19 @@ class ProjectCoordinatorSession {
         if (!gitOn) 'git (repo status/commit/branches)',
         if (!ciOn) 'ci (build/run workflows, read CI logs)',
       ].join(', ');
-      buffer.writeln('- On request: $locked — call request_tools(group) to unlock the group, THEN use those tools next.');
+      buffer.writeln(
+        '- On request: $locked — call request_tools(group) to unlock the group, THEN use those tools next.',
+      );
     }
-    buffer.writeln('- Other: view_current_plan, generate_diagram, propose_plan_adjustment.');
-    buffer.writeln('Prefer reading (list_/get_/read_) before mutating. Only delete when the user clearly asks.');
-    buffer.writeln('After you call tools, ALWAYS follow up with a short spoken sentence telling the user what you found or did. Never end a turn with only tool calls and no words.');
+    buffer.writeln(
+      '- Other: view_current_plan, generate_diagram, propose_plan_adjustment.',
+    );
+    buffer.writeln(
+      'Prefer reading (list_/get_/read_) before mutating. Only delete when the user clearly asks.',
+    );
+    buffer.writeln(
+      'After you call tools, ALWAYS follow up with a short spoken sentence telling the user what you found or did. Never end a turn with only tool calls and no words.',
+    );
     return buffer.toString();
   }
 
@@ -248,7 +312,9 @@ class ProjectCoordinatorSession {
     String? currentPlanContext,
     List<Map<String, dynamic>>? tools,
   }) async {
-    final sys = await _buildSystemPrompt(currentPlanContext: currentPlanContext);
+    final sys = await _buildSystemPrompt(
+      currentPlanContext: currentPlanContext,
+    );
     final messages = _sanitizeForWire([
       {'role': 'system', 'content': sys},
       ..._history,
@@ -271,12 +337,17 @@ class ProjectCoordinatorSession {
       _history.add({
         'role': 'assistant',
         'content': assistantMsg.content,
-        if (assistantMsg.toolCalls != null && assistantMsg.toolCalls!.isNotEmpty)
-          'tool_calls': assistantMsg.toolCalls!.map((t) => {
-                'id': t.id,
-                'name': t.function.name,
-                'arguments': t.function.arguments,
-              }).toList(),
+        if (assistantMsg.toolCalls != null &&
+            assistantMsg.toolCalls!.isNotEmpty)
+          'tool_calls': assistantMsg.toolCalls!
+              .map(
+                (t) => {
+                  'id': t.id,
+                  'name': t.function.name,
+                  'arguments': t.function.arguments,
+                },
+              )
+              .toList(),
       });
     }
 
@@ -292,7 +363,9 @@ class ProjectCoordinatorSession {
     String? currentPlanContext,
     List<Map<String, dynamic>>? tools,
   }) async* {
-    final sys = await _buildSystemPrompt(currentPlanContext: currentPlanContext);
+    final sys = await _buildSystemPrompt(
+      currentPlanContext: currentPlanContext,
+    );
     final messages = _sanitizeForWire([
       {'role': 'system', 'content': sys},
       ..._history,
@@ -333,16 +406,37 @@ class ProjectCoordinatorSession {
     // Offer the plan tools whenever a plan store is available — not only when a
     // specific plan is open — so the coordinator can list/read/create plans in
     // the general project chat (PLANS/ exists from the start of planning).
-    final allTools = CoordinatorTools.buildToolSchemas(includePlanTools: planStore != null);
+    final allTools = CoordinatorTools.buildToolSchemas(
+      includePlanTools: planStore != null,
+      includePlannerComplete: onPlanningComplete != null,
+      includePlannerReview: onPlanReview != null,
+    );
     final executor = db != null
-        ? CoordinatorToolExecutor(db: db!, projectId: projectId, inference: client, chatSessionPk: chatSessionPk, openPlanPath: openPlanPath, planStore: planStore, permissions: permissions, confirmAsk: confirmAsk, agentName: agentName, workspace: workspace, git: git, buildService: buildService)
+        ? CoordinatorToolExecutor(
+            db: db!,
+            projectId: projectId,
+            inference: client,
+            chatSessionPk: chatSessionPk,
+            openPlanPath: openPlanPath,
+            planStore: planStore,
+            permissions: permissions,
+            confirmAsk: confirmAsk,
+            agentName: agentName,
+            workspace: workspace,
+            git: git,
+            buildService: buildService,
+            onPlanningComplete: onPlanningComplete,
+            onPlanReview: onPlanReview,
+          )
         : null;
 
     try {
       for (var round = 0; round < maxToolRounds; round++) {
         // Rebuilt each round so a request_tools unlock takes effect immediately.
         final tools = _effectiveTools(allTools);
-        final sys = await _buildSystemPrompt(currentPlanContext: currentPlanContext);
+        final sys = await _buildSystemPrompt(
+          currentPlanContext: currentPlanContext,
+        );
         final messages = _sanitizeForWire([
           {'role': 'system', 'content': sys},
           ..._history,
@@ -353,7 +447,11 @@ class ProjectCoordinatorSession {
         final buf = StringBuffer();
         var toolCalls = const <ToolCall>[];
         var toolsDropped = false;
-        await for (final ev in _streamRound(messages, tools, onToolsDropped: (d) => toolsDropped = d)) {
+        await for (final ev in _streamRound(
+          messages,
+          tools,
+          onToolsDropped: (d) => toolsDropped = d,
+        )) {
           if (ev is ChatContentDelta) {
             buf.write(ev.text);
             yield ev; // forward live (do NOT also re-yield the full content below)
@@ -363,7 +461,9 @@ class ProjectCoordinatorSession {
         }
         final contentStr = buf.toString();
         if (toolsDropped && round == 0) {
-          onToolResult?.call('(This model rejected tool-calling, so live task/plan actions are off for this reply.)');
+          onToolResult?.call(
+            '(This model rejected tool-calling, so live task/plan actions are off for this reply.)',
+          );
         }
 
         // Record the assistant message in history. When there are tool calls and
@@ -371,20 +471,29 @@ class ProjectCoordinatorSession {
         // content alongside tool_calls.
         _history.add({
           'role': 'assistant',
-          'content': (toolCalls.isNotEmpty && contentStr.isEmpty) ? null : contentStr,
+          'content': (toolCalls.isNotEmpty && contentStr.isEmpty)
+              ? null
+              : contentStr,
           if (toolCalls.isNotEmpty)
             'tool_calls': [
               for (final t in toolCalls)
                 {
                   'id': t.id,
                   'type': 'function',
-                  'function': {'name': t.function.name, 'arguments': t.function.arguments},
-                }
+                  'function': {
+                    'name': t.function.name,
+                    'arguments': t.function.arguments,
+                  },
+                },
             ],
         });
 
         if (toolCalls.isEmpty || executor == null) {
-          yield ChatStreamFinish(finishReason: 'stop', toolCalls: const [], contentSoFar: contentStr);
+          yield ChatStreamFinish(
+            finishReason: 'stop',
+            toolCalls: const [],
+            contentSoFar: contentStr,
+          );
           return;
         }
 
@@ -393,7 +502,8 @@ class ProjectCoordinatorSession {
           Map<String, dynamic> args = {};
           try {
             final raw = call.function.arguments.trim();
-            if (raw.startsWith('{')) args = (jsonDecode(raw) as Map).cast<String, dynamic>();
+            if (raw.startsWith('{'))
+              args = (jsonDecode(raw) as Map).cast<String, dynamic>();
           } catch (_) {}
 
           // Progressive tool disclosure: unlock a gated group for the rest of
@@ -403,10 +513,12 @@ class ProjectCoordinatorSession {
             final String note;
             if (_gatedToolGroups.containsKey(group)) {
               _unlockedToolGroups.add(group);
-              note = 'Unlocked "$group" tools — they are now available; call '
+              note =
+                  'Unlocked "$group" tools — they are now available; call '
                   'them on your next step.';
             } else {
-              note = 'Unknown tool group "$group". Valid groups: '
+              note =
+                  'Unknown tool group "$group". Valid groups: '
                   '${_gatedToolGroups.keys.join(', ')}.';
             }
             onToolResult?.call(note);
@@ -430,7 +542,10 @@ class ProjectCoordinatorSession {
             continue; // refuse the looping call; model must change course
           }
 
-          final result = await executor.execute(name: call.function.name, args: args);
+          final result = await executor.execute(
+            name: call.function.name,
+            args: args,
+          );
           // Show only a short summary in the chat — big payloads (a whole plan or
           // file the model read) shouldn't flood the transcript. The MODEL still
           // receives the full result via `body`/history below.
@@ -448,12 +563,17 @@ class ProjectCoordinatorSession {
     } catch (e) {
       // Drop everything this turn added (user message + any partial assistant/
       // tool messages) so the conversation stays well-formed for the next try.
-      if (rollbackTo < _history.length) _history.removeRange(rollbackTo, _history.length);
+      if (rollbackTo < _history.length)
+        _history.removeRange(rollbackTo, _history.length);
       rethrow;
     }
 
     // Hit the round cap — finish gracefully.
-    yield const ChatStreamFinish(finishReason: 'length', toolCalls: [], contentSoFar: '');
+    yield const ChatStreamFinish(
+      finishReason: 'length',
+      toolCalls: [],
+      contentSoFar: '',
+    );
   }
 
   /// A short, UI-friendly version of a tool result so large payloads (e.g. an
@@ -470,7 +590,9 @@ class ProjectCoordinatorSession {
         ? '${firstLine.substring(0, cap).trimRight()}…'
         : firstLine;
     final more = lineCount - 1;
-    return more > 0 ? '$head  (+$more more line${more == 1 ? '' : 's'})' : '$head…';
+    return more > 0
+        ? '$head  (+$more more line${more == 1 ? '' : 's'})'
+        : '$head…';
   }
 
   /// Repairs a message list for the wire. Failed turns can leave a run of
@@ -479,7 +601,9 @@ class ProjectCoordinatorSession {
   /// long same-role runs. We merge consecutive same-role *text* messages into
   /// one. Messages carrying tool_calls and `tool`-role results are left intact
   /// (they must keep their exact structure for tool-calling to work).
-  static List<Map<String, dynamic>> _sanitizeForWire(List<Map<String, dynamic>> msgs) {
+  static List<Map<String, dynamic>> _sanitizeForWire(
+    List<Map<String, dynamic>> msgs,
+  ) {
     final out = <Map<String, dynamic>>[];
     for (final m in msgs) {
       final role = m['role'];
@@ -491,7 +615,9 @@ class ProjectCoordinatorSession {
           out.last['tool_calls'] == null) {
         final prev = (out.last['content'] ?? '').toString();
         final cur = (m['content'] ?? '').toString();
-        out.last['content'] = prev.isEmpty ? cur : (cur.isEmpty ? prev : '$prev\n$cur');
+        out.last['content'] = prev.isEmpty
+            ? cur
+            : (cur.isEmpty ? prev : '$prev\n$cur');
         continue;
       }
       out.add(Map<String, dynamic>.from(m));
@@ -573,7 +699,12 @@ class ProjectCoordinatorSession {
   /// so subsequent turns see the outcomes.
   Future<List<String>> executeToolCalls(List<ToolCall> toolCalls) async {
     if (db == null || toolCalls.isEmpty) {
-      return toolCalls.map((c) => 'Tool ${c.function.name} not executed (no DB or empty calls).').toList();
+      return toolCalls
+          .map(
+            (c) =>
+                'Tool ${c.function.name} not executed (no DB or empty calls).',
+          )
+          .toList();
     }
 
     final executor = CoordinatorToolExecutor(

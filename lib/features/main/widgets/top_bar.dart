@@ -16,23 +16,33 @@ class TopBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Phones can't fit the full bar (wordmark + client + project + connection
+    // label), so drop the wordmark and shrink to an icon-only toggle there.
+    final narrow = MediaQuery.sizeOf(context).width < 600;
     return Container(
       height: 52,
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
+        border: Border(
+          bottom: BorderSide(color: Theme.of(context).dividerColor),
+        ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.hub_outlined, size: 22),
-              SizedBox(width: 8),
-              Text('Nexus Projects', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+              const Icon(Icons.hub_outlined, size: 22),
+              if (!narrow) ...[
+                const SizedBox(width: 8),
+                const Text(
+                  'Nexus Projects',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                ),
+              ],
             ],
           ),
-          const SizedBox(width: 24),
+          SizedBox(width: narrow ? 10 : 24),
 
           // Prominent Current Client indicator (multi-tenancy root)
           Consumer(
@@ -42,7 +52,9 @@ class TopBar extends ConsumerWidget {
 
               final clientName = clientsAsync.when(
                 data: (clients) {
-                  final match = clients.where((c) => c.client_pk == currentClientId).firstOrNull;
+                  final match = clients
+                      .where((c) => c.client_pk == currentClientId)
+                      .firstOrNull;
                   return match?.name ?? currentClientId.toString();
                 },
                 loading: () => currentClientId.toString(),
@@ -50,12 +62,18 @@ class TopBar extends ConsumerWidget {
               );
 
               return Container(
-                constraints: const BoxConstraints(maxWidth: 160),
+                constraints: BoxConstraints(maxWidth: narrow ? 110 : 160),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primaryContainer.withValues(alpha: 0.4),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -65,7 +83,10 @@ class TopBar extends ConsumerWidget {
                     Flexible(
                       child: Text(
                         clientName,
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -83,11 +104,15 @@ class TopBar extends ConsumerWidget {
               builder: (context, ref, _) {
                 final currentClientId = ref.watch(currentClientIdProvider);
                 final currentProjectId = ref.watch(currentProjectIdProvider);
-                final projectsAsync = ref.watch(projectsForClientProvider(currentClientId));
+                final projectsAsync = ref.watch(
+                  projectsForClientProvider(currentClientId),
+                );
 
                 final projectName = projectsAsync.when(
                   data: (projects) {
-                    final match = projects.where((p) => p.project_pk == currentProjectId).firstOrNull;
+                    final match = projects
+                        .where((p) => p.project_pk == currentProjectId)
+                        .firstOrNull;
                     return match?.name ?? currentProjectId.toString();
                   },
                   loading: () => currentProjectId.toString(),
@@ -95,7 +120,10 @@ class TopBar extends ConsumerWidget {
                 );
 
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     border: Border.all(color: Theme.of(context).dividerColor),
                     borderRadius: BorderRadius.circular(6),
@@ -121,13 +149,26 @@ class TopBar extends ConsumerWidget {
 
           const Spacer(),
 
-          // Connection mode toggle (from prior work)
+          // Connection mode toggle (icon-only on phones to save width).
           Consumer(
             builder: (context, ref, _) {
               final mode = ref.watch(connectionModeNotifierProvider);
+              final icon = Icon(
+                mode == 'local' ? Icons.computer : Icons.cloud,
+                size: 16,
+              );
+              void toggle() =>
+                  ref.read(connectionModeNotifierProvider.notifier).toggle();
+              if (narrow) {
+                return IconButton(
+                  tooltip: mode == 'local' ? 'Local' : 'Remote',
+                  onPressed: toggle,
+                  icon: icon,
+                );
+              }
               return OutlinedButton.icon(
-                onPressed: () => ref.read(connectionModeNotifierProvider.notifier).toggle(),
-                icon: Icon(mode == 'local' ? Icons.computer : Icons.cloud, size: 16),
+                onPressed: toggle,
+                icon: icon,
                 label: Text(mode == 'local' ? 'Local' : 'Remote'),
               );
             },
