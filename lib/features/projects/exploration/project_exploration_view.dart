@@ -39,13 +39,13 @@ class ProjectExplorationView extends ConsumerWidget {
   final String projectName;
 
   Future<void> _generate(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
     // Walk the tree: each story → its own scoped AI session → 1..N tasks. The
     // run keeps us on this screen (explorationStatus stays 'active' until done)
     // and updates per-story progress; the canvas shows a bar on each story.
     await ref.read(taskGeneratorProvider(projectId)).run();
+    if (!context.mounted) return; // generation can take minutes
     final p = ref.read(taskGeneratorProvider(projectId)).progress;
-    messenger.showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           'Generated ${p.totalTasks} task${p.totalTasks == 1 ? '' : 's'} '

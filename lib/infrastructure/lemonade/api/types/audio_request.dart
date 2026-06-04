@@ -2,7 +2,6 @@
 // Author: Geramy Loveless <support@nexus-projects.ai>
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
-import 'dart:typed_data';
 
 /// Body for `POST /v1/audio/speech` (TTS).
 class TextToSpeechRequest {

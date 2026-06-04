@@ -11,7 +11,7 @@ import 'package:nexus_projects_client/infrastructure/lemonade/providers/lemonade
 import 'package:nexus_projects_client/core/providers/app_shell_provider.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart'
-    show InferenceServersCompanion, NexusDatabase;
+    show InferenceServersCompanion;
 import 'package:nexus_projects_client/infrastructure/lemonade/services/secure_key_store.dart';
 import 'package:nexus_projects_client/features/ai_providers/providers/ai_servers_cache_provider.dart';
 

@@ -8,7 +8,6 @@
 library;
 
 import '../../../infrastructure/database/nexus_database.dart';
-import '../agent_assignment.dart';
 import '../orchestration/orchestrator_prompts.dart';
 
 /// A hidden kickoff (sent as the first turn) so the coordinator speaks first.
@@ -58,41 +57,5 @@ ${summary.isEmpty ? '' : '\nSummary:\n$summary\n'}
 Tailor your questions to this profile: if the industry/genre reads like a GAME, ask about the core loop, mechanics, progression, and win/lose; if an APPLICATION, ask about the target users, their key workflows, the main screens, and the data involved.''';
 }
 
-/// Turns the discovery story tree into tasks: each LEAF story becomes a worker
-/// task, stamped with its `story_fk` so task ↔ story is traceable both ways.
-/// Flips the project out of the Exploration phase and starts orchestration.
-/// Returns the number of tasks created.
-Future<int> generateTasksFromStories(NexusDatabase db, int projectId) async {
-  final stories = await db.getUserStoriesForProject(projectId);
-  final parents = <int>{
-    for (final s in stories)
-      if (s.parent_story_fk != null) s.parent_story_fk!,
-  };
-  // Leaves = stories with no children (the concrete, buildable items). If the
-  // tree is flat, every story is a leaf.
-  final leaves = stories.where((s) => !parents.contains(s.story_pk)).toList();
-  final worker = await resolveDefaultWorkerPersonaId(db, projectId);
-
-  var created = 0;
-  for (final s in leaves) {
-    final ac = (s.acceptanceCriteria ?? '').trim();
-    final desc = [
-      if (s.narrative.trim().isNotEmpty) s.narrative.trim(),
-      if (ac.isNotEmpty) '\nAcceptance criteria:\n$ac',
-    ].join('\n').trim();
-    await db.createTaskInProject(
-      projectPk: projectId,
-      title: s.title,
-      description: desc,
-      agentPk: worker,
-      storyPk: s.story_pk,
-    );
-    created++;
-  }
-
-  await db.setProjectExplorationStatus(projectId, 'complete');
-  if (created > 0) {
-    await db.setProjectOrchestrationState(projectId, 'running');
-  }
-  return created;
-}
+// Task generation from the story tree lives in task_generator.dart
+// (TaskGenerator) — it runs a scoped AI session per story to produce 1..N tasks.

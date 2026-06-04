@@ -136,7 +136,26 @@ class SetupChatController extends ChangeNotifier {
     }
   }
 
-  Future<SetupSession?> _ensureSession() async {
+  Future<SetupSession?>? _sessionFuture;
+
+  /// Lazily builds the setup session ONCE. Memoizes the in-flight future so two
+  /// concurrent callers (e.g. finalize() + completeSetup()/send()) can't each
+  /// run the full init and orphan a duplicate SetupSession.
+  Future<SetupSession?> _ensureSession() {
+    if (_session != null) return Future<SetupSession?>.value(_session);
+    return _sessionFuture ??= _buildSession();
+  }
+
+  Future<SetupSession?> _buildSession() async {
+    try {
+      return await _buildSessionInner();
+    } finally {
+      // Let a later attempt rebuild if this one failed to produce a session.
+      if (_session == null) _sessionFuture = null;
+    }
+  }
+
+  Future<SetupSession?> _buildSessionInner() async {
     if (_session != null) return _session;
     final resolved = await _ref.read(
       projectInferenceProvider((
@@ -386,7 +405,7 @@ class SetupChatController extends ChangeNotifier {
   /// NO LONGER generate tasks here — that was "too eager". Instead the project
   /// moves into discovery: the Coordinator interviews the user and builds the
   /// user-story tree, and tasks are only created later when the user presses
-  /// "Generate tasks from stories" (see `generateTasksFromStories`).
+  /// "Generate tasks from stories" (see `TaskGenerator` in task_generator.dart).
   Future<void> completeSetup() async {
     refining = false;
     final db = _ref.read(nexusDatabaseProvider);

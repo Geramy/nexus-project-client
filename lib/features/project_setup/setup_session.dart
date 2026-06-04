@@ -124,13 +124,16 @@ How to work:
   to confirm a direction — not for every exchange. Selection questions are
   MULTI-SELECT by default (leave `multi` true); set `multi:false` only for a
   strict single choice (yes/no, "continue vs. add more").
-- When you're confident about something the user said or picked, call
-  `propose_tags` to put it on the board. You MAY batch several tags in one call,
-  across categories. Tags save as `proposed` for the user to accept — you don't
-  need a `propose_tags` after every single message.
-- Capture databases and services you INFER from the description (orders/users →
-  a `databases` tag like PostgreSQL; payments → a `services` tag like Stripe).
-  Derive `languages`/`frameworks` yourself rather than quizzing the user.
+- Propose tags ONLY for what the user has EXPLICITLY said or picked. Do NOT
+  fill the board ahead of them: answering one question (e.g. "iOS, Android, Web")
+  should propose ONLY that category's tags (platforms) — never silently invent
+  objectives, features, databases, or services they haven't mentioned yet. Ask
+  about the next topic instead. Tags save as `proposed` for the user to accept.
+- The ONLY things you may add without the user stating them are the technical
+  STACK — `languages`/`frameworks` — and only AFTER the platforms/objectives are
+  known, kept minimal. For `databases`/`services`, propose a tag only when the
+  user's description clearly implies it (orders/users → PostgreSQL; payments →
+  Stripe); otherwise ask.
 - ADAPTIVE SCOPE (optional helpers): after proposing `industries` you may call
   `scope_status` to surface a sub-axis (e.g. Gaming → Genre) and `scope_options`
   for industry/platform-tailored vocabulary. Use them when they help — honor the

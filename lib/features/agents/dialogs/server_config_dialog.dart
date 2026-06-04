@@ -12,8 +12,6 @@ import 'package:nexus_projects_client/infrastructure/models/ui/inference_server.
 // The old InferenceClient has been fully removed from server management surfaces.
 import 'package:nexus_projects_client/infrastructure/lemonade/api/lemonade_client.dart';
 import 'package:nexus_projects_client/infrastructure/lemonade/models/server_config.dart';
-import 'package:nexus_projects_client/infrastructure/lemonade/api/types/model_info.dart'
-    as lemonade_model;
 
 /// Server configuration dialog (model selection, refresh, limits).
 /// Extracted from the monolithic center_agents_view during organization refactor.
@@ -74,12 +72,6 @@ class _ServerConfigDialogState extends ConsumerState<ServerConfigDialog> {
       final effectiveKey = rawKey.trim().isNotEmpty
           ? rawKey.trim()
           : 'lemonade';
-
-      // Use a temporary server object just for the client (with live values)
-      final serverForClient = _server.copyWith(
-        baseUrl: currentBaseUrl,
-        apiKey: effectiveKey,
-      );
 
       // Use the rich ported LemonadeApiClient (ModelsEndpoint) for refresh.
       // This is the replacement for the deprecated InferenceClient in all server

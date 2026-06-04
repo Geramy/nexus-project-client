@@ -155,7 +155,7 @@ class ApiChatMessage {
         : null;
 
     return ApiChatMessage(
-      role: role.role!,
+      role: role.role,
       content: contentString,
       toolCalls: calls,
     );

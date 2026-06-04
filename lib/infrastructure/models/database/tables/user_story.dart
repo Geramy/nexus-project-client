@@ -10,7 +10,7 @@ import 'project.dart';
 /// the discovery interview where the Coordinator fleshes the idea out BEFORE any
 /// tasks are generated. Stories form a tree (epics → stories → sub-stories) via
 /// [parent_story_fk], and are rendered as a UML-style node/edge diagram. Tasks
-/// later link back to the story item they implement (Tasks.story_fk), so the
+/// later link back to the story item they implement (Tasks.task_story_fk), so the
 /// system can trace any task to its originating story and vice-versa.
 class UserStories extends Table {
   IntColumn get story_pk => integer().autoIncrement()();

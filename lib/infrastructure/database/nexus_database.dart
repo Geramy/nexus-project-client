@@ -1090,12 +1090,16 @@ class NexusDatabase extends _$NexusDatabase {
   }
 
   /// Delete a story and all of its descendants (depth-first), plus their notes.
-  Future<void> deleteUserStory(int storyPk) async {
+  /// Wrapped in a transaction so a crash/concurrent write can't orphan rows.
+  Future<void> deleteUserStory(int storyPk) =>
+      transaction(() => _deleteUserStoryRec(storyPk));
+
+  Future<void> _deleteUserStoryRec(int storyPk) async {
     final kids = await (select(
       userStories,
     )..where((s) => s.parent_story_fk.equals(storyPk))).get();
     for (final k in kids) {
-      await deleteUserStory(k.story_pk);
+      await _deleteUserStoryRec(k.story_pk);
     }
     await (delete(storyNotes)..where((n) => n.story_fk.equals(storyPk))).go();
     await (delete(userStories)..where((s) => s.story_pk.equals(storyPk))).go();
@@ -1768,29 +1772,34 @@ class NexusDatabase extends _$NexusDatabase {
     int projectPk,
     int agentPk,
     String agentName,
-  ) async {
+  ) {
     final scope = agentSessionScope(agentPk);
-    final existing =
-        await (select(chatSessions)
-              ..where(
-                (s) =>
-                    s.project_fk.equals(projectPk) & s.plan_path.equals(scope),
-              )
-              ..orderBy([
-                (s) => OrderingTerm(
-                  expression: s.updatedAt,
-                  mode: OrderingMode.desc,
-                ),
-              ]))
-            .get();
-    if (existing.isNotEmpty) return existing.first.session_pk;
-    return createChatSession(
-      ChatSessionsCompanion.insert(
-        project_fk: projectPk,
-        plan_path: Value(scope),
-        title: Value(agentName.trim().isEmpty ? 'Agent' : agentName.trim()),
-      ),
-    );
+    // Transaction so two concurrent orchestrator stages for the SAME agent
+    // (cap up to 12) can't both find none and both insert → duplicate sessions.
+    return transaction(() async {
+      final existing =
+          await (select(chatSessions)
+                ..where(
+                  (s) =>
+                      s.project_fk.equals(projectPk) &
+                      s.plan_path.equals(scope),
+                )
+                ..orderBy([
+                  (s) => OrderingTerm(
+                    expression: s.updatedAt,
+                    mode: OrderingMode.desc,
+                  ),
+                ]))
+              .get();
+      if (existing.isNotEmpty) return existing.first.session_pk;
+      return createChatSession(
+        ChatSessionsCompanion.insert(
+          project_fk: projectPk,
+          plan_path: Value(scope),
+          title: Value(agentName.trim().isEmpty ? 'Agent' : agentName.trim()),
+        ),
+      );
+    });
   }
 
   Future<void> touchChatSession(int sessionPk, {String? title}) async {

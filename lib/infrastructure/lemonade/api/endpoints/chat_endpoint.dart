@@ -7,7 +7,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import '../exceptions.dart';
 import '../lemonade_client.dart';
 import '../sse/tool_call_assembler.dart';
 import '../types/chat_request.dart';

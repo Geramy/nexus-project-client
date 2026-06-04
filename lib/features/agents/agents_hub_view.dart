@@ -8,7 +8,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:nexus_projects_client/core/providers/app_shell_provider.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart'
-    show NexusDatabase, AgentPersonasCompanion;
+    show AgentPersonasCompanion;
 
 import 'tabs/personas_tab.dart';
 import 'tabs/cost_usage_tab.dart';

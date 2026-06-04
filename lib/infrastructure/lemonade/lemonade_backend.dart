@@ -5,12 +5,10 @@
 /// Adapter that makes the rich ported `LemonadeApiClient` implement the
 /// common `InferenceBackend` interface.
 
-import 'dart:typed_data';
 
 import '../inference/inference_backend.dart' as iface;
 import 'api/lemonade_client.dart';
 import 'api/types/audio_request.dart';
-import 'api/types/chat_message.dart';
 import 'api/types/chat_request.dart';
 import 'api/types/chat_response.dart' as api_types;
 import 'api/types/tool_call.dart' as tc;
@@ -261,9 +259,6 @@ class LemonadeBackend implements iface.InferenceBackend {
     }
     throw StateError('Unknown ChatStreamEvent subtype');
   }
-
-  static ApiChatMessage _messageFromWire(Map<String, dynamic> json) =>
-      ApiChatMessage.fromJson(json.cast());
 
   static iface.ToolCall _toolCallToIface(tc.ToolCall tc) {
     return iface.ToolCall(

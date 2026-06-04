@@ -3,7 +3,6 @@
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
 import 'dart:async';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:nexus_projects_client/services/audio/audio_recorder_service.dart';

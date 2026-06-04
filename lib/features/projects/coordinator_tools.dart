@@ -1768,21 +1768,22 @@ class CoordinatorToolExecutor {
       return 'Could not draft stories from that text — try add_user_story.';
     }
 
+    // Read the current sibling count ONCE, then append in order.
+    final existing = await db.getUserStoriesForProject(projectId);
+    final base = existing.where((s) => s.parent_story_fk == parentId).length;
     var made = 0;
     for (final it in items) {
       final title = (it['title'] ?? '').toString().trim();
       if (title.isEmpty) continue;
       final desc = (it['description'] ?? '').toString().trim();
       final note = (it['note'] ?? '').toString().trim();
-      final existing = await db.getUserStoriesForProject(projectId);
-      final sib = existing.where((s) => s.parent_story_fk == parentId).length;
       final id = await db.createUserStory(
         UserStoriesCompanion.insert(
           project_fk: projectId,
           parent_story_fk: Value(parentId),
           title: title,
           narrative: Value(desc),
-          orderIndex: Value(sib),
+          orderIndex: Value(base + made),
         ),
       );
       if (note.isNotEmpty) await db.createStoryNote(id, note);

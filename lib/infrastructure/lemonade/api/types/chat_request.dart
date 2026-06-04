@@ -3,7 +3,6 @@
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
 import 'chat_message.dart';
-import 'tool_definition.dart';
 
 class ChatCompletionRequest {
   final String model;

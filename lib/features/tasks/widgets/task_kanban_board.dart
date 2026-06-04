@@ -4,10 +4,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:drift/drift.dart' show Value;
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
-import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart'
-    show NexusDatabase;
 
 /// Kanban board view for the Project Overview (moved during organization refactor 2026-05).
 /// Groups tasks by status columns. Supports drag-to-move between columns.

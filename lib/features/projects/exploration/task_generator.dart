@@ -82,7 +82,10 @@ class TaskGenerator extends ChangeNotifier {
 
   /// Walk the leaf stories and generate tasks for each via a scoped AI call.
   Future<void> run() async {
+    // Re-entrancy guard set SYNCHRONOUSLY (before any await) so a double-tap
+    // can't start two runs and create every task twice.
     if (progress.running) return;
+    _emit(progress.copyWith(running: true));
     final db = _ref.read(nexusDatabaseProvider);
 
     final stories = await db.getUserStoriesForProject(projectId);

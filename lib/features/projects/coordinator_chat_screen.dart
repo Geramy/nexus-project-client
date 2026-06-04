@@ -96,7 +96,6 @@ class _ProjectCoordinatorChatScreenState
   // arrived yet (drives the "Coordinator is thinking…" indicator).
   bool _isThinking = false;
   VoiceState _voiceState = VoiceState.idle;
-  String _liveVoiceTranscript = '';
 
   /// Concrete backend for the selected server (LemonadeBackend via factory).
   InferenceClient? _inferenceClient;
@@ -174,9 +173,8 @@ class _ProjectCoordinatorChatScreenState
         '[Voice] Agent="${persona?.name ?? "(none)"}" → server "${chosen.name}" @ ${chosen.baseUrl}',
       );
 
-      final models = chosen.availableModelsJson != null
-          ? (jsonDecode(chosen.availableModelsJson!) as List).cast<String>()
-          : const <String>[];
+      final models =
+          (jsonDecode(chosen.availableModelsJson) as List).cast<String>();
 
       // Live model list from the chosen (agent's) server.
       final cache = ref.read(aiServersCacheProvider.notifier);
@@ -241,7 +239,7 @@ class _ProjectCoordinatorChatScreenState
         id: chosen.server_pk.toString(),
         name: chosen.name,
         baseUrl: chosen.baseUrl,
-        apiKey: chosen.apiKey ?? '',
+        apiKey: chosen.apiKey,
         providerType: 'lemonade',
         selectedModel: chosen.selectedModel,
         availableModels: models,
@@ -660,7 +658,6 @@ class _ProjectCoordinatorChatScreenState
 
     setState(() {
       _isVoiceCallActive = !_isVoiceCallActive;
-      _liveVoiceTranscript = '';
       if (!_isVoiceCallActive) {
         _isMicMuted = false;
       }

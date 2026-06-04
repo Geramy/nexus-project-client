@@ -2,7 +2,6 @@
 // Author: Geramy Loveless <support@nexus-projects.ai>
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
-import '../exceptions.dart';
 import '../lemonade_client.dart';
 import '../types/audio_request.dart';
 import '../types/audio_response.dart';

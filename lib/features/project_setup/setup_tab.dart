@@ -63,7 +63,13 @@ class _SetupTabState extends ConsumerState<SetupTab> {
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
 
-    // Generate /PLANS in the background — don't make the user wait for it.
+    // Write the durable state FIRST (setupStatus=complete, explorationStatus=
+    // active) so it can't race the background plan generation below.
+    await controller.completeSetup();
+    if (!mounted) return;
+
+    // Generate /PLANS in the background — don't make the user wait. (Runs after
+    // completeSetup so they can't both mutate the controller concurrently.)
     unawaited(() async {
       try {
         await controller.finalize();
@@ -71,10 +77,6 @@ class _SetupTabState extends ConsumerState<SetupTab> {
         /* best-effort; the user stories drive tasks now */
       }
     }());
-
-    // Enter the Exploration (user-story) phase (sets explorationStatus=active).
-    await controller.completeSetup();
-    if (!mounted) return;
 
     // Take the user to the project workspace, which now shows the two-pane
     // Exploration screen (user-story tree + discovery chat).

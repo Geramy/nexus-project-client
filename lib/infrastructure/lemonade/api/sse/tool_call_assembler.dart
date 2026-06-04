@@ -6,7 +6,6 @@
 
 // The types are defined in chat_response.dart which imports tool_call.dart.
 // We import from the response file so both ToolCall and PartialToolCall resolve.
-import '../types/chat_message.dart'; // gives us ApiChatMessage for _map helpers if needed
 import '../types/tool_call.dart' as tc;
 
 /// Accumulates indexed `delta.tool_calls[]` fragments across streaming chunks.
