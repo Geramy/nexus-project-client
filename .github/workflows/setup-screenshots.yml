@@ -101,8 +101,13 @@ jobs:
           xvfb-run -a flutter test integration_test/exploration_flow_screens_test.dart \
             -d linux --reporter expanded
 
+      # Always bundle whatever screenshots WERE captured, even if a later live
+      # step (e.g. the exploration walkthrough) failed or timed out — the setup
+      # flow's shots are still worth shipping. Publish no longer gates on this
+      # job's success, so this artifact is best-effort.
       - name: Bundle screenshots + timing into a ZIP
         id: zip
+        if: always()
         run: |
           NAME="nexus-setup-screenshots-${{ steps.ver.outputs.version }}"
           mkdir -p "dist/$NAME"

@@ -33,7 +33,14 @@ jobs:
       version: ${{ github.ref_name }}
 
   publish:
+    # Wait for BOTH to finish so the screenshots ZIP can be bundled when it's
+    # ready — but only REQUIRE the installer build to succeed. The live-AI
+    # screenshot capture is best-effort: a stalled inference request (12-min
+    # timeout) or any screenshot failure must never block shipping installers,
+    # which the in-app updater depends on. Whatever screenshots WERE captured
+    # still get bundled; if none, the release just ships without them.
     needs: [build, screenshots]
+    if: ${{ always() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Download installers
