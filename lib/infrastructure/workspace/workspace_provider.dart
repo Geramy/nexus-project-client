@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'async_lock.dart';
 import 'workspace.dart';
 import 'vhd_workspace.dart';
 
@@ -16,6 +17,41 @@ import 'vhd_workspace.dart';
 Future<String> projectDiskPath(int projectId) async {
   final base = (await getApplicationSupportDirectory()).path;
   return p.join(base, 'workspaces', 'project_$projectId.nxtprj');
+}
+
+/// Host path of a per-TASK working-tree disk — an isolated `.nxtprj` holding one
+/// task's checked-out files while it runs concurrently. Git objects/refs stay in
+/// the project disk; this holds only the task's working-tree file state.
+Future<String> taskDiskPath(int projectId, int taskPk) async {
+  final base = (await getApplicationSupportDirectory()).path;
+  return p.join(
+      base, 'workspaces', 'tasks', 'project_${projectId}_task_$taskPk.nxtprj');
+}
+
+/// Delete a finished task's working-tree disk (best-effort). The project's git
+/// object/ref database is untouched — only the task's scratch tree is removed.
+Future<void> deleteTaskDisk(int projectId, int taskPk) async {
+  try {
+    final f = File(await taskDiskPath(projectId, taskPk));
+    if (await f.exists()) await f.delete();
+  } catch (_) {}
+}
+
+/// Remove any leftover per-task working-tree disks (e.g. from a crash) for a
+/// fresh orchestration start. Best-effort.
+Future<void> pruneTaskDisks(int projectId) async {
+  try {
+    final base = (await getApplicationSupportDirectory()).path;
+    final dir = Directory(p.join(base, 'workspaces', 'tasks'));
+    if (!await dir.exists()) return;
+    await for (final e in dir.list()) {
+      if (e is File && p.basename(e.path).startsWith('project_${projectId}_task_')) {
+        try {
+          await e.delete();
+        } catch (_) {}
+      }
+    }
+  } catch (_) {}
 }
 
 /// The project's workspace: a single-file SQLite "virtual disk", accessed
@@ -28,6 +64,29 @@ final workspaceFsProvider = FutureProvider.family<Workspace, int>((ref, projectI
   final ws = await VhdWorkspace.open(path);
   ref.onDispose(() => ws.dispose());
   return ws;
+});
+
+/// An ISOLATED per-task working tree (its own `.nxtprj`), so concurrent task
+/// agents don't clobber each other's files. Keyed by (projectId, taskPk). The
+/// orchestrator hydrates it from the task branch (via the shared git engine,
+/// under the git lane) and commits it back; the file is deleted on completion.
+final taskWorkspaceProvider =
+    FutureProvider.family<Workspace, ({int projectId, int taskPk})>((
+  ref,
+  key,
+) async {
+  final path = await taskDiskPath(key.projectId, key.taskPk);
+  await Directory(p.dirname(path)).create(recursive: true);
+  final ws = await VhdWorkspace.open(path);
+  ref.onDispose(() => ws.dispose());
+  return ws;
+});
+
+/// Per-project "git lane": serializes all multi-step git object/ref operations
+/// (materialize / commit / merge) across concurrent task agents, since the
+/// libgit2 + SQLite engine is single-isolate. Kept alive for the session.
+final gitLaneProvider = Provider.family<AsyncLock, int>((ref, projectId) {
+  return AsyncLock();
 });
 
 /// Bumped to force the browser to re-list after a mutation (create/delete/move).

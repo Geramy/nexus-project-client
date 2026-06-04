@@ -180,15 +180,17 @@ class NxtprjGitEngine {
     required String message,
     String authorName = 'Coordinator',
     String authorEmail = 'agent@nexus.local',
+    Workspace? tree,
   }) async {
-    final entries = await _ws.walk();
+    final ws = tree ?? _ws;
+    final entries = await ws.walk();
     // Collect file contents keyed by their path segments.
     final files = <List<String>, Uint8List>{};
     for (final e in entries) {
       if (e.isDirectory) continue;
       final segs = _segments(e.path);
       if (segs.isEmpty) continue;
-      files[segs] = await _ws.readBytes(e.path);
+      files[segs] = await ws.readBytes(e.path);
     }
 
     final treeOid = _buildTree(files);
@@ -200,6 +202,75 @@ class NxtprjGitEngine {
       authorEmail: authorEmail,
       treeHex: treeOid,
       parentHex: parentHex,
+    );
+  }
+
+  /// Commit the full contents of an ISOLATED working tree [tree] onto [branch]
+  /// in the shared object/ref database — without touching HEAD or any other
+  /// working tree. The parent is [branch]'s current tip and the branch ref is
+  /// advanced directly, so any number of per-task trees can commit to their own
+  /// branches concurrently (serialize the call through the git lane). Returns
+  /// the new commit hex.
+  Future<String> commitFrom(
+    Workspace tree, {
+    required String branch,
+    required String message,
+    String authorName = 'Coordinator',
+    String authorEmail = 'agent@nexus.local',
+  }) async {
+    final entries = await tree.walk();
+    final files = <List<String>, Uint8List>{};
+    for (final e in entries) {
+      if (e.isDirectory) continue;
+      final segs = _segments(e.path);
+      if (segs.isEmpty) continue;
+      files[segs] = await tree.readBytes(e.path);
+    }
+    final treeOid = _buildTree(files);
+    final refName = 'refs/heads/$branch';
+    final parentHex = _resolveOid(refName);
+    return _createCommit(
+      message: message,
+      authorName: authorName,
+      authorEmail: authorEmail,
+      treeHex: treeOid,
+      parentHex: parentHex,
+      refName: refName,
+    );
+  }
+
+  /// Hydrate an isolated working tree [tree] with the tip of [branch] (writing
+  /// every tracked blob, deleting files absent from that tree) — the per-task
+  /// equivalent of [checkoutBranch], but it never moves HEAD or the shared tree.
+  /// No-op (clears nothing) when the branch is unborn.
+  Future<void> materializeInto(String branch, Workspace tree) async {
+    final tipHex = _resolveOid('refs/heads/$branch');
+    if (tipHex == null) return;
+    await _materializeTree(tipHex, tree: tree);
+  }
+
+  /// Create [name] pointing at [base]'s tip without checking it out or touching
+  /// any working tree (ref-only). Used to root a task branch on main/parent so a
+  /// per-task tree can then be materialized from it. No-op if [name] exists.
+  Future<void> createBranchAt(String name, {required String base}) async {
+    final clean = name.trim();
+    if (clean.isEmpty ||
+        !_branchNameOk.hasMatch(clean) ||
+        clean.startsWith('/') ||
+        clean.endsWith('/')) {
+      throw StateError('Invalid branch name: "$name"');
+    }
+    final refName = 'refs/heads/$clean';
+    final exists = _ws.database
+        .select('SELECT 1 FROM git_refs WHERE name=?', [refName]).isNotEmpty;
+    if (exists) return;
+    final baseHex = _resolveOid('refs/heads/$base');
+    if (baseHex == null) {
+      throw StateError('Base branch "$base" has no commit to branch from.');
+    }
+    _ws.database.execute(
+      'INSERT INTO git_refs(name, target, symbolic) VALUES(?, ?, NULL)',
+      [refName, baseHex],
     );
   }
 
@@ -307,12 +378,16 @@ class NxtprjGitEngine {
     required String authorEmail,
     required String treeHex,
     required String? parentHex,
+    String? refName,
   }) {
     final sigOut = calloc<Pointer<git_signature>>();
     final cName = authorName.toNativeUtf8();
     final cEmail = authorEmail.toNativeUtf8();
     final cMessage = message.toNativeUtf8();
-    final refNameStr = _commitRefName();
+    // Advance an explicit branch ref when given (so a per-task commit moves
+    // task/<id> directly, never the shared HEAD — the key to safe concurrency);
+    // otherwise move whatever branch HEAD points at.
+    final refNameStr = refName ?? _commitRefName();
     final treeOid = calloc<git_oid>();
     final treeOut = calloc<Pointer<git_tree>>();
     final commitOut = calloc<git_oid>();
@@ -714,17 +789,18 @@ class NxtprjGitEngine {
 
   /// Overwrite the workspace files to match [commitHex]'s tree: write every
   /// tracked blob and delete workspace files absent from that tree.
-  Future<void> _materializeTree(String commitHex) async {
+  Future<void> _materializeTree(String commitHex, {Workspace? tree}) async {
+    final ws = tree ?? _ws;
     final target = _flattenHeadTree(commitHex); // rel -> blob oid hex
     for (final entry in target.entries) {
-      await _ws.writeBytes('/${entry.key}', _readBlobBytes(entry.value));
+      await ws.writeBytes('/${entry.key}', _readBlobBytes(entry.value));
     }
-    final wsEntries = await _ws.walk();
+    final wsEntries = await ws.walk();
     for (final e in wsEntries) {
       if (e.isDirectory) continue;
       final rel = _segments(e.path).join('/');
       if (rel.isNotEmpty && !target.containsKey(rel)) {
-        await _ws.delete(e.path);
+        await ws.delete(e.path);
       }
     }
   }
