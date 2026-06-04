@@ -54,22 +54,41 @@ class _SetupTabState extends ConsumerState<SetupTab> {
     }
   }
 
-  Future<void> _finalize() async {
+  /// The single final setup step: generate the plan files (in the background,
+  /// for the Plan tab) AND finish setup, then go STRAIGHT to the post-setup
+  /// Exploration screen (the user-story / workflow step). No second "done"
+  /// button, no separate refine stage.
+  Future<void> _finalizeAndExplore() async {
     final controller = ref.read(setupChatControllerProvider(_key));
-    try {
-      final result = await controller.finalize();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result), duration: const Duration(seconds: 4)),
-        );
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+
+    // Generate /PLANS in the background — don't make the user wait for it.
+    unawaited(() async {
+      try {
+        await controller.finalize();
+      } catch (_) {
+        /* best-effort; the user stories drive tasks now */
       }
-    } catch (_) {
-      if (mounted && controller.error != null) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(controller.error!)));
-      }
-    }
+    }());
+
+    // Enter the Exploration (user-story) phase (sets explorationStatus=active).
+    await controller.completeSetup();
+    if (!mounted) return;
+
+    // Take the user to the project workspace, which now shows the two-pane
+    // Exploration screen (user-story tree + discovery chat).
+    ref.read(currentMainViewProvider.notifier).setView(MainView.projectPlans);
+    navigator.maybePop(); // close the full-screen setup wizard
+    messenger.showSnackBar(
+      const SnackBar(
+        duration: Duration(seconds: 6),
+        content: Text(
+          'Initial project setup is done — now let\'s build out your user '
+          'stories and workflow.',
+        ),
+      ),
+    );
   }
 
   Future<void> _skip() async {
@@ -83,48 +102,18 @@ class _SetupTabState extends ConsumerState<SetupTab> {
     }
   }
 
-  Future<void> _complete() async {
-    final navigator = Navigator.of(context);
-    final messenger = ScaffoldMessenger.of(context);
-
-    // Kick the planning run off in the BACKGROUND — it expands the plan, the
-    // engineers review it, tasks are built, and orchestration starts, which can
-    // take a minute. We don't block the UI on it: jump straight to Tasks so the
-    // board fills in and agents start working in view, rather than holding the
-    // user on the setup screen the whole time.
-    unawaited(ref.read(setupChatControllerProvider(_key)).completeSetup());
-
-    if (!mounted) return;
-    ref.read(currentMainViewProvider.notifier).setView(MainView.tasks);
-    navigator.maybePop();
-    messenger.showSnackBar(
-      const SnackBar(
-        duration: Duration(seconds: 6),
-        content: Text(
-          'Planning your project… tasks will appear in Tasks and '
-          'agents will start working as it completes (this can take a minute).',
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    // Watch so the action bar tracks the shared interview's busy + phase state.
+    // Watch so the action bar's busy state tracks the shared interview.
     final busy = ref.watch(
       setupChatControllerProvider(_key).select((c) => c.busy),
-    );
-    final refining = ref.watch(
-      setupChatControllerProvider(_key).select((c) => c.refining),
     );
     return Column(
       children: [
         _ActionBar(
           busy: busy,
-          refining: refining,
           onSkip: _skip,
-          onFinalize: _finalize,
-          onComplete: _complete,
+          onFinalize: _finalizeAndExplore,
         ),
         const Divider(height: 1),
         Expanded(child: TagBoardView(projectPk: widget.projectId)),
@@ -136,17 +125,13 @@ class _SetupTabState extends ConsumerState<SetupTab> {
 class _ActionBar extends StatelessWidget {
   const _ActionBar({
     required this.busy,
-    required this.refining,
     required this.onSkip,
     required this.onFinalize,
-    required this.onComplete,
   });
 
   final bool busy;
-  final bool refining;
   final VoidCallback onSkip;
   final VoidCallback onFinalize;
-  final VoidCallback onComplete;
 
   @override
   Widget build(BuildContext context) {
@@ -156,29 +141,24 @@ class _ActionBar extends StatelessWidget {
         children: [
           const Icon(Icons.checklist_rtl, size: 18),
           const SizedBox(width: 8),
-          Expanded(
+          const Expanded(
             child: Text(
-              refining ? 'Refining Plans' : 'Project Setup',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              'Project Setup',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
           ),
-          if (!refining) ...[
-            TextButton(
-              onPressed: busy ? null : onSkip,
-              child: const Text('Skip'),
-            ),
-            const SizedBox(width: 8),
-            FilledButton.icon(
-              onPressed: busy ? null : onFinalize,
-              icon: const Icon(Icons.flag_outlined, size: 16),
-              label: const Text('Finalize & generate plans'),
-            ),
-          ] else
-            FilledButton.icon(
-              onPressed: busy ? null : onComplete,
-              icon: const Icon(Icons.task_alt, size: 16),
-              label: const Text('Done Refining - Finish'),
-            ),
+          TextButton(
+            onPressed: busy ? null : onSkip,
+            child: const Text('Skip'),
+          ),
+          const SizedBox(width: 8),
+          // The ONE final step: generate the plan, finish setup, and continue
+          // straight to the user-story / workflow (Exploration) screen.
+          FilledButton.icon(
+            onPressed: busy ? null : onFinalize,
+            icon: const Icon(Icons.arrow_forward, size: 16),
+            label: const Text('Generate plan & continue to user stories'),
+          ),
         ],
       ),
     );
