@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.7.1+24
+version: 1.8.0+25
 
 environment:
   sdk: ^3.11.5
@@ -88,6 +88,8 @@ dependencies:
   flutter_highlight: ^0.7.0
   highlight: ^0.7.0
   gpt_markdown: ^1.1.7
+  package_info_plus: ^9.0.1
+  crypto: ^3.0.7
 
 # No more record_platform_interface override — we now use the modern record 6.x
 # stack that lemonade_mobile successfully uses on macOS. If macOS debug builds
