@@ -36,8 +36,12 @@ import 'package:nexus_projects_client/infrastructure/workspace/vhd_workspace.dar
 void main() {
   final email = Platform.environment['NEXUS_EMAIL'];
   final password = Platform.environment['NEXUS_PASSWORD'];
-  final gateway =
-      Platform.environment['NEXUS_GATEWAY'] ?? 'https://api.nexus-projects.ai';
+  // The workflow always sets NEXUS_GATEWAY (to the secret, which may be empty),
+  // so treat an EMPTY value as "use the default" — env[..] is '' not null here.
+  final gatewayEnv = Platform.environment['NEXUS_GATEWAY'];
+  final gateway = (gatewayEnv == null || gatewayEnv.trim().isEmpty)
+      ? 'https://api.nexus-projects.ai'
+      : gatewayEnv.trim();
   final skip =
       (email == null || email.isEmpty || password == null || password.isEmpty)
       ? 'live E2E skipped: set NEXUS_EMAIL and NEXUS_PASSWORD (GitHub secrets) to run'
