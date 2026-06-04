@@ -589,10 +589,52 @@ class ProjectOrchestrator {
   /// role allowed to merge. If no Coordinator persona exists, the task is left
   /// awaiting a human merge.
   Future<void> _runMergeStage(Task task) async {
+    final handles = await _resolveWorkspaceHandles();
+    final git = handles.git;
+    // A subtask integrates into its parent's branch; a top-level task into main.
+    final targetBranch = await _integrationTargetBranch(task);
+    final branch = task.workBranch ?? 'task/${task.task_pk}';
+
+    await _db.beginTaskMerge(task.task_pk);
+
+    // FAST PATH: a clean merge needs no agent — do it deterministically. The git
+    // engine is conservative (it only reports a conflict when the SAME files
+    // changed on both sides, and commits nothing in that case), so a non-conflict
+    // outcome is safe to auto-approve. An agent is only pulled in for a real
+    // conflict, exactly as the user expects.
+    if (git != null) {
+      try {
+        await _checkout(git, targetBranch, task.task_pk);
+        final result = await git.merge(
+          branch,
+          message: 'Merge task #${task.task_pk}: ${task.title}',
+        );
+        if (result.outcome != MergeOutcome.conflicts) {
+          await _db.approveTask(task.task_pk);
+          debugPrint(
+            '[Orchestrator p$projectId] task ${task.task_pk}: auto-merged (${result.outcome.name}) into "$targetBranch".',
+          );
+          return;
+        }
+        debugPrint(
+          '[Orchestrator p$projectId] task ${task.task_pk}: merge conflicts on ${result.conflicts.length} file(s) — escalating.',
+        );
+      } catch (e) {
+        debugPrint(
+          '[Orchestrator p$projectId] task ${task.task_pk}: auto-merge errored ($e) — escalating.',
+        );
+      }
+    }
+
+    // CONFLICT PATH: a real conflict needs an agent (the Coordinator) to resolve
+    // it or send the task back for rework. If there's no Coordinator persona,
+    // don't stall forever — return the task to the board so the worker redoes it
+    // against the now-updated target branch.
     final persona = await _findPersonaForRole(AgentRole.coordinator);
     if (persona == null) {
+      await _db.reopenTask(task.task_pk);
       debugPrint(
-        '[Orchestrator p$projectId] task ${task.task_pk}: no Coordinator persona; leaving for human merge.',
+        '[Orchestrator p$projectId] task ${task.task_pk}: merge conflict, no Coordinator persona; sent back to the board for rework.',
       );
       return;
     }
@@ -603,16 +645,11 @@ class ProjectOrchestrator {
       );
       return;
     }
-    final handles = await _resolveWorkspaceHandles();
-    // A subtask integrates into its parent's branch; a top-level task into main.
-    // Put the worktree on that target before the Coordinator merges into it.
-    final targetBranch = await _integrationTargetBranch(task);
+    // Put the worktree on the target so the Coordinator resolves into it.
     await _checkout(handles.git, targetBranch, task.task_pk);
 
-    final branch = task.workBranch ?? 'task/${task.task_pk}';
     final prompts = await _loadPrompts();
     final vars = _varsFor(task, branch, targetBranch: targetBranch);
-    await _db.beginTaskMerge(task.task_pk);
 
     // Reuse the Coordinator's single per-agent session (see worker stage).
     final sessionPk = await _db.getOrCreateAgentChatSession(
