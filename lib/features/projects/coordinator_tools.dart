@@ -1838,13 +1838,57 @@ class CoordinatorToolExecutor {
       if (note.isNotEmpty) await db.createStoryNote(id, note);
       made++;
     }
-    return 'Drafted $made user stor${made == 1 ? 'y' : 'ies'} '
+    final summary =
+        'Drafted $made user stor${made == 1 ? 'y' : 'ies'} '
         '${usedAi ? '(rephrased + nested into a tree)' : '(split straight from '
               'your text — titles are literal, so tidy/rephrase + nest them with '
               'update_user_story and move_user_story)'}'
         '${parentId != null ? ' under #$parentId' : ''}. '
         'Check the shape with list_user_stories; fix any nesting with '
         'move_user_story if needed.';
+
+    // Coverage backstop (completeness-critic): surface a few open questions about
+    // what the user only NAMED in passing or left undefined, so the discovery
+    // interviewer has concrete gaps to probe next instead of treating the draft
+    // as a finished spec. Best-effort — a backend hiccup just means no extra
+    // questions this time; drafting never depends on it.
+    var openQuestions = const <String>[];
+    if (backend != null && mdl != null && mdl.isNotEmpty) {
+      const criticSystem =
+          'You review a product/feature description for GAPS a requirements '
+          'interviewer should follow up on: features the user NAMED but did not '
+          'DESCRIBE, steps of the flow with no detail, undefined error/edge '
+          'cases, and unstated assumptions. Return ONLY a JSON array of 2–4 '
+          'short, specific questions (strings) — no prose, no code fences. Base '
+          'them strictly on the input; do not invent features.';
+      try {
+        final raw = await scopedComplete(
+          backend: backend,
+          model: mdl,
+          system: criticSystem,
+          user: text,
+          maxTokens: 300,
+        );
+        final start = raw.indexOf('[');
+        final end = raw.lastIndexOf(']');
+        if (start >= 0 && end > start) {
+          final decoded = jsonDecode(raw.substring(start, end + 1));
+          if (decoded is List) {
+            openQuestions = decoded
+                .map((e) => e.toString().trim())
+                .where((s) => s.isNotEmpty)
+                .take(4)
+                .toList();
+          }
+        }
+      } catch (_) {
+        // ignore — the critic is advisory; the draft already succeeded.
+      }
+    }
+    if (openQuestions.isEmpty) return summary;
+    final bullets = openQuestions.map((q) => '- $q').join('\n');
+    return '$summary\n\nStill under-specified — ask the user about these next '
+        '(ONE at a time), then capture their answers as stories:\n$bullets';
   }
 
   /// Deterministic fallback for [_draftStoriesFromText] when no model is

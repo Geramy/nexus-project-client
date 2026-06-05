@@ -190,31 +190,43 @@ class _ProjectCoordinatorChatScreenState
       // resolved against the agent's own server.
       String? sttModel;
       String? ttsModel;
-      String? ttsVoice;
+      String? ttsVoice = persona?.ttsVoice;
       String? resolvedChatModel;
-      if (persona != null) {
-        ttsVoice = persona.ttsVoice;
-        // Default to an Omni collection (the product's LMX-Omni-52B-Halo when
-        // the server advertises it, else the first collection it lists) when the
-        // persona hasn't picked one — so agents get full voice/vision/image
-        // capability out of the box, on local AND routed servers.
-        var omniCollection = persona.omniCollectionModel;
-        if (omniCollection == null || omniCollection.trim().isEmpty) {
-          omniCollection = defaultOmniCollectionId(serverModels);
-        }
+
+      // The coordinator voice ALWAYS defaults to the best Omni collection the
+      // chosen server advertises — the product default, LMX-Omni-52B-Halo — for
+      // the large chat model + HQ STT/TTS (Whisper-Large-v3-Turbo, not the tiny
+      // Lite components). This MUST run even when no persona is assigned to the
+      // project (the common case — the log shows Agent="(none)"): previously the
+      // whole block lived inside `if (persona != null)`, so with no persona the
+      // voice skipped the collection entirely and fell through to the
+      // per-modality "first model" safety nets below, which pick the small Lite
+      // models. We prefer the server default over any collection stored on the
+      // persona, and fall back to the persona's own pick only when the server
+      // advertises none.
+      final omniCollection =
+          defaultOmniCollectionId(serverModels) ?? persona?.omniCollectionModel;
+      if (omniCollection != null && omniCollection.trim().isNotEmpty) {
         final resolved = resolvePersonaModels(
           omniCollectionModel: omniCollection,
-          llmModel: persona.llmModel,
-          sttModel: persona.sttModel,
-          ttsModel: persona.ttsModel,
-          visionModel: persona.visionModel,
-          imageGenModel: persona.imageGenModel,
+          llmModel: persona?.llmModel,
+          sttModel: persona?.sttModel,
+          ttsModel: persona?.ttsModel,
+          visionModel: persona?.visionModel,
+          imageGenModel: persona?.imageGenModel,
           models: serverModels,
         );
         resolvedChatModel = resolved.llm;
         sttModel = resolved.stt;
         ttsModel = resolved.tts;
+        // Default the coordinator's spoken voice to Bella on the Halo collection
+        // when no explicit voice is set.
+        if ((ttsVoice == null || ttsVoice.trim().isEmpty) &&
+            omniCollection == kDefaultOmniCollection) {
+          ttsVoice = 'af_bella'; // Bella — US Female
+        }
       }
+
       // Safety net (any path): never let voice fall back to the backend's
       // `whisper-1` / empty TTS defaults, which 404 on Lemonade servers.
       sttModel ??= firstAudioModelId(serverModels);
@@ -232,7 +244,10 @@ class _ProjectCoordinatorChatScreenState
       final effectiveChatModel =
           resolveChatModelId(chatCandidate, serverModels) ?? chatCandidate;
       debugPrint(
-        '[Voice] Coordinator models → chat=$effectiveChatModel stt=$sttModel tts=$ttsModel voice=${ttsVoice ?? "(default)"}',
+        '[Voice] Coordinator models → chat=$effectiveChatModel stt=$sttModel '
+        'tts=$ttsModel voice=${ttsVoice ?? "(default)"} '
+        'omni=${omniCollection ?? "(none)"} '
+        'collectionsSeen=[${serverModels.where((m) => m.isCollection).map((m) => m.id).join(", ")}]',
       );
 
       final uiServer = ui_server.InferenceServer(
@@ -577,6 +592,10 @@ class _ProjectCoordinatorChatScreenState
       // arrive via onToolResult (shown as system notes between answer segments).
       final stream = _session!.runTurn(
         text,
+        // Discovery drafts + restructures a whole story tree in one turn, which
+        // can burn several tool rounds before the agent gets to speak/ask — give
+        // it more headroom than the normal chat so it never stops mid-build.
+        maxToolRounds: _session!.discoveryMode ? 8 : 4,
         onToolResult: (r) {
           if (!mounted) return;
           setState(() {

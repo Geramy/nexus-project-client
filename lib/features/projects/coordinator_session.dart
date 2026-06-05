@@ -589,12 +589,48 @@ class ProjectCoordinatorSession {
       rethrow;
     }
 
-    // Hit the round cap — finish gracefully.
-    yield const ChatStreamFinish(
-      finishReason: 'length',
-      toolCalls: [],
-      contentSoFar: '',
-    );
+    // Hit the round cap with tool work still pending. Don't end the turn on
+    // silence (an empty 'length' finish) — make ONE final completion with NO
+    // tools so the model must put its findings into words and, in discovery,
+    // ask the next question, instead of stopping without a spoken reply.
+    try {
+      final wrapSys = await _buildSystemPrompt(
+        currentPlanContext: currentPlanContext,
+      );
+      final wrapMessages = _sanitizeForWire([
+        {'role': 'system', 'content': wrapSys},
+        ..._history,
+      ]);
+      final wrapBuf = StringBuffer();
+      await for (final ev in _streamRound(
+        wrapMessages,
+        const [],
+        onToolsDropped: (_) {},
+      )) {
+        if (ev is ChatContentDelta) {
+          wrapBuf.write(ev.text);
+          yield ev;
+        } else if (ev is ChatReasoningDelta) {
+          yield ev;
+        }
+      }
+      final wrapStr = wrapBuf.toString();
+      if (wrapStr.isNotEmpty) {
+        _history.add({'role': 'assistant', 'content': wrapStr});
+      }
+      yield ChatStreamFinish(
+        finishReason: 'stop',
+        toolCalls: const [],
+        contentSoFar: wrapStr,
+      );
+    } catch (_) {
+      // If the wrap-up call itself fails, fall back to the graceful finish.
+      yield const ChatStreamFinish(
+        finishReason: 'length',
+        toolCalls: [],
+        contentSoFar: '',
+      );
+    }
   }
 
   /// A short, UI-friendly version of a tool result so large payloads (e.g. an
