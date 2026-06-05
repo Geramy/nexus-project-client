@@ -14,6 +14,12 @@ import '../../shared/ui/sticky_scroll.dart';
 import '../../shared/ui/submit_on_enter.dart';
 import 'setup_chat_controller.dart';
 
+/// Sticky preference for whether interview question cards show their pick-from
+/// options expanded. Once the user opens (or closes) the options on ANY question,
+/// every subsequent question remembers that choice for the rest of the session —
+/// so a user who prefers clicking options isn't re-collapsing them every turn.
+final interviewOptionsExpandedProvider = StateProvider<bool>((_) => false);
+
 /// The Project Setup interview, rendered as a chat in the MainShell right outer
 /// panel. Shows the full back-and-forth — thinking, tool calls, and inline
 /// multiple-choice questions (which stay in the transcript, so a question is
@@ -420,19 +426,18 @@ class _NoteRow extends StatelessWidget {
 /// choices are a fallback, tucked behind a "Pick from options" dropdown arrow
 /// the user can expand to click instead. Once answered (typed OR picked) it
 /// locks and shows what happened, so it's never lost by clicking away.
-class _QuestionCard extends StatefulWidget {
+class _QuestionCard extends ConsumerStatefulWidget {
   const _QuestionCard({required this.msg, required this.onAnswer});
 
   final SetupMsg msg;
   final void Function(SetupMsg msg, List<String> picks) onAnswer;
 
   @override
-  State<_QuestionCard> createState() => _QuestionCardState();
+  ConsumerState<_QuestionCard> createState() => _QuestionCardState();
 }
 
-class _QuestionCardState extends State<_QuestionCard> {
+class _QuestionCardState extends ConsumerState<_QuestionCard> {
   final Set<String> _selected = {};
-  bool _optionsOpen = false;
 
   @override
   Widget build(BuildContext context) {
@@ -440,6 +445,10 @@ class _QuestionCardState extends State<_QuestionCard> {
     final msg = widget.msg;
     final answered = msg.answered;
     final hasOptions = msg.options.isNotEmpty;
+    // Sticky across questions: read (and write) the shared session preference
+    // instead of a per-card flag, so opening/closing options on one question
+    // carries to the next.
+    final optionsOpen = ref.watch(interviewOptionsExpandedProvider);
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -499,20 +508,22 @@ class _QuestionCardState extends State<_QuestionCard> {
               // The dropdown-arrow disclosure: collapsed by default; expands the
               // pre-made checkboxes/chips as the click-to-pick fallback.
               InkWell(
-                onTap: () => setState(() => _optionsOpen = !_optionsOpen),
+                onTap: () => ref
+                    .read(interviewOptionsExpandedProvider.notifier)
+                    .state = !optionsOpen,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        _optionsOpen ? Icons.expand_less : Icons.expand_more,
+                        optionsOpen ? Icons.expand_less : Icons.expand_more,
                         size: 18,
                         color: theme.colorScheme.primary,
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        _optionsOpen
+                        optionsOpen
                             ? 'Hide options'
                             : 'Pick from ${msg.options.length} options',
                         style: theme.textTheme.labelMedium?.copyWith(
@@ -523,7 +534,7 @@ class _QuestionCardState extends State<_QuestionCard> {
                   ),
                 ),
               ),
-              if (_optionsOpen) _buildOptions(theme, msg),
+              if (optionsOpen) _buildOptions(theme, msg),
             ],
           ],
         ],

@@ -81,6 +81,13 @@ class ChatEndpoint {
 
       final delta = first['delta'];
       if (delta is Map<String, dynamic>) {
+        // Reasoning ("thinking") tokens arrive on a separate field on reasoning
+        // models. Forward them so the UI can show a live think block instead of
+        // an opaque spinner; don't fold them into the visible answer.
+        final reasoning = delta['reasoning_content'] ?? delta['reasoning'];
+        if (reasoning is String && reasoning.isNotEmpty) {
+          yield ChatReasoningDelta(reasoning);
+        }
         final content = delta['content'];
         if (content is String && content.isNotEmpty) {
           contentBuf.write(content);

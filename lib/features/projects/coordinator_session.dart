@@ -474,6 +474,8 @@ class ProjectCoordinatorSession {
           if (ev is ChatContentDelta) {
             buf.write(ev.text);
             yield ev; // forward live (do NOT also re-yield the full content below)
+          } else if (ev is ChatReasoningDelta) {
+            yield ev; // forward thinking tokens live; not part of the answer text
           } else if (ev is ChatStreamFinish) {
             toolCalls = ev.toolCalls;
           }

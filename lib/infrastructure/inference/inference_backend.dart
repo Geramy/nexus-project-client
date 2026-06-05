@@ -217,6 +217,15 @@ class ChatContentDelta extends ChatStreamEvent {
   const ChatContentDelta(this.text);
 }
 
+/// Reasoning ("thinking") tokens from a reasoning model, streamed separately
+/// from the visible answer (OpenAI `reasoning_content` / `reasoning` delta).
+/// Surfaced in the UI as a collapsible "Thinking…" block so a long think isn't
+/// an opaque spinner.
+class ChatReasoningDelta extends ChatStreamEvent {
+  final String text;
+  const ChatReasoningDelta(this.text);
+}
+
 class ChatToolCallDelta extends ChatStreamEvent {
   final List<PartialToolCall> partials;
   const ChatToolCallDelta(this.partials);

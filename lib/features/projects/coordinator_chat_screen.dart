@@ -570,6 +570,8 @@ class _ProjectCoordinatorChatScreenState
       final assistantBuffer = StringBuffer();
       var needNewBubble =
           true; // start a fresh assistant bubble after tool notes
+      final reasoningBuffer = StringBuffer();
+      int? reasoningIndex; // index of the live reasoning tile for this round
 
       // runTurn drives the tool loop and produces the final answer. Tool results
       // arrive via onToolResult (shown as system notes between answer segments).
@@ -587,13 +589,39 @@ class _ProjectCoordinatorChatScreenState
           unawaited(_persist('system', '✓ $r'));
           needNewBubble = true;
           assistantBuffer.clear();
+          // Each tool round gets its own think block.
+          reasoningBuffer.clear();
+          reasoningIndex = null;
         },
       );
 
       await for (final event in stream) {
         if (!mounted) break;
 
-        if (event is ChatContentDelta) {
+        if (event is ChatReasoningDelta) {
+          reasoningBuffer.write(event.text);
+          setState(() {
+            if (reasoningIndex == null) {
+              _messages.add(
+                _ChatMessage(
+                  text: reasoningBuffer.toString(),
+                  isUser: false,
+                  isReasoning: true,
+                ),
+              );
+              reasoningIndex = _messages.length - 1;
+            } else {
+              _messages[reasoningIndex!] = _ChatMessage(
+                text: reasoningBuffer.toString(),
+                isUser: false,
+                isReasoning: true,
+              );
+            }
+            // Reasoning is streaming — we have live feedback, so drop the opaque
+            // "thinking…" spinner.
+            _isThinking = false;
+          });
+        } else if (event is ChatContentDelta) {
           if (needNewBubble) {
             assistantBuffer
               ..clear()
@@ -860,6 +888,13 @@ class _ProjectCoordinatorChatScreenState
                 final isSystem = msg.isSystem == true;
                 final nx = context.nx;
 
+                // Reasoning ("thinking") blocks render as a collapsible tile so
+                // a long think is visible (and inspectable for debugging) without
+                // crowding the answer.
+                if (msg.isReasoning) {
+                  return _ReasoningTile(text: msg.text);
+                }
+
                 return Align(
                   alignment: msg.isUser
                       ? Alignment.centerRight
@@ -1068,10 +1103,85 @@ class _ProjectCoordinatorChatScreenState
   }
 }
 
+/// A collapsible "Thinking…" block for a reasoning model's streamed reasoning
+/// tokens. Default-expanded so a long think shows live progress (and is there to
+/// inspect for debugging); tap the header to collapse.
+class _ReasoningTile extends StatefulWidget {
+  const _ReasoningTile({required this.text});
+  final String text;
+
+  @override
+  State<_ReasoningTile> createState() => _ReasoningTileState();
+}
+
+class _ReasoningTileState extends State<_ReasoningTile> {
+  bool _open = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final nx = context.nx;
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: nx.glass,
+        borderRadius: AppRadius.lgAll,
+        border: Border.all(color: nx.hairline),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _open = !_open),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _open ? Icons.expand_more : Icons.chevron_right,
+                  size: 16,
+                  color: nx.textMuted,
+                ),
+                const SizedBox(width: AppSpacing.xs),
+                Icon(Icons.psychology_outlined, size: 14, color: nx.textMuted),
+                const SizedBox(width: AppSpacing.xs),
+                Text(
+                  'Thinking',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: nx.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_open) ...[
+            const SizedBox(height: AppSpacing.xs),
+            SelectableText(
+              widget.text,
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.35,
+                fontStyle: FontStyle.italic,
+                color: nx.textMuted,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _ChatMessage {
   final String text;
   final bool isUser;
   final bool? isSystem;
+
+  /// A reasoning ("thinking") block from a reasoning model — rendered as a
+  /// collapsible tile, not a normal answer bubble. Ephemeral (not persisted).
+  final bool isReasoning;
 
   /// Path to the synthesized reply audio (assistant voice turns only).
   final String? audioPath;
@@ -1080,6 +1190,7 @@ class _ChatMessage {
     required this.text,
     required this.isUser,
     this.isSystem,
+    this.isReasoning = false,
     this.audioPath,
   });
 }

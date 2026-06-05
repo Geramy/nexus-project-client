@@ -71,6 +71,13 @@ class ChatContentDelta extends ChatStreamEvent {
   const ChatContentDelta(this.text);
 }
 
+/// Reasoning ("thinking") tokens streamed separately from the answer
+/// (`reasoning_content` / `reasoning` delta on reasoning models).
+class ChatReasoningDelta extends ChatStreamEvent {
+  final String text;
+  const ChatReasoningDelta(this.text);
+}
+
 class ChatToolCallDelta extends ChatStreamEvent {
   final List<PartialToolCall> partials;
   const ChatToolCallDelta(this.partials);

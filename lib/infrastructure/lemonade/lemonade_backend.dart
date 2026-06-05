@@ -223,6 +223,8 @@ class LemonadeBackend implements iface.InferenceBackend {
   ) {
     if (event is api_types.ChatContentDelta)
       return iface.ChatContentDelta(event.text);
+    if (event is api_types.ChatReasoningDelta)
+      return iface.ChatReasoningDelta(event.text);
     if (event is api_types.ChatToolCallDelta) {
       final partials = <iface.PartialToolCall>[];
       for (final p in event.partials) {
