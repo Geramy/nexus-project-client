@@ -129,6 +129,11 @@ How to work:
   should propose ONLY that category's tags (platforms) — never silently invent
   objectives, features, databases, or services they haven't mentioned yet. Ask
   about the next topic instead. Tags save as `proposed` for the user to accept.
+- DELIBERATION CONTRACT: whenever you weigh several candidates ("let me think
+  about this — here are some options…"), call `consider_items` with them FIRST,
+  then resolve EACH with `propose_tags` (add) or `dismiss_item` (skip) — and do
+  the same after every `lookup_package`. Never just list options in prose and
+  move on: setup will not let you finish while any considered item is undecided.
 - The ONLY things you may add without the user stating them are the technical
   STACK — `languages`/`frameworks` — and only AFTER the platforms/objectives are
   known, kept minimal. For `databases`/`services`, propose a tag only when the
@@ -223,6 +228,11 @@ How to work:
       // text — a true stall. We auto-nudge those back into motion. A spoken
       // reply with no tool is a legitimate conversational turn and is NOT a stall.
       var emptyRounds = 0;
+      // Bounds how many times per turn we force the model to reconcile a
+      // looked-up-but-undecided package before letting the turn end (the pending
+      // state persists to the next turn and still blocks finalize, so nothing
+      // slips through — this only prevents an in-turn infinite loop).
+      var reconcileRounds = 0;
       for (var round = 0; round < maxToolRounds; round++) {
         // The system prompt is kept STATIC (phase-only) and the tool list is
         // deterministic, so the [system + tools] prefix is byte-identical every
@@ -281,6 +291,28 @@ How to work:
             _history.add({'role': 'user', 'content': _continueNudge});
             continue;
           }
+          // GUARD (we are the hand-holder, not the model): never let a turn end
+          // with an item the host looked up or was weighing left undecided. Every
+          // lookup_package / consider_items option must resolve to an add
+          // (propose_tags) or an explicit skip (dismiss_item). If any dangle,
+          // force the model to reconcile them now — that's how an announced
+          // "let me think about these…" silently produced nothing.
+          if (phase == SetupPhase.interview && reconcileRounds < 2) {
+            final pending = executor.pendingDecisions;
+            if (pending.isNotEmpty) {
+              reconcileRounds++;
+              _history.add({
+                'role': 'user',
+                'content':
+                    'Before you stop: you were weighing ${pending.join(', ')} '
+                    'but have not decided on ${pending.length == 1 ? 'it' : 'them'}. '
+                    'For EACH, either call propose_tags to add it or dismiss_item '
+                    'to skip it with a reason. If you are unsure which to keep, '
+                    'ask the user with ask_question first.',
+              });
+              continue;
+            }
+          }
           return content;
         }
         emptyRounds = 0;
@@ -308,11 +340,28 @@ How to work:
             continue; // refuse the looping call; model must change course
           }
 
-          final result = await executor.execute(call.function.name, args);
+          // A tool that THROWS (network drop, registry 5xx, a DB upsert error in
+          // propose_tags) must NOT abort the whole turn — that's how an announced
+          // action ("let me check a few libraries…") silently produced nothing.
+          // Surface the failure to the model as this tool's result with an
+          // explicit retry instruction so it self-corrects within the remaining
+          // rounds; the LoopGuard still bounds a tool that keeps failing.
+          String result;
+          var threw = false;
+          try {
+            result = await executor.execute(call.function.name, args);
+          } catch (e) {
+            threw = true;
+            result =
+                'ERROR: ${call.function.name} failed and did NOT take effect: '
+                '$e. Retry this tool once now (or take a different step) — do '
+                'not tell the user it succeeded.';
+          }
           onToolResult?.call(call.function.name, result);
           // Generating the plans flips the host into the refine stage so the
-          // rest of this turn (and the next) uses the plan-editing toolset.
-          if (call.function.name == 'finalize_setup') {
+          // rest of this turn (and the next) uses the plan-editing toolset —
+          // but ONLY when finalize actually succeeded.
+          if (!threw && call.function.name == 'finalize_setup') {
             phase = SetupPhase.refine;
           }
           final body = action == LoopAction.warn

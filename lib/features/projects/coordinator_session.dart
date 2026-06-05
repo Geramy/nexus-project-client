@@ -563,10 +563,22 @@ class ProjectCoordinatorSession {
             continue; // refuse the looping call; model must change course
           }
 
-          final result = await executor.execute(
-            name: call.function.name,
-            args: args,
-          );
+          // A tool that THROWS must not abort the whole turn (which would roll
+          // back and surface a raw error). Feed the failure back to the model as
+          // this tool's result with a retry instruction so it self-corrects in
+          // the remaining rounds; the LoopGuard bounds a tool that keeps failing.
+          String result;
+          try {
+            result = await executor.execute(
+              name: call.function.name,
+              args: args,
+            );
+          } catch (e) {
+            result =
+                'ERROR: ${call.function.name} failed and did NOT take effect: '
+                '$e. Retry this tool once now (or take a different step) — do '
+                'not tell the user it succeeded.';
+          }
           // Show only a short summary in the chat — big payloads (a whole plan or
           // file the model read) shouldn't flood the transcript. The MODEL still
           // receives the full result via `body`/history below.

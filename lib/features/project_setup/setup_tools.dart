@@ -150,7 +150,9 @@ class SetupTools {
           'description':
               'Verify a library/framework against pub.dev or GitHub and get a '
               'deterministic freshness verdict (fresh|aging|stale|dead). '
-              'Use before proposing any library tag.',
+              'Use before proposing any library tag. After EVERY lookup you MUST '
+              'either propose_tags it (add) or dismiss_item it (skip) — setup '
+              'will not finalize while a lookup is left undecided.',
           'parameters': {
             'type': 'object',
             'properties': {
@@ -164,6 +166,68 @@ class SetupTools {
               },
             },
             'required': ['name', 'ecosystem'],
+          },
+        },
+      },
+      {
+        'type': 'function',
+        'function': {
+          'name': 'consider_items',
+          'description':
+              'Register options you are WEIGHING but have not committed to — '
+              'whenever you would tell the user "let me think about this; here '
+              'are the candidates…", list them here (ANY category: libraries, '
+              'databases, services, features, frameworks, …). Each becomes a '
+              'pending decision you MUST then resolve with propose_tags (add) or '
+              'dismiss_item (skip); setup will not move on or finalize while any '
+              'are undecided.',
+          'parameters': {
+            'type': 'object',
+            'properties': {
+              'category': {
+                'type': 'string',
+                'description':
+                    'What kind of options these are (e.g. databases, services, '
+                    'libraries, features).',
+              },
+              'items': {
+                'type': 'array',
+                'items': {'type': 'string'},
+                'description': 'The candidate names you are weighing.',
+              },
+              'note': {
+                'type': 'string',
+                'description': 'Optional: what you are deciding between.',
+              },
+            },
+            'required': ['items'],
+          },
+        },
+      },
+      {
+        'type': 'function',
+        'function': {
+          'name': 'dismiss_item',
+          'description':
+              'Record a decision NOT to add something you looked up '
+              '(lookup_package) or were weighing (consider_items) — it is '
+              'stale/dead, a duplicate, or not needed. Every looked-up or '
+              'considered item MUST end in either propose_tags (add) or '
+              'dismiss_item (skip); setup will not finalize while a decision is '
+              'pending.',
+          'parameters': {
+            'type': 'object',
+            'properties': {
+              'name': {
+                'type': 'string',
+                'description': 'The item to skip (as you named it).',
+              },
+              'reason': {
+                'type': 'string',
+                'description': 'Short reason for not adding it.',
+              },
+            },
+            'required': ['name'],
           },
         },
       },
@@ -340,6 +404,26 @@ class SetupToolExecutor {
   )?
   askQuestion;
 
+  /// Items the host has put up for decision — looked up via `lookup_package` or
+  /// shortlisted via `consider_items` ("let me think about these…") — that have
+  /// NOT yet been resolved: neither added (`propose_tags`) nor dismissed
+  /// (`dismiss_item`). The session guard refuses to end a turn or finalize while
+  /// any remain, so every deliberation ends in an explicit add/skip PER ITEM.
+  /// Keyed by normalized name → display label. Session-scoped (persists across
+  /// turns) so a dangling decision keeps blocking until it is made.
+  final Map<String, String> _pendingDecisions = {};
+
+  /// Display labels of items still awaiting an add/dismiss decision.
+  List<String> get pendingDecisions => _pendingDecisions.values.toList();
+
+  /// Normalize an item/package id for matching across consider/lookup/propose/
+  /// dismiss: lowercase and, for `owner/repo` GitHub ids, keep the repo segment.
+  static String _normPkg(String raw) {
+    final s = raw.trim().toLowerCase();
+    final slash = s.lastIndexOf('/');
+    return slash >= 0 ? s.substring(slash + 1) : s;
+  }
+
   Future<String> execute(String name, Map<String, dynamic> args) async {
     switch (name) {
       case 'ask_question':
@@ -350,8 +434,12 @@ class SetupToolExecutor {
         return _scopeOptions(args);
       case 'lookup_package':
         return _lookup(args);
+      case 'consider_items':
+        return _consider(args);
       case 'propose_tags':
         return _propose(args);
+      case 'dismiss_item':
+        return _dismiss(args);
       case 'finalize_setup':
         return _finalize();
       case 'list_plans':
@@ -551,9 +639,17 @@ class SetupToolExecutor {
         if (r.owner != null) 'owner=${r.owner}',
         if (r.isTrusted) 'trusted-org',
       ];
+      // Mark this lookup UNRESOLVED until the host explicitly adds it
+      // (propose_tags) or dismisses it (dismiss_item). The session guard and
+      // the finalize gate both refuse to move on while it is pending.
+      _pendingDecisions[_normPkg(name)] = name;
       return '$name ($ecosystem): ${parts.join(', ')}.'
-          '${r.repoUrl != null ? ' repo=${r.repoUrl}' : ''}';
+          '${r.repoUrl != null ? ' repo=${r.repoUrl}' : ''}'
+          ' — DECIDE NEXT: add it with propose_tags (category `libraries`) or '
+          'drop it with dismiss_item.';
     } catch (e) {
+      // A failed verification is NOT a pending decision — the host should retry
+      // the lookup (or pick another package), so don't register it.
       return 'Could not verify $name: $e';
     }
   }
@@ -630,6 +726,9 @@ class SetupToolExecutor {
         ),
       );
       accepted.add(value);
+      // Adding a tag resolves any pending lookup for the same package (matched
+      // by normalized name) — it satisfies the "add it" half of the contract.
+      _pendingDecisions.remove(_normPkg(value));
       if (catStr == 'industries') proposedIndustries.add(value);
     }
 
@@ -653,6 +752,40 @@ class SetupToolExecutor {
       }
     }
     return b.isEmpty ? 'No valid tags to propose.' : b.toString();
+  }
+
+  /// Register a shortlist of options the host is weighing ("let me think about
+  /// these…") as pending decisions, so each is forced into an explicit add/skip
+  /// rather than mentioned in prose and forgotten.
+  Future<String> _consider(Map<String, dynamic> args) async {
+    final category = (args['category'] ?? '').toString().trim();
+    final items = ((args['items'] as List?) ?? const [])
+        .map((e) => e.toString().trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    if (items.isEmpty) return 'consider_items needs a non-empty items list.';
+    for (final it in items) {
+      _pendingDecisions[_normPkg(it)] = category.isEmpty
+          ? it
+          : '$it ($category)';
+    }
+    return 'Noted ${items.length} option(s) under consideration: '
+        '${items.join(', ')}. Decide on EACH before moving on — propose_tags to '
+        'add it, or dismiss_item to skip it (with a reason). Ask the user with '
+        'ask_question if you are unsure which to keep.';
+  }
+
+  /// Resolve a looked-up or considered item as the "don't add" decision — clears
+  /// it from the pending set so setup can proceed without adding a tag for it.
+  Future<String> _dismiss(Map<String, dynamic> args) async {
+    final name = (args['name'] ?? '').toString().trim();
+    if (name.isEmpty) return 'dismiss_item needs the item name.';
+    final reason = (args['reason'] ?? '').toString().trim();
+    final had = _pendingDecisions.remove(_normPkg(name)) != null;
+    return had
+        ? 'Dismissed $name${reason.isNotEmpty ? ' ($reason)' : ''} — it will not '
+              'be added.'
+        : 'Nothing pending for "$name" (already added or dismissed).';
   }
 
   /// Generate the `/PLANS` files from the project's confirmed tags WITHOUT
@@ -718,6 +851,14 @@ class SetupToolExecutor {
           '${missing.join(', ')}. Ask the user about each of these, propose_tags '
           'for them, and only call finalize_setup once every required section '
           'has at least one tag.';
+    }
+    // Guard: every looked-up OR considered item must have an explicit add/skip
+    // decision before the plans are generated, so nothing the host "checked" or
+    // "was thinking about" is silently dropped.
+    if (_pendingDecisions.isNotEmpty) {
+      return 'Not ready to finalize — you were still weighing '
+          '${pendingDecisions.join(', ')} without a decision. For EACH, call '
+          'propose_tags to add it or dismiss_item to skip it, then finalize.';
     }
     final generated = await generatePlans();
     // Enter the REFINE phase rather than completing outright: the plans now
