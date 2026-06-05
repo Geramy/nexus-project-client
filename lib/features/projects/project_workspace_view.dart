@@ -7,9 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:nexus_projects_client/core/providers/app_shell_provider.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
-import 'package:nexus_projects_client/features/projects/coordinator_chat_screen.dart';
 import 'package:nexus_projects_client/features/projects/exploration/project_exploration_view.dart';
-import 'package:nexus_projects_client/features/projects/exploration/story_tree_canvas.dart';
 import 'package:nexus_projects_client/features/projects/orchestration/project_orchestrator.dart';
 import 'package:nexus_projects_client/features/projects/widgets/project_orchestration_controls.dart';
 import 'package:nexus_projects_client/features/projects/workspace_nav.dart';
@@ -19,16 +17,20 @@ import 'package:nexus_projects_client/features/project_setup/project_setup_wizar
 import 'package:nexus_projects_client/features/project_setup/summary_tab.dart';
 
 /// Which detail panel the project-workspace RIGHT outer panel should show,
-/// published by the active workspace tab: Chat → chat-session history, Plan →
-/// the plans file explorer, Setup → the interview chat.
-enum WorkspaceRightPanel { chatHistory, planExplorer, setupInterview }
+/// published by the active workspace tab: Plan → the plans file explorer, Setup
+/// → the interview chat, and [none] when the active tab provides its own chat
+/// (the User Stories screen now embeds a Chat | History sidebar) so the shell
+/// doesn't double up.
+enum WorkspaceRightPanel { none, planExplorer, setupInterview }
 
 final workspaceRightPanelProvider = StateProvider<WorkspaceRightPanel>(
-  (ref) => WorkspaceRightPanel.chatHistory,
+  (ref) => WorkspaceRightPanel.none,
 );
 
 /// Center pane for a project: a tabbed workspace.
-///   • Chat — the project Coordinator (first tab, the human's main surface).
+///   • User Stories — the human's main surface (first tab): the UML story tree
+///     with the Coordinator Chat | History sidebar on its right.
+///   • Summary — the project profile/tags summary.
 ///   • Overview — project settings: assigned agent, orchestration Start/Pause,
 ///     and the working-hours window.
 ///   • Plan — the plan currently opened from the Plans explorer (right panel).
@@ -45,8 +47,9 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
   // Setup is no longer a tab — it's a full-screen wizard (auto-opened on a fresh
-  // project, resumable from Summary). Tabs: Chat(0), Summary(1), Overview(2),
-  // Plan(3).
+  // project, resumable from Summary). Tabs: User Stories(0), Summary(1),
+  // Overview(2), Plan(3). The Coordinator chat is no longer its own tab — it
+  // lives in the User Stories screen's right sidebar (Chat | History).
   static const int _planTabIndex = 3;
   static const int _overviewTabIndex = 2;
 
@@ -57,7 +60,7 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 5, vsync: this);
+    _tabs = TabController(length: 4, vsync: this);
     // Publish whether Setup is the active tab so the MainShell right outer
     // panel can swap to the interview chat (instead of the Plan explorer).
     _tabs.addListener(_publishSetupMode);
@@ -68,11 +71,13 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
 
   void _publishSetupMode() {
     if (!mounted) return;
-    // Drive the right outer panel from the active tab: Plan → plans explorer,
-    // everything else (Chat/Summary/Overview) → chat-session history.
+    // Drive the right outer panel from the active tab: Plan → plans explorer;
+    // every other tab → none. Chat/History now live inside the User Stories
+    // screen's own sidebar, so the shell's global right panel stays hidden to
+    // avoid a duplicate.
     final panel = _tabs.index == _planTabIndex
         ? WorkspaceRightPanel.planExplorer
-        : WorkspaceRightPanel.chatHistory;
+        : WorkspaceRightPanel.none;
     if (ref.read(workspaceRightPanelProvider) != panel) {
       ref.read(workspaceRightPanelProvider.notifier).state = panel;
     }
@@ -101,8 +106,8 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
       }
     });
 
-    // When setup finishes (status flips to 'complete'), drop the user back on
-    // the Chat tab — Setup has just slid to the last slot behind them.
+    // When setup finishes (status flips to 'complete'), drop the user on the
+    // first tab — now User Stories, the project's main screen.
     ref.listen(projectRowProvider(projectId), (prev, next) {
       final was = prev?.valueOrNull?.setupStatus;
       final now = next.valueOrNull?.setupStatus;
@@ -129,15 +134,11 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
     final projectRow = ref.watch(projectRowProvider(projectId)).valueOrNull;
     final setupStatus = projectRow?.setupStatus;
 
-    // After setup, the project enters the Exploration (discovery) phase: a
-    // dedicated two-pane screen (user-story tree + discovery chat) that REPLACES
-    // the normal tabbed workspace until the user generates tasks from stories.
-    if (projectRow?.explorationStatus == 'active') {
-      return ProjectExplorationView(
-        projectId: projectId,
-        projectName: projectName,
-      );
-    }
+    // The post-setup discovery phase is NOT a one-shot full-screen takeover any
+    // more — it's the persistent, resumable "User Stories" tab (the default tab
+    // below), which shows the story-building interview while discovery is active
+    // and the normal Coordinator afterwards. So leaving and returning always
+    // lands you back on the same screen with your stories + conversation.
 
     // External nudges (e.g. the setup "Done" flow) can ask us to surface the
     // Overview tab, where the orchestration Start button lives.
@@ -154,9 +155,9 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
       });
     }
 
-    const chatTab = Tab(
-      icon: Icon(Icons.forum_outlined, size: 18),
-      text: 'Chat',
+    const storiesTab = Tab(
+      icon: Icon(Icons.account_tree_outlined, size: 18),
+      text: 'User Stories',
     );
     const summaryTab = Tab(
       icon: Icon(Icons.summarize_outlined, size: 18),
@@ -167,10 +168,6 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
       icon: Icon(Icons.description_outlined, size: 18),
       text: 'Plan',
     );
-    const storiesTab = Tab(
-      icon: Icon(Icons.account_tree_outlined, size: 18),
-      text: 'User Stories',
-    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -179,7 +176,7 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
           controller: _tabs,
           isScrollable: true,
           tabAlignment: TabAlignment.start,
-          tabs: const [chatTab, summaryTab, overviewTab, planTab, storiesTab],
+          tabs: const [storiesTab, summaryTab, overviewTab, planTab],
         ),
         const Divider(height: 1),
         if (setupStatus == 'notStarted' ||
@@ -197,8 +194,12 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
             // editor / chat composer get the drag gestures instead.
             physics: const NeverScrollableScrollPhysics(),
             children: [
-              ProjectCoordinatorChatScreen(
-                key: ValueKey('project-chat-$projectId'),
+              // Main screen: the persistent, resumable story-building surface —
+              // the user-story tree, a Generate-tasks header, and the Coordinator
+              // Chat | History sidebar (discovery interview while building, normal
+              // chat afterwards).
+              ProjectExplorationView(
+                key: ValueKey('project-stories-pane-$projectId'),
                 projectId: projectId,
                 projectName: projectName,
               ),
@@ -209,10 +210,6 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
               ),
               _ProjectOverviewTab(projectId: projectId, clientId: clientId),
               const PlanWorkspaceView(),
-              UserStoriesView(
-                key: ValueKey('project-stories-$projectId'),
-                projectId: projectId,
-              ),
             ],
           ),
         ),

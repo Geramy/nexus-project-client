@@ -17,7 +17,6 @@ import 'package:nexus_projects_client/features/projects/project_workspace_view.d
 import 'package:nexus_projects_client/features/projects/orchestration/project_orchestrator.dart';
 import 'package:nexus_projects_client/features/project_plans/plan_explorer.dart';
 import 'package:nexus_projects_client/features/project_setup/setup_interview_panel.dart';
-import 'package:nexus_projects_client/features/main/widgets/chat_sessions_sidebar.dart';
 import 'package:nexus_projects_client/features/agents/agents_hub_view.dart';
 import 'package:nexus_projects_client/features/agents/persona_bulk_select.dart';
 import 'package:nexus_projects_client/features/agents/bulk_edit_personas_panel.dart';
@@ -303,7 +302,7 @@ class _MainShellState extends ConsumerState<MainShell> {
 
                     // Some pages have no right-panel content at all (e.g. Account),
                     // so the whole right side — divider, rail and panel — is hidden.
-                    if (_hasRightPanel(currentView)) ...[
+                    if (_hasRightPanel(currentView, ref)) ...[
                       // Draggable divider - Center <-> Right (only when expanded)
                       if (!_rightCollapsed)
                         ResizableDivider(onDrag: _updateRightWidth),
@@ -384,14 +383,26 @@ class _MainShellState extends ConsumerState<MainShell> {
   /// show a contextual empty state instead of an unrelated panel.
   /// Pages that have no right-panel content: the whole right side (rail +
   /// divider + panel) is omitted so the page uses the full width.
-  bool _hasRightPanel(MainView view) => view != MainView.account;
+  bool _hasRightPanel(MainView view, WidgetRef ref) {
+    if (view == MainView.account) return false;
+    // The project workspace hides the whole right side when the active tab
+    // provides no panel content — e.g. the User Stories screen, which embeds its
+    // own Chat | History sidebar, so the page uses full width.
+    if (view == MainView.projectPlans &&
+        ref.watch(workspaceRightPanelProvider) == WorkspaceRightPanel.none) {
+      return false;
+    }
+    return true;
+  }
 
   Widget _buildRightPanel(MainView currentView, WidgetRef ref) {
     switch (currentView) {
       case MainView.projectPlans:
         // The right outer panel follows the active workspace tab: Setup → the AI
-        // interview chat, Plan → the plans file explorer, Chat (and other tabs) →
-        // the chat-session history.
+        // interview chat, Plan → the plans file explorer. Other tabs (User
+        // Stories / Summary / Overview) are `none` — the whole right side is
+        // hidden by _hasRightPanel (the User Stories screen has its own
+        // Chat | History sidebar), so this case won't actually render.
         switch (ref.watch(workspaceRightPanelProvider)) {
           case WorkspaceRightPanel.setupInterview:
             return SetupInterviewPanel(
@@ -400,8 +411,8 @@ class _MainShellState extends ConsumerState<MainShell> {
             );
           case WorkspaceRightPanel.planExplorer:
             return const PlanExplorer();
-          case WorkspaceRightPanel.chatHistory:
-            return const ChatSessionsSidebar();
+          case WorkspaceRightPanel.none:
+            return const SizedBox.shrink();
         }
 
       case MainView.aiProviders:

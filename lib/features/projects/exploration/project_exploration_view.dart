@@ -2,18 +2,24 @@
 // Author: Geramy Loveless <support@nexus-projects.ai>
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
-/// The post-setup **Project Exploration** screen: a UML-style user-story tree in
-/// the center and the discovery Coordinator chat on the right. The coordinator
-/// proactively interviews the user and builds the story tree; NO tasks are
-/// created until the user presses "Generate tasks from stories".
+/// The project's persistent, resumable **User Stories** screen (the default
+/// workspace tab): a UML-style user-story tree in the center, a "Generate tasks
+/// from stories" header, and the Coordinator **Chat | History** sidebar on the
+/// right. While the project is still in discovery (explorationStatus !=
+/// 'complete') the Coordinator runs the story-building interview and speaks
+/// first; once tasks are generated the screen stays available (normal chat) for
+/// refining the tree and regenerating. Because it's an ordinary tab — not a
+/// one-shot full-screen phase — leaving and returning always resumes the same
+/// stories + conversation.
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/database_provider.dart';
-import '../coordinator_chat_screen.dart';
+import '../../project_setup/providers/tag_providers.dart';
 import 'exploration_session.dart';
+import 'stories_chat_sidebar.dart';
 import 'story_providers.dart';
 import 'story_tree_canvas.dart';
 import 'task_generator.dart';
@@ -75,10 +81,25 @@ class ProjectExplorationView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final stories = ref.watch(projectStoriesProvider(projectId)).valueOrNull ?? const [];
-    final promptAsync = ref.watch(
-      discoveryPromptProvider((projectId: projectId, projectName: projectName)),
-    );
     final progress = ref.watch(taskGeneratorProvider(projectId)).progress;
+
+    // This screen is PERSISTENT and resumable — it's the project's main "User
+    // Stories" surface, not a one-shot phase. While the project hasn't finished
+    // generating tasks yet (explorationStatus != 'complete') it's in DISCOVERY:
+    // the Coordinator runs the story-building interview (story-only tools, speaks
+    // first). Once tasks have been generated it stays available for editing the
+    // tree and regenerating, with the normal Coordinator chat.
+    final explorationStatus =
+        ref.watch(projectRowProvider(projectId)).valueOrNull?.explorationStatus;
+    final isDiscovery = explorationStatus != 'complete';
+    final promptAsync = isDiscovery
+        ? ref.watch(
+            discoveryPromptProvider((
+              projectId: projectId,
+              projectName: projectName,
+            )),
+          )
+        : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -91,7 +112,10 @@ class ProjectExplorationView extends ConsumerWidget {
           ),
           child: Row(
             children: [
-              Icon(Icons.explore_outlined, color: theme.colorScheme.primary),
+              Icon(
+                isDiscovery ? Icons.explore_outlined : Icons.account_tree_outlined,
+                color: theme.colorScheme.primary,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Column(
@@ -99,15 +123,18 @@ class ProjectExplorationView extends ConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'Explore "$projectName"',
+                      'User Stories — "$projectName"',
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     Text(
-                      'Talk it through with the Coordinator — build out the user '
-                      'stories, then generate tasks when the idea is solid.',
+                      isDiscovery
+                          ? 'Talk it through with the Coordinator — build out the '
+                                'user stories, then generate tasks when the idea is solid.'
+                          : 'Your user-story map. Refine it with the Coordinator and '
+                                'regenerate tasks any time.',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -141,11 +168,14 @@ class ProjectExplorationView extends ConsumerWidget {
                   ),
                 )
               else ...[
-                TextButton(
-                  onPressed: () => _generate(context, ref),
-                  child: const Text('Skip & generate'),
-                ),
-                const SizedBox(width: 8),
+                // "Skip & generate" is only an option during the initial build.
+                if (isDiscovery) ...[
+                  TextButton(
+                    onPressed: () => _generate(context, ref),
+                    child: const Text('Skip & generate'),
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 FilledButton.icon(
                   onPressed: stories.isEmpty
                       ? null
@@ -160,7 +190,7 @@ class ProjectExplorationView extends ConsumerWidget {
             ],
           ),
         ),
-        // ── Story tree (center) + discovery chat (right) ─────────────────
+        // ── Story tree (center) + Coordinator Chat | History sidebar ──────
         Expanded(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -169,19 +199,29 @@ class ProjectExplorationView extends ConsumerWidget {
               const VerticalDivider(width: 1),
               SizedBox(
                 width: 460,
-                child: promptAsync.when(
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
-                  error: (e, _) => Center(child: Text('Discovery error: $e')),
-                  data: (prompt) => ProjectCoordinatorChatScreen(
-                    key: ValueKey('discovery-chat-$projectId'),
-                    projectId: projectId,
-                    projectName: projectName,
-                    discoveryMode: true,
-                    systemPromptOverride: prompt,
-                    autoOpenPrompt: kDiscoveryAutoOpen,
-                  ),
-                ),
+                // Same Chat | History sidebar throughout: discovery interview
+                // while building, then the normal Coordinator. The conversation
+                // (general project session) carries across the transition.
+                child: isDiscovery
+                    ? promptAsync!.when(
+                        loading: () =>
+                            const Center(child: CircularProgressIndicator()),
+                        error: (e, _) =>
+                            Center(child: Text('Discovery error: $e')),
+                        data: (prompt) => StoriesChatSidebar(
+                          key: ValueKey('stories-sidebar-discovery-$projectId'),
+                          projectId: projectId,
+                          projectName: projectName,
+                          discoveryMode: true,
+                          systemPromptOverride: prompt,
+                          autoOpenPrompt: kDiscoveryAutoOpen,
+                        ),
+                      )
+                    : StoriesChatSidebar(
+                        key: ValueKey('stories-sidebar-normal-$projectId'),
+                        projectId: projectId,
+                        projectName: projectName,
+                      ),
               ),
             ],
           ),
