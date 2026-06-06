@@ -79,7 +79,16 @@ class _NexusCardState extends State<NexusCard> {
                     )
                   : null),
       ),
-      child: widget.child,
+      // The card paints its own background via the BoxDecoration above. A
+      // ListTile/SwitchListTile child paints its background + ink on the nearest
+      // Material — which would be the one BEHIND this card, so it'd be hidden
+      // (Flutter warns: "ListTile … wrapped in a DecoratedBox that has a
+      // background color"). Give the content its own transparent Material so
+      // those children render their ink/selection correctly over the card.
+      child: Material(
+        type: MaterialType.transparency,
+        child: widget.child,
+      ),
     );
 
     // Gradient border = paint a 1px brand-gradient ring around a glass fill.

@@ -219,11 +219,28 @@ class SetupChatController extends ChangeNotifier {
     return resolveBuiltinSetupFlow(flowType, flowSub);
   }
 
-  /// Stage key → label for the flow's required stages (drives the finalize gate).
-  Map<String, String> _requiredCategories(SetupFlowDefinition flow) => {
-    for (final s in flow.stages)
-      if (s.required) s.key: s.title,
-  };
+  /// Stage key → label for the stages that MUST have a tag before finalize.
+  ///
+  /// Beyond the flow's own `required` stages, a software project must ALWAYS have
+  /// a language AND a framework — skipping the stack leaves stories/tasks/code
+  /// underspecified — so force those two required whenever the flow has them
+  /// (IVR/phone flows, which don't have those stages, are unaffected; this also
+  /// defends against a DB-stored flow that marked one optional). Libraries are
+  /// deliberately NOT forced: their per-package verification can stall, so they
+  /// stay addable-but-optional.
+  Map<String, String> _requiredCategories(SetupFlowDefinition flow) {
+    final req = <String, String>{
+      for (final s in flow.stages)
+        if (s.required) s.key: s.title,
+    };
+    const forced = {'languages', 'frameworks'};
+    for (final s in flow.stages) {
+      if (forced.contains(s.key)) req[s.key] = s.title;
+    }
+    // Libraries are optional even if a stored flow marked them required.
+    req.remove('libraries');
+    return req;
+  }
 
   /// Required setup sections (and unanswered industry sub-axes like Genre) still
   /// missing a tag, as human labels. Empty ⇒ ready to generate the plan. The
@@ -324,6 +341,16 @@ class SetupChatController extends ChangeNotifier {
 
   void _append(SetupMsg msg) {
     messages.add(msg);
+    notifyListeners();
+  }
+
+  /// Stop the in-flight interview turn (the user tapped the thinking indicator
+  /// because it looped/hung). The session aborts before its next model round;
+  /// we clear `busy` so the composer frees up immediately.
+  void cancelTurn() {
+    if (!busy) return;
+    _session?.cancel();
+    busy = false;
     notifyListeners();
   }
 

@@ -7,6 +7,10 @@ import 'dart:convert';
 import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart';
 // Backward-compat types (InferenceClient = InferenceBackend).
 import 'package:nexus_projects_client/infrastructure/inference/inference_client.dart';
+import 'package:nexus_projects_client/infrastructure/lemonade/api/exceptions.dart'
+    show LemonadeApiException;
+import 'package:nexus_projects_client/infrastructure/lemonade/services/persona_model_resolver.dart'
+    show kDefaultOmniCollection;
 import 'package:nexus_projects_client/features/projects/coordinator_tools.dart';
 import 'package:nexus_projects_client/features/agents/agent_tool_permissions.dart';
 import 'package:nexus_projects_client/features/project_plans/plan_store.dart';
@@ -151,7 +155,7 @@ class ProjectCoordinatorSession {
   /// The model id actually sent to the backend.
   String get _effectiveModel => (model != null && model!.trim().isNotEmpty)
       ? model!.trim()
-      : 'default-coordinator';
+      : kDefaultOmniCollection;
 
   List<Map<String, dynamic>> get history => List.unmodifiable(_history);
 
@@ -706,25 +710,36 @@ class ProjectCoordinatorSession {
     List<Map<String, dynamic>> tools, {
     required void Function(bool dropped) onToolsDropped,
   }) async* {
-    // Primary: streaming WITH tools.
+    // Primary: streaming WITH tools. Retry on the plan's concurrent-connection
+    // cap (429 / too_many_connections) with backoff — that's transient pressure
+    // (a busy slot frees up shortly), NOT a request-shape problem, so retrying
+    // beats both failing the turn AND falling through to the no-tools fallback.
     var emitted = false;
-    try {
-      await for (final ev in client.streamChatCompletion(
-        model: _effectiveModel,
-        messages: messages,
-        tools: tools,
-        temperature: 0.7,
-        enableThinking: enableThinking,
-      )) {
-        emitted = true;
-        yield ev;
+    for (var attempt = 0; attempt <= 3; attempt++) {
+      try {
+        await for (final ev in client.streamChatCompletion(
+          model: _effectiveModel,
+          messages: messages,
+          tools: tools,
+          temperature: 0.7,
+          enableThinking: enableThinking,
+        )) {
+          emitted = true;
+          yield ev;
+        }
+        onToolsDropped(false);
+        return;
+      } catch (e) {
+        // If partial content already streamed we can't safely retry — rethrow.
+        if (emitted) rethrow;
+        if (_isConnCap(e) && attempt < 3) {
+          await Future<void>.delayed(
+            Duration(milliseconds: 1500 * (attempt + 1)),
+          );
+          continue; // retry streaming once a connection likely frees
+        }
+        break; // non-429 (or out of retries): try the fallbacks below
       }
-      onToolsDropped(false);
-      return;
-    } catch (_) {
-      // If partial content already streamed we can't safely retry — rethrow.
-      if (emitted) rethrow;
-      // Otherwise fall through to the non-streaming fallbacks below.
     }
 
     // Fallback 1: non-streaming WITH tools.
@@ -740,6 +755,14 @@ class ProjectCoordinatorSession {
     yield* _nonStreamingRound(messages, null);
     onToolsDropped(true);
   }
+
+  /// True if [e] is the plan's concurrent-connection cap (HTTP 429 /
+  /// too_many_connections) — transient backpressure worth retrying, not an error
+  /// to surface to the user.
+  static bool _isConnCap(Object e) =>
+      e is LemonadeApiException &&
+      (e.statusCode == 429 ||
+          e.message.toLowerCase().contains('too_many_connections'));
 
   /// One non-streaming round mapped into the same event shape as streaming.
   Stream<ChatStreamEvent> _nonStreamingRound(

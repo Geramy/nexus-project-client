@@ -19,9 +19,12 @@ import '../../../infrastructure/inference/inference_backend.dart';
 import '../../../infrastructure/inference/inference_backend_factory.dart';
 import '../../../infrastructure/inference/routed_server.dart';
 import '../../../infrastructure/inference/scoped_completion.dart';
+import '../../../infrastructure/lemonade/services/persona_model_resolver.dart'
+    show resolveAgentChatModel;
 import '../../../infrastructure/models/ui/inference_server.dart' as ui_server;
 import '../agent_assignment.dart';
 import '../orchestration/orchestrator_prompts.dart';
+import '../project_baseline.dart';
 
 enum StoryGenStatus { pending, generating, done, error }
 
@@ -132,7 +135,9 @@ class TaskGenerator extends ChangeNotifier {
       final sys = OrchestratorPrompts.fromJson(
         project?.orchestratorPromptsJson,
       ).raw(OrchestratorPromptField.taskGenSystem);
-      final profile = await _profile(db, projectId);
+      // The full, AUTHORITATIVE baseline (platforms + stack + scope) so each
+      // story's tasks are generated within the project's locked tech choices.
+      final profile = await buildProjectBaseline(db, projectId);
 
       for (final s in leaves) {
         _setStory(s.story_pk, const StoryGen(StoryGenStatus.generating));
@@ -239,7 +244,7 @@ class TaskGenerator extends ChangeNotifier {
         b.writeln('- ${n.body.trim()}');
       }
     }
-    b.writeln('\nPROJECT TECH PROFILE:\n$profile');
+    b.writeln('\n$profile');
 
     // A backend that's down, unauthorized, or returns junk must NOT abort the
     // story (which would skip the one-task-per-story fallback in run() and yield
@@ -257,19 +262,6 @@ class TaskGenerator extends ChangeNotifier {
       debugPrint('task-gen scoped call for story #${s.story_pk} failed: $e');
       return const [];
     }
-  }
-
-  Future<String> _profile(NexusDatabase db, int projectId) async {
-    final tags = await db.getTagsForProject(projectId);
-    final byCat = <String, List<String>>{};
-    for (final t in tags) {
-      if (t.status == 'rejected') continue;
-      (byCat[t.category] ??= <String>[]).add(t.value);
-    }
-    String c(String k) => (byCat[k] ?? const []).join(', ');
-    return 'Platforms: ${c('platforms')}\nLanguages: ${c('languages')}\n'
-        'Frameworks: ${c('frameworks')}\nDatabases: ${c('databases')}\n'
-        'Services: ${c('services')}';
   }
 
   /// Resolve the project's routed inference backend + model (the configured
@@ -290,10 +282,13 @@ class TaskGenerator extends ChangeNotifier {
     try {
       models = (jsonDecode(chosen.availableModelsJson) as List).cast<String>();
     } catch (_) {}
-    final model =
-        (chosen.selectedModel != null && chosen.selectedModel!.trim().isNotEmpty)
-        ? chosen.selectedModel!.trim()
-        : (models.isNotEmpty ? models.first : 'default-coordinator');
+    // Routed Nexus Router serves the Omni collection id directly; default to it
+    // rather than a raw 4B fallback. (Task-gen doesn't fetch the live model list;
+    // local servers fall back to the configured selectedModel/default.)
+    final model = resolveAgentChatModel(
+      routed: isRoutedProviderType(chosen.providerType),
+      selectedModel: chosen.selectedModel,
+    );
     final uiServer = ui_server.InferenceServer(
       id: chosen.server_pk.toString(),
       name: chosen.name,

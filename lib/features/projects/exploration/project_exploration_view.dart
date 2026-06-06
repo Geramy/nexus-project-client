@@ -92,6 +92,46 @@ class ProjectExplorationView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+
+    // The User Stories screen (and its Coordinator discovery chat) must NOT run
+    // until SETUP is complete. The shell keeps this screen mounted, so on a fresh
+    // project it would otherwise fire a background discovery turn that competes
+    // with the setup interview for the connection budget and stalls it (the new
+    // project would loop after the first question). Show a wait-for-setup
+    // placeholder until then.
+    final setupComplete =
+        ref.watch(projectRowProvider(projectId)).valueOrNull?.setupStatus ==
+        'complete';
+    if (!setupComplete) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.account_tree_outlined,
+                size: 44,
+                color: theme.colorScheme.outline,
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Finish project setup first',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Once setup is complete, the Coordinator helps you build out the '
+                'user stories here.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: theme.colorScheme.outline),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final stories = ref.watch(projectStoriesProvider(projectId)).valueOrNull ?? const [];
     final progress = ref.watch(taskGeneratorProvider(projectId)).progress;
 

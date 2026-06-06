@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nexus_projects_client/core/providers/app_shell_provider.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
+import 'package:nexus_projects_client/features/main/widgets/agent_feed_indicator.dart';
 
 /// Top bar extracted from main_shell.dart during organization refactor (2026-05).
 /// Contains prominent client indicator + project switcher + connection mode.
@@ -98,49 +99,84 @@ class TopBar extends ConsumerWidget {
 
           const SizedBox(width: 8),
 
-          // Project Switcher (simplified for now)
+          // Project switcher — a dropdown so exactly ONE project is focused at a
+          // time. Switching away from a project whose agents are running asks for
+          // confirmation and pauses them, so an accidental click can't hand all
+          // your concurrency to an unfinished project.
           Flexible(
             child: Consumer(
               builder: (context, ref, _) {
                 final currentClientId = ref.watch(currentClientIdProvider);
                 final currentProjectId = ref.watch(currentProjectIdProvider);
-                final projectsAsync = ref.watch(
-                  projectsForClientProvider(currentClientId),
-                );
-
-                final projectName = projectsAsync.when(
-                  data: (projects) {
-                    final match = projects
+                final projects =
+                    ref
+                        .watch(projectsForClientProvider(currentClientId))
+                        .valueOrNull ??
+                    const [];
+                final projectName =
+                    projects
                         .where((p) => p.project_pk == currentProjectId)
-                        .firstOrNull;
-                    return match?.name ?? currentProjectId.toString();
-                  },
-                  loading: () => currentProjectId.toString(),
-                  error: (_, __) => currentProjectId.toString(),
-                );
+                        .firstOrNull
+                        ?.name ??
+                    currentProjectId.toString();
 
-                return Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
+                return PopupMenuButton<int>(
+                  tooltip: 'Switch project',
+                  position: PopupMenuPosition.under,
+                  onSelected: (id) => _switchProject(
+                    context,
+                    ref,
+                    currentProjectId,
+                    projectName,
+                    id,
                   ),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Theme.of(context).dividerColor),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.folder_open, size: 14),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          projectName,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12),
+                  itemBuilder: (_) => [
+                    for (final p in projects)
+                      PopupMenuItem(
+                        value: p.project_pk,
+                        child: Row(
+                          children: [
+                            Icon(
+                              p.project_pk == currentProjectId
+                                  ? Icons.check
+                                  : Icons.folder_open,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                p.name,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
+                  ],
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Theme.of(context).dividerColor),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.folder_open, size: 14),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            projectName,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                        const Icon(Icons.arrow_drop_down, size: 18),
+                      ],
+                    ),
                   ),
                 );
               },
@@ -148,6 +184,12 @@ class TopBar extends ConsumerWidget {
           ),
 
           const Spacer(),
+
+          // Live agent feed: which agent is running, the task it's on, and its
+          // state (working / complete / stopped) — sits between the project
+          // breadcrumb and the connection toggle.
+          AgentFeedIndicator(narrow: narrow),
+          SizedBox(width: narrow ? 8 : 12),
 
           // Connection mode toggle (icon-only on phones to save width).
           Consumer(
@@ -176,5 +218,48 @@ class TopBar extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// Switch the focused project. If the project we're leaving has its
+  /// orchestration RUNNING, confirm first and PAUSE it — so its agents stop
+  /// consuming the shared connection budget and an accidental switch can't strand
+  /// the project you actually want to work on.
+  Future<void> _switchProject(
+    BuildContext context,
+    WidgetRef ref,
+    int currentId,
+    String currentName,
+    int newId,
+  ) async {
+    if (newId == currentId) return;
+    final db = ref.read(nexusDatabaseProvider);
+    final proj = await db.getProjectById(currentId);
+    final running = proj?.orchestrationState == 'running';
+    if (running) {
+      if (!context.mounted) return;
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Swap projects?'),
+          content: Text(
+            'Are you sure you want to swap projects? This will pause the agents '
+            'currently working on "$currentName" until you focus it again.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Swap & pause'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+      await db.setProjectOrchestrationState(currentId, 'paused');
+    }
+    ref.read(currentProjectIdProvider.notifier).selectProject(newId);
   }
 }

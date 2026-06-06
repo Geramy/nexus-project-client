@@ -111,7 +111,10 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
     ref.listen(projectRowProvider(projectId), (prev, next) {
       final was = prev?.valueOrNull?.setupStatus;
       final now = next.valueOrNull?.setupStatus;
-      if (was != 'complete' && now == 'complete') {
+      // Only jump on a GENUINE transition into 'complete'. Guard `was != null`
+      // so the first Loading→Data emission (where `was` is null) isn't mistaken
+      // for "setup just completed" and yanked to tab 0 out from under the user.
+      if (was != null && was != 'complete' && now == 'complete') {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _tabs.animateTo(0);
         });
@@ -188,29 +191,38 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
                 showProjectSetupWizard(context, projectId, clientId),
           ),
         Expanded(
-          child: TabBarView(
-            controller: _tabs,
-            // Chat + plan editors keep state; don't allow swipe so the code
-            // editor / chat composer get the drag gestures instead.
-            physics: const NeverScrollableScrollPhysics(),
-            children: [
-              // Main screen: the persistent, resumable story-building surface —
-              // the user-story tree, a Generate-tasks header, and the Coordinator
-              // Chat | History sidebar (discovery interview while building, normal
-              // chat afterwards).
-              ProjectExplorationView(
-                key: ValueKey('project-stories-pane-$projectId'),
-                projectId: projectId,
-                projectName: projectName,
-              ),
-              SummaryTab(
-                key: ValueKey('project-summary-$projectId'),
-                projectId: projectId,
-                clientId: clientId,
-              ),
-              _ProjectOverviewTab(projectId: projectId, clientId: clientId),
-              const PlanWorkspaceView(),
-            ],
+          // IndexedStack (not TabBarView) so EVERY tab stays mounted when you
+          // switch tabs — switching away no longer disposes the User Stories
+          // pane, so the Coordinator chat keeps its session, in-flight "thinking"
+          // stream, queued prompts and scroll position running in the background
+          // (its own lifecycle), and returning resumes mid-conversation instead
+          // of rebuilding from scratch in a broken state. It also stops the tab
+          // content from remounting on switch. Rebuilds when the tab index
+          // changes via the controller.
+          child: AnimatedBuilder(
+            animation: _tabs,
+            builder: (context, _) => IndexedStack(
+              index: _tabs.index,
+              sizing: StackFit.expand,
+              children: [
+                // Main screen: the persistent, resumable story-building surface —
+                // the user-story tree, a Generate-tasks header, and the
+                // Coordinator Chat | History sidebar (discovery interview while
+                // building, normal chat afterwards).
+                ProjectExplorationView(
+                  key: ValueKey('project-stories-pane-$projectId'),
+                  projectId: projectId,
+                  projectName: projectName,
+                ),
+                SummaryTab(
+                  key: ValueKey('project-summary-$projectId'),
+                  projectId: projectId,
+                  clientId: clientId,
+                ),
+                _ProjectOverviewTab(projectId: projectId, clientId: clientId),
+                const PlanWorkspaceView(),
+              ],
+            ),
           ),
         ),
       ],

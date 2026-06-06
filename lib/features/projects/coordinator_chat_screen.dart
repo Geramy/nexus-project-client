@@ -95,6 +95,8 @@ class _ProjectCoordinatorChatScreenState
   // True while an assistant turn is in flight but no streamed content has
   // arrived yet (drives the "Coordinator is thinking…" indicator).
   bool _isThinking = false;
+  // Set when the user taps the thinking indicator to abort a stuck/looping turn.
+  bool _stopRequested = false;
   VoiceState _voiceState = VoiceState.idle;
 
   /// Concrete backend for the selected server (LemonadeBackend via factory).
@@ -184,14 +186,12 @@ class _ProjectCoordinatorChatScreenState
         entry = cache.entryFor(chosen.server_pk);
       }
       final serverModels = entry?.models ?? const <ApiModelInfo>[];
-      final liveTextModel = firstChatModelId(serverModels);
 
       // Per-modality models from the agent (omni components or individual fields),
       // resolved against the agent's own server.
       String? sttModel;
       String? ttsModel;
       String? ttsVoice = persona?.ttsVoice;
-      String? resolvedChatModel;
 
       // The coordinator voice ALWAYS defaults to the best Omni collection the
       // chosen server advertises — the product default, LMX-Omni-52B-Halo — for
@@ -216,7 +216,6 @@ class _ProjectCoordinatorChatScreenState
           imageGenModel: persona?.imageGenModel,
           models: serverModels,
         );
-        resolvedChatModel = resolved.llm;
         sttModel = resolved.stt;
         ttsModel = resolved.tts;
         // Default the coordinator's spoken voice to Bella on the Halo collection
@@ -232,17 +231,17 @@ class _ProjectCoordinatorChatScreenState
       sttModel ??= firstAudioModelId(serverModels);
       ttsModel ??= firstTtsModelId(serverModels);
 
-      // Chat model: agent's resolved LLM → server's selected → first live → first cached.
-      final chatCandidate =
-          resolvedChatModel ??
-          ((chosen.selectedModel != null &&
-                  chosen.selectedModel!.trim().isNotEmpty)
-              ? chosen.selectedModel!.trim()
-              : (liveTextModel ?? (models.isNotEmpty ? models.first : null)));
-      // Never address a collection/omni id at chat — decompose to its LLM
-      // component (the server 500s on bare collection ids).
-      final effectiveChatModel =
-          resolveChatModelId(chatCandidate, serverModels) ?? chatCandidate;
+      // Chat model: the routed Nexus Router serves the Omni COLLECTION id
+      // (LMX-Omni-52B-Halo) DIRECTLY, so send it as-is and default to it — do NOT
+      // decompose to a raw sub-model, which fell through to a small 4B (Qwen3.5-4B)
+      // and is the wrong model. Local servers (which 500 on a bare collection)
+      // decompose from their live model list. Voice STT/TTS resolved above.
+      final effectiveChatModel = resolveAgentChatModel(
+        routed: isRoutedProviderType(chosen.providerType),
+        personaModel: persona?.llmModel,
+        selectedModel: chosen.selectedModel,
+        serverModels: serverModels,
+      );
       debugPrint(
         '[Voice] Coordinator models → chat=$effectiveChatModel stt=$sttModel '
         'tts=$ttsModel voice=${ttsVoice ?? "(default)"} '
@@ -566,6 +565,19 @@ class _ProjectCoordinatorChatScreenState
     }
   }
 
+  /// Abort the in-flight turn — the user tapped the thinking indicator because it
+  /// looped or hung. Setting [_stopRequested] breaks the stream loop on its next
+  /// event (which cancels the underlying request); we drop the spinner right away
+  /// so the composer frees up immediately.
+  void _stopTurn() {
+    if (!_isSending && !_isThinking) return;
+    setState(() {
+      _stopRequested = true;
+      _isSending = false;
+      _isThinking = false;
+    });
+  }
+
   Future<void> _sendMessage({String? hiddenPrompt}) async {
     // A hidden prompt (the discovery auto-opener) drives a turn WITHOUT showing
     // a user bubble or persisting it — so the coordinator appears to speak first.
@@ -578,6 +590,7 @@ class _ProjectCoordinatorChatScreenState
       if (!hidden) _messageController.clear();
       _isSending = true;
       _isThinking = true;
+      _stopRequested = false;
     });
     final userMsgPk = hidden ? null : await _persist('user', text);
 
@@ -615,61 +628,77 @@ class _ProjectCoordinatorChatScreenState
       );
 
       await for (final event in stream) {
-        if (!mounted) break;
-
+        // Stop consuming ONLY when the widget is genuinely DISPOSED (project
+        // switch, app close, re-init) — that cancels the turn and frees its
+        // inference connection. When the chat is merely OFFSTAGE (another tab/
+        // screen) it stays MOUNTED (the shell keeps the workspace alive via
+        // Offstage), so `mounted` is still true here and the turn keeps running
+        // in the background as intended. Without this break, a disposed chat's
+        // in-flight turn would hold its connection open and pile up across the
+        // re-inits that happen during startup/navigation → "too_many_connections"
+        // (429), which even broke the live coordinator chat.
+        if (!mounted || _stopRequested) break;
         if (event is ChatReasoningDelta) {
           reasoningBuffer.write(event.text);
-          setState(() {
-            if (reasoningIndex == null) {
-              _messages.add(
-                _ChatMessage(
+          if (mounted) {
+            setState(() {
+              if (reasoningIndex == null) {
+                _messages.add(
+                  _ChatMessage(
+                    text: reasoningBuffer.toString(),
+                    isUser: false,
+                    isReasoning: true,
+                  ),
+                );
+                reasoningIndex = _messages.length - 1;
+              } else {
+                _messages[reasoningIndex!] = _ChatMessage(
                   text: reasoningBuffer.toString(),
                   isUser: false,
                   isReasoning: true,
-                ),
-              );
-              reasoningIndex = _messages.length - 1;
-            } else {
-              _messages[reasoningIndex!] = _ChatMessage(
-                text: reasoningBuffer.toString(),
-                isUser: false,
-                isReasoning: true,
-              );
-            }
-            // Reasoning is streaming — we have live feedback, so drop the opaque
-            // "thinking…" spinner.
-            _isThinking = false;
-          });
+                );
+              }
+              // Reasoning is streaming — we have live feedback, so drop the
+              // opaque "thinking…" spinner.
+              _isThinking = false;
+            });
+          }
         } else if (event is ChatContentDelta) {
           if (needNewBubble) {
             assistantBuffer
               ..clear()
               ..write(event.text);
-            setState(() {
-              _messages.add(
-                _ChatMessage(text: assistantBuffer.toString(), isUser: false),
-              );
-              _isThinking = false; // content is streaming now
-            });
             needNewBubble = false;
+            if (mounted) {
+              setState(() {
+                _messages.add(
+                  _ChatMessage(text: assistantBuffer.toString(), isUser: false),
+                );
+                _isThinking = false; // content is streaming now
+              });
+            }
           } else {
             assistantBuffer.write(event.text);
-            setState(
-              () => _messages.last = _ChatMessage(
-                text: assistantBuffer.toString(),
-                isUser: false,
-              ),
-            );
+            if (mounted) {
+              setState(
+                () => _messages.last = _ChatMessage(
+                  text: assistantBuffer.toString(),
+                  isUser: false,
+                ),
+              );
+            }
           }
         } else if (event is ChatStreamFinish) {
           final assistantText = assistantBuffer.toString().trim();
           if (assistantText.isNotEmpty) {
             await _persist('assistant', assistantText);
           }
-          setState(() {
-            _isSending = false;
-            _isThinking = false;
-          });
+          if (mounted) {
+            setState(() {
+              _isSending = false;
+              _isThinking = false;
+            });
+          }
         }
       }
     } catch (e) {
@@ -861,7 +890,11 @@ class _ProjectCoordinatorChatScreenState
             ),
 
           Expanded(
-            child: ListView.builder(
+            // SelectionArea makes the whole transcript drag-selectable so the
+            // user can copy exact quotes — markdown-rendered messages aren't
+            // selectable on their own.
+            child: SelectionArea(
+              child: ListView.builder(
               controller: _sticky.controller,
               padding: const EdgeInsets.all(AppSpacing.lg),
               itemCount: _messages.length + (_isThinking ? 1 : 0),
@@ -871,34 +904,56 @@ class _ProjectCoordinatorChatScreenState
                 if (index >= _messages.length) {
                   return Align(
                     alignment: Alignment.centerLeft,
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(
-                        vertical: AppSpacing.xs,
-                      ),
-                      padding: const EdgeInsets.all(AppSpacing.md),
-                      decoration: BoxDecoration(
-                        color: context.nx.glass,
+                    child: Tooltip(
+                      message: 'Stop',
+                      // Tap the spinner to abort a stuck/looping turn.
+                      child: InkWell(
                         borderRadius: AppRadius.lgAll,
-                        border: Border.all(color: context.nx.hairline),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                        onTap: _stopTurn,
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(
+                            vertical: AppSpacing.xs,
                           ),
-                          const SizedBox(width: AppSpacing.sm),
-                          Text(
-                            'Coordinator is thinking…',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontStyle: FontStyle.italic,
-                              color: context.nx.textMuted,
-                            ),
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          decoration: BoxDecoration(
+                            color: context.nx.glass,
+                            borderRadius: AppRadius.lgAll,
+                            border: Border.all(color: context.nx.hairline),
                           ),
-                        ],
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Spinner with a stop glyph centred to signal it's
+                              // clickable.
+                              SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    const CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                    Icon(
+                                      Icons.stop,
+                                      size: 9,
+                                      color: context.nx.textMuted,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Text(
+                                'Coordinator is thinking… (tap to stop)',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontStyle: FontStyle.italic,
+                                  color: context.nx.textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   );
@@ -976,6 +1031,7 @@ class _ProjectCoordinatorChatScreenState
                   ),
                 );
               },
+              ),
             ),
           ),
 

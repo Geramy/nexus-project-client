@@ -96,9 +96,7 @@ final projectInferenceProvider = FutureProvider.family<ResolvedInference?, ({int
     entry = cache.entryFor(chosen.server_pk);
   }
   final serverModels = entry?.models ?? const [];
-  final liveTextModel = firstChatModelId(serverModels);
 
-  String? resolvedChatModel;
   String? sttModel;
   String? ttsModel;
   String? ttsVoice;
@@ -120,7 +118,6 @@ final projectInferenceProvider = FutureProvider.family<ResolvedInference?, ({int
       imageGenModel: persona.imageGenModel,
       models: serverModels,
     );
-    resolvedChatModel = resolved.llm;
     sttModel = resolved.stt;
     ttsModel = resolved.tts;
   }
@@ -130,15 +127,17 @@ final projectInferenceProvider = FutureProvider.family<ResolvedInference?, ({int
   sttModel ??= firstAudioModelId(serverModels);
   ttsModel ??= firstTtsModelId(serverModels);
 
-  final selected = chosen.selectedModel;
-  final candidate =
-      resolvedChatModel ??
-      ((selected != null && selected.trim().isNotEmpty)
-          ? selected.trim()
-          : (liveTextModel ?? (models.isNotEmpty ? models.first : '')));
-  // Never send a collection/omni id to chat — decompose it to its LLM
-  // component (the server 500s on bare collection ids).
-  final model = resolveChatModelId(candidate, serverModels) ?? candidate;
+  // The routed Nexus Router serves the Omni COLLECTION id (LMX-Omni-52B-Halo)
+  // DIRECTLY, so send it as-is and default to it — do NOT decompose to a raw
+  // sub-model, which fell through to a small 4B (e.g. Qwen3.5-4B): the wrong
+  // model. Local servers (which 500 on a bare collection) decompose from the
+  // live list. STT/TTS components are still resolved above for voice.
+  final model = resolveAgentChatModel(
+    routed: isRoutedProviderType(chosen.providerType),
+    personaModel: persona?.llmModel as String?,
+    selectedModel: chosen.selectedModel,
+    serverModels: serverModels,
+  );
 
   final uiServer = ui_server.InferenceServer(
     id: chosen.server_pk.toString(),

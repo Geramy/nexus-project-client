@@ -9,6 +9,7 @@ library;
 
 import '../../../infrastructure/database/nexus_database.dart';
 import '../orchestration/orchestrator_prompts.dart';
+import '../project_baseline.dart';
 
 /// A hidden kickoff (sent as the first turn) so the coordinator speaks first.
 const String kDiscoveryAutoOpen =
@@ -22,39 +23,26 @@ Future<String> buildDiscoveryPrompt(
   int projectId,
   String projectName,
 ) async {
-  final tags = await db.getTagsForProject(projectId);
-  final byCat = <String, List<String>>{};
-  for (final t in tags) {
-    if (t.status == 'rejected') continue;
-    (byCat[t.category] ??= <String>[]).add(t.value);
-  }
-  String cat(String k) {
-    final v = byCat[k] ?? const [];
-    return v.isEmpty ? '—' : v.join(', ');
-  }
-
   final proj = await db.getProjectById(projectId);
-  final summary = (proj?.projectSummaryMd ?? '').trim();
 
   // The discovery system prompt is a SYSTEM SETTING (editable in the Prompts
   // tab, per project) — the hierarchy/chaining behavior lives there, not buried
-  // in code. We append the dynamic project profile so it's grounded.
+  // in code. We append the full, AUTHORITATIVE project baseline (every setup
+  // decision incl. languages/frameworks/libraries) so discovery is grounded and
+  // can't drift the stack — instead of the old partial profile that dropped the
+  // tech stack and let stories invent a different one (e.g. a web app becoming a
+  // Unity/C# game).
   final instructions = OrchestratorPrompts.fromJson(proj?.orchestratorPromptsJson)
       .raw(OrchestratorPromptField.discoverySystem)
       .replaceAll('{projectName}', projectName);
+  final baseline = await buildProjectBaseline(db, projectId);
 
   return '''
 $instructions
 
-PROJECT PROFILE (captured during setup):
-- Industries: ${cat('industries')}
-- Platforms: ${cat('platforms')}
-- Objectives: ${cat('objectives')}
-- Features: ${cat('features')}
-- Databases: ${cat('databases')}
-- Services: ${cat('services')}
-${summary.isEmpty ? '' : '\nSummary:\n$summary\n'}
-Tailor your questions to this profile: if the industry/genre reads like a GAME, ask about the core loop, mechanics, progression, and win/lose; if an APPLICATION, ask about the target users, their key workflows, the main screens, and the data involved.''';
+$baseline
+
+Tailor your questions to this baseline: if the industry/genre reads like a GAME, ask about the core loop, mechanics, progression, and win/lose; if an APPLICATION, ask about the target users, their key workflows, the main screens, and the data involved. Every story you create must be buildable within the platforms and stack above.''';
 }
 
 // Task generation from the story tree lives in task_generator.dart

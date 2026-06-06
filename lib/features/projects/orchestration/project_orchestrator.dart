@@ -18,6 +18,14 @@ import 'package:nexus_projects_client/infrastructure/inference/inference_client.
     show InferenceBackend;
 import 'package:nexus_projects_client/infrastructure/models/ui/inference_server.dart'
     as ui_server;
+import 'package:nexus_projects_client/infrastructure/lemonade/api/types/model_info.dart'
+    show ApiModelInfo;
+import 'package:nexus_projects_client/infrastructure/lemonade/services/persona_model_resolver.dart'
+    show resolveAgentChatModel;
+import 'package:nexus_projects_client/infrastructure/lemonade/api/exceptions.dart'
+    show LemonadeApiException;
+import 'package:nexus_projects_client/features/ai_providers/providers/ai_servers_cache_provider.dart'
+    show aiServersCacheProvider;
 import 'package:nexus_projects_client/infrastructure/workspace/async_lock.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/workspace.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/workspace_provider.dart';
@@ -33,6 +41,8 @@ import 'package:nexus_projects_client/features/agents/agent_role_policy.dart';
 import 'package:nexus_projects_client/features/agents/agent_tool_permissions.dart';
 import 'package:nexus_projects_client/features/projects/coordinator_session.dart';
 import 'package:nexus_projects_client/features/projects/orchestration/orchestrator_prompts.dart';
+import 'package:nexus_projects_client/features/projects/project_baseline.dart'
+    show buildProjectBaseline;
 import 'package:nexus_projects_client/features/projects/orchestration/weighted_scheduler.dart';
 import 'package:nexus_projects_client/features/projects/project_working_hours.dart';
 import 'package:nexus_projects_client/features/projects/task_workflow.dart';
@@ -79,14 +89,26 @@ class ProjectOrchestrator {
   /// failing to submit rather than spinning forever.
   final Map<int, int> _attempts = {};
 
+  /// After hitting the plan's concurrent-connection cap (HTTP 429), pause NEW
+  /// agent dispatch until this time so we stop piling past the cap — in-flight
+  /// stages keep running, and the task that 429'd goes back to the board (it is
+  /// NOT counted as a failure or Blocked; it's pure backpressure).
+  DateTime? _connBackoffUntil;
+
   /// Fair, backlog-weighted scheduler over the pipeline stages, so verify/build/
   /// merge aren't starved by a long implement queue while busier stages still
   /// get proportionally more turns.
   final WeightedRoundRobin<_Stage> _scheduler = WeightedRoundRobin<_Stage>();
 
-  static const int _maxAttemptsPerTask = 2;
+  // Per-task retry budget within ONE run before a task is surfaced as Blocked.
+  // Kept generous so a couple of transient hiccups (a flaky worker turn, a
+  // momentary backend blip) don't strand otherwise-workable tasks — blocking is
+  // a "needs a human look" signal, not a hair-trigger. (Re)starting the loop
+  // clears this and requeues blocked tasks, so it's never a permanent dead end.
+  static const int _maxAttemptsPerTask = 5;
   static const int _maxTurnsPerTask = 12;
   static const int _maxTurnsPerStage = 8;
+  static const Duration _connBackoff = Duration(seconds: 20);
   static const Duration _tickInterval = Duration(seconds: 30);
   static const Duration _buildPollInterval = Duration(seconds: 3);
   static const Duration _buildTimeout = Duration(minutes: 30);
@@ -98,6 +120,12 @@ class ProjectOrchestrator {
   void start() {
     // Clear any leftover per-task working-tree disks from a previous crash.
     unawaited(pruneTaskDisks(projectId));
+    // A new run starts every task with a clean retry budget, and any task that
+    // was Blocked in a previous run gets another chance — so pressing Start
+    // always actually starts the work instead of immediately re-surfacing a
+    // board full of Blocked tasks the user can't get past.
+    _attempts.clear();
+    unawaited(_db.requeueBlockedTasks(projectId));
     // Reconcile tasks orphaned mid-run by a crash/quit: our in-memory _active
     // set is empty on a fresh start, so any task still marked `running` in the
     // DB would never be re-picked. Return them to the board.
@@ -128,6 +156,14 @@ class ProjectOrchestrator {
       final project = await _db.getProjectById(projectId);
       if (project == null || project.orchestrationState != 'running') return;
       if (!isWithinWorkingHours(project)) return;
+
+      // Honour the connection-cap backoff: a recent 429 means every slot the plan
+      // allows is in use (often by the interactive Coordinator chat too), so don't
+      // launch MORE agents — let in-flight work finish and free a connection.
+      if (_connBackoffUntil != null &&
+          DateTime.now().isBefore(_connBackoffUntil!)) {
+        return;
+      }
 
       final cap = await _concurrencyCap(project);
       while (!_disposed && _active.length < cap) {
@@ -380,8 +416,12 @@ class ProjectOrchestrator {
         // Autonomous coders need file/git/build tools directly — no progressive
         // disclosure (that's for the interactive PM chat).
         leanTools: false,
-        systemPromptOverride:
-            '${defaultSystemPrompt(role)}\n${prompts.render(OrchestratorPromptField.workerFraming, vars)}',
+        systemPromptOverride: await _framedPrompt(
+          role,
+          OrchestratorPromptField.workerFraming,
+          prompts,
+          vars,
+        ),
         enableThinking: resolveEnableThinking(
           agent: personaThinkingMode(
             persona.configJson,
@@ -418,9 +458,21 @@ class ProjectOrchestrator {
             // Drain the stream; tool effects are applied inside runTurn.
           }
         } catch (e) {
-          debugPrint(
-            '[Orchestrator p$projectId] task ${task.task_pk}: turn $turn failed: $e',
-          );
+          if (_isConnCap(e)) {
+            // Connection-cap backpressure, NOT a failure: undo this attempt so a
+            // 429 can never push the task toward Blocked. It returns to the board
+            // and is retried once a connection frees.
+            final n = (_attempts[task.task_pk] ?? 1) - 1;
+            if (n <= 0) {
+              _attempts.remove(task.task_pk);
+            } else {
+              _attempts[task.task_pk] = n;
+            }
+          } else {
+            debugPrint(
+              '[Orchestrator p$projectId] task ${task.task_pk}: turn $turn failed: $e',
+            );
+          }
           await _db.markTaskYieldedBack(task.task_pk);
           return;
         }
@@ -454,6 +506,21 @@ class ProjectOrchestrator {
   Future<OrchestratorPrompts> _loadPrompts() async {
     final project = await _db.getProjectById(projectId);
     return OrchestratorPrompts.fromJson(project?.orchestratorPromptsJson);
+  }
+
+  /// A stage's system prompt with the AUTHORITATIVE project baseline prepended,
+  /// so every agent (worker / verifier / merger) implements, checks, and merges
+  /// strictly within the platforms + language/framework stack chosen at setup —
+  /// never substituting a different technology.
+  Future<String> _framedPrompt(
+    AgentRole role,
+    OrchestratorPromptField field,
+    OrchestratorPrompts prompts,
+    PromptVars vars,
+  ) async {
+    final baseline = await buildProjectBaseline(_db, projectId);
+    return '$baseline\n\n${defaultSystemPrompt(role)}\n'
+        '${prompts.render(field, vars)}';
   }
 
   /// The placeholder values for [task]'s prompt templates.
@@ -536,8 +603,12 @@ class ProjectOrchestrator {
         git: th.git,
         buildService: th.build,
         leanTools: false,
-        systemPromptOverride:
-            '${defaultSystemPrompt(AgentRole.verificationAgent)}\n${prompts.render(OrchestratorPromptField.verifyFraming, vars)}',
+        systemPromptOverride: await _framedPrompt(
+          AgentRole.verificationAgent,
+          OrchestratorPromptField.verifyFraming,
+          prompts,
+          vars,
+        ),
         enableThinking: resolveEnableThinking(
           agent: personaThinkingMode(
             persona.configJson,
@@ -553,9 +624,11 @@ class ProjectOrchestrator {
         try {
           await for (final _ in session.runTurn(kickoff)) {}
         } catch (e) {
-          debugPrint(
-            '[Orchestrator p$projectId] task ${task.task_pk}: verify turn $turn failed: $e',
-          );
+          if (!_isConnCap(e)) {
+            debugPrint(
+              '[Orchestrator p$projectId] task ${task.task_pk}: verify turn $turn failed: $e',
+            );
+          }
           return;
         }
         final fresh = await _db.getTaskById(task.task_pk);
@@ -762,8 +835,12 @@ class ProjectOrchestrator {
       // Autonomous coders need file/git/build tools directly — no progressive
       // disclosure (that's for the interactive PM chat).
       leanTools: false,
-      systemPromptOverride:
-          '${defaultSystemPrompt(AgentRole.coordinator)}\n${prompts.render(OrchestratorPromptField.mergeFraming, vars)}',
+      systemPromptOverride: await _framedPrompt(
+        AgentRole.coordinator,
+        OrchestratorPromptField.mergeFraming,
+        prompts,
+        vars,
+      ),
       enableThinking: resolveEnableThinking(
         agent: personaThinkingMode(
           persona.configJson,
@@ -779,9 +856,11 @@ class ProjectOrchestrator {
       try {
         await for (final _ in session.runTurn(kickoff)) {}
       } catch (e) {
-        debugPrint(
-          '[Orchestrator p$projectId] task ${task.task_pk}: merge turn $turn failed: $e',
-        );
+        if (!_isConnCap(e)) {
+          debugPrint(
+            '[Orchestrator p$projectId] task ${task.task_pk}: merge turn $turn failed: $e',
+          );
+        }
         return;
       }
       final fresh = await _db.getTaskById(task.task_pk);
@@ -868,6 +947,25 @@ class ProjectOrchestrator {
     await deleteTaskDisk(projectId, taskPk);
   }
 
+  /// True if [e] is the plan's concurrent-connection cap (HTTP 429 /
+  /// too_many_connections). Records a short dispatch backoff so the pump stops
+  /// launching new agents until a connection frees. This is BACKPRESSURE, not a
+  /// task failure — callers return the task to the board and never Block it.
+  bool _isConnCap(Object e) {
+    final hit =
+        e is LemonadeApiException &&
+        (e.statusCode == 429 ||
+            e.message.toLowerCase().contains('too_many_connections'));
+    if (hit) {
+      _connBackoffUntil = DateTime.now().add(_connBackoff);
+      debugPrint(
+        '[Orchestrator p$projectId] connection cap (429) — returning task to '
+        'the board, pausing new agents for ${_connBackoff.inSeconds}s.',
+      );
+    }
+    return hit;
+  }
+
   /// How many agents may run at once: the routed (subscription) server's
   /// `maxConcurrency` (synced from the account), clamped to a safe range. Falls
   /// back to 1 when no server is configured.
@@ -945,16 +1043,34 @@ class ProjectOrchestrator {
       }
     }
 
-    final models = (jsonDecode(chosen.availableModelsJson) as List)
-        .cast<String>();
+    final models = chosen.availableModelsJson.isNotEmpty
+        ? (jsonDecode(chosen.availableModelsJson) as List).cast<String>()
+        : const <String>[];
 
-    final personaModel = persona.llmModel?.trim();
-    final model = (personaModel != null && personaModel.isNotEmpty)
-        ? personaModel
-        : ((chosen.selectedModel != null &&
-                  chosen.selectedModel!.trim().isNotEmpty)
-              ? chosen.selectedModel!.trim()
-              : (models.isNotEmpty ? models.first : null));
+    // Address the model the SAME way the app/coordinator does. The routed Nexus
+    // Router serves the Omni COLLECTION id (LMX-Omni-52B-Halo) DIRECTLY, so send
+    // it as-is and default to it — never decompose to a raw sub-model, which fell
+    // through to a small 4B (e.g. Qwen3.5-4B): the wrong model, and (when the
+    // routed server had no selected model) the null→'default-coordinator'
+    // sentinel that 503'd and Blocked every task. Local servers (which 500 on a
+    // bare collection) decompose from their live model list instead.
+    final routed = isRoutedProviderType(chosen.providerType);
+    List<ApiModelInfo> serverModels = const [];
+    if (!routed) {
+      final cache = ref.read(aiServersCacheProvider.notifier);
+      var entry = cache.entryFor(chosen.server_pk);
+      if (entry == null || entry.models.isEmpty) {
+        await cache.refreshServer(chosen.server_pk);
+        entry = cache.entryFor(chosen.server_pk);
+      }
+      serverModels = entry?.models ?? const <ApiModelInfo>[];
+    }
+    final model = resolveAgentChatModel(
+      routed: routed,
+      personaModel: persona.llmModel,
+      selectedModel: chosen.selectedModel,
+      serverModels: serverModels,
+    );
 
     final uiServer = ui_server.InferenceServer(
       id: chosen.server_pk.toString(),

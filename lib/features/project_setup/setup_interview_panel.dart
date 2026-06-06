@@ -198,6 +198,7 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
               enabled: canType,
               loading: controller.busy && pending == null,
               onSend: _send,
+              onStop: controller.cancelTurn,
               hintText: pending != null
                   ? 'Type your answer… (or expand the options to pick)'
                   : controller.refining
@@ -544,9 +545,14 @@ class _QuestionCardState extends ConsumerState<_QuestionCard> {
 
   /// The fallback picker, revealed when the user expands the options dropdown.
   Widget _buildOptions(ThemeData theme, SetupMsg msg) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+    // These tiles sit inside the question card's tinted Container; give them a
+    // transparent Material so CheckboxListTile's ink/selection paint correctly
+    // (otherwise Flutter spams "ListTile wrapped in a DecoratedBox …").
+    return Material(
+      type: MaterialType.transparency,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
         if (msg.multi)
           for (final option in msg.options)
             CheckboxListTile(
@@ -597,7 +603,8 @@ class _QuestionCardState extends ConsumerState<_QuestionCard> {
             ),
           ],
         ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -672,10 +679,14 @@ class _Composer extends StatelessWidget {
     required this.enabled,
     required this.loading,
     required this.onSend,
+    required this.onStop,
     required this.hintText,
   });
 
   final TextEditingController controller;
+
+  /// Abort the in-flight turn — tapping the loading spinner stops a stuck turn.
+  final VoidCallback onStop;
 
   /// Whether the user can type/send right now. True whenever the host is idle
   /// OR has an inline question awaiting a reply.
@@ -713,12 +724,29 @@ class _Composer extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           loading
-              ? const SizedBox(
-                  width: 36,
-                  height: 36,
-                  child: Padding(
-                    padding: EdgeInsets.all(8),
-                    child: CircularProgressIndicator(strokeWidth: 2),
+              ? Tooltip(
+                  message: 'Stop',
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: onStop,
+                    child: SizedBox(
+                      width: 36,
+                      height: 36,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          const Padding(
+                            padding: EdgeInsets.all(8),
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          Icon(
+                            Icons.stop,
+                            size: 14,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 )
               : IconButton.filled(

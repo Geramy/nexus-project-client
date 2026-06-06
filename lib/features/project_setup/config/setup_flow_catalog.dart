@@ -98,12 +98,15 @@ final SetupFlowDefinition applicationDevelopmentFlow = SetupFlowDefinition(
       suggestions: kDatabases,
       required: false,
     ),
+    // Optional: libraries are nice-to-have but the per-package verification can
+    // stall, so they must NOT block finishing setup — they're addable, not required.
     _s(
       'libraries',
       TagCategoryX(TagCategory.libraries).label,
       'Specific packages implementing the features — verify each via '
           '`lookup_package`, set `forLanguage`, propose as `libraries`.',
       vocab: SetupVocab.open,
+      required: false,
     ),
     _s(
       'services',

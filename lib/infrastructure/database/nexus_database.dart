@@ -922,6 +922,15 @@ class NexusDatabase extends _$NexusDatabase {
     )..where((p) => p.project_pk.equals(projectPk))).getSingleOrNull();
   }
 
+  /// Rename a project (the user can fix a name set wrong at creation).
+  Future<void> setProjectName(int projectPk, String name) async {
+    await (update(
+      projects,
+    )..where((p) => p.project_pk.equals(projectPk))).write(
+      ProjectsCompanion(name: Value(name), updatedAt: Value(DateTime.now())),
+    );
+  }
+
   /// Persist a project's orchestrator prompt-template overrides (JSON), or null
   /// to clear all overrides back to the built-in defaults.
   Future<void> setProjectOrchestratorPrompts(
@@ -1449,6 +1458,27 @@ class NexusDatabase extends _$NexusDatabase {
         updatedAt: Value(DateTime.now()),
       ),
     );
+  }
+
+  /// Return every Blocked task in a project to the Todo board (exec `idle`) so a
+  /// fresh orchestration run retries it. Blocking is only meant to surface tasks
+  /// that exhausted their retry budget within ONE run — it must not permanently
+  /// strand work, so (re)starting the loop gives blocked tasks another chance.
+  /// Returns how many tasks were requeued.
+  Future<int> requeueBlockedTasks(int projectPk) async {
+    return (update(tasks)
+          ..where(
+            (t) =>
+                t.task_project_fk.equals(projectPk) &
+                t.status.equals(TaskStatus.blocked),
+          ))
+        .write(
+          TasksCompanion(
+            status: const Value(TaskStatus.todo),
+            executionStatus: const Value(TaskExecStatus.idle),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
   }
 
   /// The worker called submit_for_completion; store its submission payload.

@@ -6,6 +6,8 @@
 /// common `InferenceBackend` interface.
 
 
+import 'package:http/http.dart' as http;
+
 import '../inference/inference_backend.dart' as iface;
 import 'api/lemonade_client.dart';
 import 'api/types/audio_request.dart';
@@ -20,7 +22,16 @@ class LemonadeBackend implements iface.InferenceBackend {
   final ui_model.InferenceServer _row;
   late final LemonadeApiClient _client;
 
-  LemonadeBackend(this._row, {String? agentName, String? sessionId}) {
+  /// When [client] is supplied (the shared per-host transport from
+  /// [backendForServer]) it is REUSED — this backend must not own/close it.
+  final bool _ownsClient;
+
+  LemonadeBackend(
+    this._row, {
+    String? agentName,
+    String? sessionId,
+    http.Client? client,
+  }) : _ownsClient = client == null {
     final cfg = ServerConfig(
       name: _row.name,
       baseUrl: _row.baseUrl,
@@ -28,7 +39,7 @@ class LemonadeBackend implements iface.InferenceBackend {
       agentName: agentName,
       sessionId: sessionId,
     );
-    _client = LemonadeApiClient(cfg);
+    _client = LemonadeApiClient(cfg, client: client);
   }
 
   @override
@@ -270,5 +281,10 @@ class LemonadeBackend implements iface.InferenceBackend {
     );
   }
 
-  void close() => _client.close();
+  /// Close only a transport this backend OWNS. When the shared per-host client
+  /// was injected (the normal path via [backendForServer]), closing is a no-op —
+  /// the pooled transport is app-lifetime and reused by other backends.
+  void close() {
+    if (_ownsClient) _client.close();
+  }
 }

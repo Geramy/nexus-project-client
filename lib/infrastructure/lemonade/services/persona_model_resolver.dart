@@ -42,6 +42,34 @@ class ResolvedModalityModels {
 String? _emptyToNull(String? s) =>
     (s != null && s.trim().isNotEmpty) ? s.trim() : null;
 
+/// The chat/LLM model id an agent (coordinator, worker, verifier, task-gen…)
+/// should send, honoring the two serving models in play:
+///  • the ROUTED Nexus Router serves the Omni-COLLECTION id directly, so we send
+///    it as-is and default to it. Decomposing the collection fell through to the
+///    first raw text model (a small 4B, e.g. Qwen3.5-4B) — the WRONG model.
+///  • a LOCAL Lemonade server 500s on a bare collection id, so there we decompose
+///    to a real chat model from the live [serverModels] list.
+///
+/// Priority: an explicit per-persona [personaModel] → the server's
+/// [selectedModel] → the product default Omni collection [kDefaultOmniCollection]
+/// (routed) / the first served chat model (local). Never returns empty.
+String resolveAgentChatModel({
+  required bool routed,
+  String? personaModel,
+  String? selectedModel,
+  List<ApiModelInfo> serverModels = const [],
+}) {
+  final explicit = _emptyToNull(personaModel);
+  final selected = _emptyToNull(selectedModel);
+  if (routed) {
+    // Send the configured id straight to the router (it serves the collection);
+    // default to the product Omni collection. No decomposition.
+    return explicit ?? selected ?? kDefaultOmniCollection;
+  }
+  final candidate = explicit ?? selected ?? firstChatModelId(serverModels);
+  return resolveChatModelId(candidate, serverModels) ?? candidate ?? kDefaultOmniCollection;
+}
+
 /// Coerce any candidate model id into a safe chat/LLM model id to send to
 /// `/v1/chat/completions`. If [candidate] is an Omni Collection, decompose it
 /// to its LLM component (collections are not loadable chat models — the server

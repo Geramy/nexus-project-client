@@ -6,6 +6,8 @@ import 'dart:convert';
 
 import '../../core/agents/loop_guard.dart';
 import '../../infrastructure/inference/inference_backend.dart';
+import '../../infrastructure/lemonade/services/persona_model_resolver.dart'
+    show kDefaultOmniCollection;
 import 'config/setup_flow.dart';
 import 'setup_tools.dart';
 
@@ -84,10 +86,17 @@ class SetupSession {
   /// session scope so it catches loops that span user turns, not just one turn.
   final LoopGuard _loopGuard = LoopGuard();
 
+  /// Set by [cancel] to abort the current turn between rounds (the user tapped
+  /// the thinking indicator because it looped/hung). Reset at the start of [send].
+  bool _cancelled = false;
+
+  /// Abort the in-flight turn after the current model round returns.
+  void cancel() => _cancelled = true;
+
   List<Map<String, dynamic>> get history => List.unmodifiable(_history);
 
   String get _effectiveModel =>
-      model.trim().isEmpty ? 'default-coordinator' : model.trim();
+      model.trim().isEmpty ? kDefaultOmniCollection : model.trim();
 
   String _systemPrompt() =>
       phase == SetupPhase.refine ? _refinePrompt() : _interviewPrompt();
@@ -129,16 +138,25 @@ How to work:
   should propose ONLY that category's tags (platforms) — never silently invent
   objectives, features, databases, or services they haven't mentioned yet. Ask
   about the next topic instead. Tags save as `proposed` for the user to accept.
+- RECORD-BEFORE-MOVING-ON: the moment the user answers an ask_question with
+  selections (e.g. they pick several features), your VERY NEXT action MUST be a
+  `propose_tags` call saving those selections under that category. Do not just
+  say "great choices" and move on — acknowledging without recording leaves the
+  section empty and blocks the user from finishing setup.
 - DELIBERATION CONTRACT: whenever you weigh several candidates ("let me think
   about this — here are some options…"), call `consider_items` with them FIRST,
   then resolve EACH with `propose_tags` (add) or `dismiss_item` (skip) — and do
   the same after every `lookup_package`. Never just list options in prose and
   move on: setup will not let you finish while any considered item is undecided.
-- The ONLY things you may add without the user stating them are the technical
-  STACK — `languages`/`frameworks` — and only AFTER the platforms/objectives are
-  known, kept minimal. For `databases`/`services`, propose a tag only when the
-  user's description clearly implies it (orders/users → PostgreSQL; payments →
-  Stripe); otherwise ask.
+- The technical STACK is AI-DERIVED: you MUST derive and propose at least one
+  `languages` tag AND one `frameworks` tag before finalizing — never skip these,
+  even if the user never mentioned them. Derive them once platforms/objectives are
+  known, kept minimal and appropriate to the platforms. `libraries` are
+  best-effort/OPTIONAL — propose specific packages (verify via `lookup_package`,
+  set `forLanguage`) when you can, but if verification is slow or unclear, move on:
+  libraries do NOT block finishing setup. For `databases`/`services`, propose a tag
+  only when the user's description clearly implies it (orders/users → PostgreSQL;
+  payments → Stripe); otherwise ask.
 - ADAPTIVE SCOPE (optional helpers): after proposing `industries` you may call
   `scope_status` to surface a sub-axis (e.g. Gaming → Genre) and `scope_options`
   for industry/platform-tailored vocabulary. Use them when they help — honor the
@@ -205,6 +223,7 @@ How to work:
     void Function(String text)? onAssistantText,
     void Function(String name, Map<String, dynamic> args)? onToolCall,
   }) async {
+    _cancelled = false;
     // Hard-drop the interview working context at the interview→refine boundary:
     // the plans now exist and the refine stage starts fresh (the transcript is
     // preserved separately for restore).
@@ -233,7 +252,14 @@ How to work:
       // state persists to the next turn and still blocks finalize, so nothing
       // slips through — this only prevents an in-turn infinite loop).
       var reconcileRounds = 0;
+      // Bounds how many times per turn we force the model to RECORD a selection
+      // the user just made via ask_question but the model only acknowledged
+      // (the common "picked some features → model says 'great!' → stops without
+      // propose_tags" stall that leaves a required section empty).
+      var selectionNudges = 0;
       for (var round = 0; round < maxToolRounds; round++) {
+        // The user tapped "stop" — abort before issuing another model round.
+        if (_cancelled) return '';
         // The system prompt is kept STATIC (phase-only) and the tool list is
         // deterministic, so the [system + tools] prefix is byte-identical every
         // round and across turns — which is exactly what llama.cpp/Lemonade
@@ -289,6 +315,27 @@ How to work:
           if (!spoke && phase == SetupPhase.interview && emptyRounds < 2) {
             emptyRounds++;
             _history.add({'role': 'user', 'content': _continueNudge});
+            continue;
+          }
+          // ANTI-STALL: the user just answered an ask_question but the model is
+          // about to end the turn without recording it (no propose_tags). That's
+          // the "picked features → model acknowledged → stopped" stall that
+          // leaves a required section empty and the Generate-plan button stuck.
+          // Poke it to save the selection before stopping.
+          if (phase == SetupPhase.interview &&
+              executor.lastSelection != null &&
+              selectionNudges < 2) {
+            selectionNudges++;
+            final sel = executor.lastSelection!;
+            executor.lastSelection = null;
+            _history.add({
+              'role': 'user',
+              'content':
+                  'You have NOT recorded the user\'s last answer ($sel). Call '
+                  'propose_tags NOW to save those under the matching category, '
+                  'then continue with the next topic — do not stop until their '
+                  'selections are on the board.',
+            });
             continue;
           }
           // GUARD (we are the hand-holder, not the model): never let a turn end

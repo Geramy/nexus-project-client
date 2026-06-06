@@ -33,6 +33,45 @@ class _SummaryTabState extends ConsumerState<SummaryTab> {
   bool _busy = false;
   String? _error;
 
+  /// Rename the project — useful when the name was set wrong at creation and
+  /// there's otherwise no way to change it.
+  Future<void> _rename() async {
+    final db = ref.read(nexusDatabaseProvider);
+    final current =
+        ref.read(projectRowProvider(widget.projectId)).valueOrNull?.name ?? '';
+    final controller = TextEditingController(text: current);
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Rename project'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Project name'),
+          onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (newName == null || newName.isEmpty || newName == current) return;
+    await db.setProjectName(widget.projectId, newName);
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Project renamed to "$newName".')));
+    }
+  }
+
   Future<void> _generate() async {
     setState(() {
       _busy = true;
@@ -63,12 +102,26 @@ class _SummaryTabState extends ConsumerState<SummaryTab> {
             children: [
               const Icon(Icons.summarize_outlined, size: 18),
               const SizedBox(width: 8),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'Project Summary',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ref
+                          .watch(projectRowProvider(widget.projectId))
+                          .valueOrNull
+                          ?.name ??
+                      'Project Summary',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              IconButton(
+                tooltip: 'Rename project',
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                onPressed: _rename,
+              ),
+              const SizedBox(width: 4),
               FilledButton.icon(
                 onPressed: _busy ? null : _generate,
                 icon: _busy

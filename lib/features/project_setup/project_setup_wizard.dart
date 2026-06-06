@@ -137,21 +137,6 @@ class _Overview extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                width: 56,
-                height: 56,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  gradient: AppTheme.brandGradient,
-                  borderRadius: AppRadius.mdAll,
-                ),
-                child: const Icon(
-                  Icons.checklist_rtl,
-                  color: Colors.white,
-                  size: 28,
-                ),
-              ),
-              Gap.md,
               Text(
                 'Set up your project',
                 textAlign: TextAlign.center,

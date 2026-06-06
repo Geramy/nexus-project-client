@@ -63,11 +63,6 @@ class _StoryTreeCanvasState extends ConsumerState<StoryTreeCanvas> {
   int? _dragId;
   Offset? _dragPos;
 
-  double get _scale {
-    final s = _transform.value.getMaxScaleOnAxis();
-    return s == 0 ? 1.0 : s;
-  }
-
   NexusDatabase get _db => ref.read(nexusDatabaseProvider);
 
   @override
@@ -189,8 +184,13 @@ class _StoryTreeCanvasState extends ConsumerState<StoryTreeCanvas> {
                               _dragPos = posOf(s);
                             }),
                             onPanUpdate: (d) => setState(() {
-                              _dragPos =
-                                  (_dragPos ?? posOf(s)) + d / _scale;
+                              // `d` is the gesture delta in the LOCAL space of the
+                              // node card — which lives INSIDE the InteractiveViewer's
+                              // scaled child, so it's already in canvas/scene units.
+                              // Dividing by _scale again double-applied the zoom and
+                              // sent the node ~1/scale too far when zoomed out (the
+                              // "10x on a small screen" drift). Apply it 1:1.
+                              _dragPos = (_dragPos ?? posOf(s)) + d;
                             }),
                             onPanEnd: () {
                               final p = _dragPos;

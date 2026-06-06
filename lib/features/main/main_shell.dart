@@ -148,12 +148,21 @@ class _MainShellState extends ConsumerState<MainShell> {
     ref.listen(taskCompletedStreamProvider, (_, next) {
       final ev = next.valueOrNull;
       if (ev == null) return;
-      ScaffoldMessenger.of(context)
+      final messenger = ScaffoldMessenger.of(context);
+      messenger
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
-            duration: const Duration(seconds: 6),
-            content: Text('Task complete: "${ev.title}"'),
+            // Auto-dismiss quickly, and let a tap anywhere dismiss it too — a run
+            // that completes many tasks shouldn't leave a popup parked at the
+            // bottom of the screen.
+            duration: const Duration(seconds: 3),
+            dismissDirection: DismissDirection.horizontal,
+            content: GestureDetector(
+              onTap: messenger.hideCurrentSnackBar,
+              behavior: HitTestBehavior.opaque,
+              child: Text('Task complete: "${ev.title}"'),
+            ),
             action: SnackBarAction(
               label: 'View',
               onPressed: () {
@@ -333,19 +342,26 @@ class _MainShellState extends ConsumerState<MainShell> {
     final clientId = ref.watch(currentClientIdProvider);
     final projectId = ref.watch(currentProjectIdProvider);
 
-    // Force rebuild when client or project changes so placeholder views update
-    final key = ValueKey('$view-$clientId-$projectId');
+    // The project workspace is kept ALIVE across left-nav screen switches: it is
+    // ALWAYS the first child of the Stack below (stable position + key), shown
+    // when active and Offstage otherwise. Offstage keeps it mounted and laid out
+    // (so the chat list keeps a real viewport) but unpainted/!hit-testable — so
+    // the Coordinator chat's in-flight "thinking" stream and any queued interview
+    // prompts keep running in the BACKGROUND and resume instantly on return,
+    // instead of being torn down (and breaking) every time the user visits
+    // another screen. Other views still mount/unmount normally on top.
+    final workspace = KeyedSubtree(
+      key: ValueKey('projectPlans-$clientId-$projectId'),
+      child: const ProjectWorkspaceView(),
+    );
 
-    Widget child;
+    Widget? other;
     switch (view) {
       case MainView.projectPlans:
-        // Project workspace: Chat | Overview | Plan tabs. The plan
-        // file-explorer lives in the right panel and opens plans into the
-        // Plan tab.
-        child = const ProjectWorkspaceView();
+        other = null; // the workspace itself is the active view
         break;
       case MainView.tasks:
-        child = TasksView(
+        other = TasksView(
           onTaskSelected: (id) {
             ref.read(selectedTaskIdNotifierProvider.notifier).selectTask(id);
             ref.read(currentMainViewProvider.notifier).setView(MainView.tasks);
@@ -353,29 +369,36 @@ class _MainShellState extends ConsumerState<MainShell> {
         );
         break;
       case MainView.agents:
-        child = const AgentsHubView();
+        other = const AgentsHubView();
         break;
       case MainView.aiProviders:
-        child = const AiProvidersPage();
+        other = const AiProvidersPage();
         break;
       case MainView.activity:
-        child = const ActivityCenter();
+        other = const ActivityCenter();
         break;
       case MainView.launch:
-        child = const LaunchCenter();
+        other = const LaunchCenter();
         break;
       case MainView.code:
-        child = const FileBrowserView();
+        other = const FileBrowserView();
         break;
       case MainView.callFlow:
-        child = const CallFlowWorkspace();
+        other = const CallFlowWorkspace();
         break;
       case MainView.account:
-        child = const AccountView();
+        other = const AccountView();
         break;
     }
 
-    return KeyedSubtree(key: key, child: child);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Offstage(offstage: view != MainView.projectPlans, child: workspace),
+        if (other != null)
+          KeyedSubtree(key: ValueKey('$view-$clientId-$projectId'), child: other),
+      ],
+    );
   }
 
   /// Builds the right panel content. Each [MainView] owns its own right panel —

@@ -453,17 +453,25 @@ class SetupToolExecutor {
     }
   }
 
+  /// The user's most recent ask_question answer (picks or typed text) that has
+  /// NOT yet been turned into tags via propose_tags. The session uses this to
+  /// detect the common stall where the host asks (e.g. features), the user
+  /// picks some, and the model then just acknowledges and stops WITHOUT recording
+  /// them — leaving a required section empty and the "Generate plan" gate stuck.
+  /// Cleared the moment propose_tags runs.
+  String? lastSelection;
+
   Future<String> _ask(Map<String, dynamic> args) async {
     final question = (args['question'] ?? '').toString();
     final options = ((args['options'] as List?) ?? const [])
         .map((e) => e.toString())
         .toList();
-    // Default to multi-select: setup questions (platforms, languages,
-    // frameworks, libraries, …) are additive, so the picker allows multiple
-    // unless the host explicitly marks the question a single-choice confirmation
-    // (multi:false). This guarantees e.g. Platform renders as checkboxes even if
-    // the model omits the flag.
-    final multi = args['multi'] != false;
+    // ALWAYS multi-select. Setup choices are additive — a project can span
+    // several industries, platforms, objectives, features, etc. — and the few
+    // genuinely-exclusive things (e.g. a primary language) aren't asked as
+    // questions anyway. Forcing multi here keeps every picker consistent
+    // (checkboxes) regardless of what the model puts in `multi`.
+    const multi = true;
     if (askQuestion == null) {
       return 'Cannot ask the user here (no input channel). Proceed with sensible defaults.';
     }
@@ -472,9 +480,15 @@ class SetupToolExecutor {
     // to what the user actually said (not a canned "User selected: …"); chip
     // picks come back as the chosen labels; either being empty is a skip.
     if (answer.freeText != null && answer.freeText!.trim().isNotEmpty) {
-      return 'User answered: "${answer.freeText!.trim()}"';
+      final text = answer.freeText!.trim();
+      lastSelection = text;
+      return 'User answered: "$text"';
     }
-    if (answer.picks.isEmpty) return 'User skipped the question.';
+    if (answer.picks.isEmpty) {
+      lastSelection = null;
+      return 'User skipped the question.';
+    }
+    lastSelection = answer.picks.join(', ');
     return 'User selected: ${answer.picks.join(', ')}.';
   }
 
@@ -655,6 +669,9 @@ class SetupToolExecutor {
   }
 
   Future<String> _propose(Map<String, dynamic> args) async {
+    // The model is recording choices now → the user's last answer is no longer
+    // "unrecorded", so the session's anti-stall nudge stands down.
+    lastSelection = null;
     final raw = (args['tags'] as List?) ?? const [];
     final controller = TagController(db, projectPk);
     final accepted = <String>[];
