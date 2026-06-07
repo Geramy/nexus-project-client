@@ -106,6 +106,16 @@ class ProjectOrchestrator {
   // a "needs a human look" signal, not a hair-trigger. (Re)starting the loop
   // clears this and requeues blocked tasks, so it's never a permanent dead end.
   static const int _maxAttemptsPerTask = 5;
+
+  /// Connections kept free for the interactive Coordinator (the story-maker you
+  /// talk to during/after setup to add & adjust user stories). Without this, a
+  /// burst of worker agents (e.g. the generalist) can claim every connection the
+  /// plan allows, starving the Coordinator so you can't edit stories while work
+  /// is running. We hold this many slots back from the worker pool — but never so
+  /// many that no worker can run (a 1-connection plan still does work, just
+  /// shared with the Coordinator).
+  static const int _reservedCoordinatorSlots = 1;
+
   static const int _maxTurnsPerTask = 12;
   static const int _maxTurnsPerStage = 8;
   static const Duration _connBackoff = Duration(seconds: 20);
@@ -166,7 +176,11 @@ class ProjectOrchestrator {
       }
 
       final cap = await _concurrencyCap(project);
-      while (!_disposed && _active.length < cap) {
+      // Hold a connection back for the interactive Coordinator so worker agents
+      // can't claim every slot and starve story editing. Never drop below 1, so
+      // a single-connection plan still makes progress.
+      final workerCap = (cap - _reservedCoordinatorSlots).clamp(1, cap);
+      while (!_disposed && _active.length < workerCap) {
         final (task, stage) = await _nextPipelineWork();
         if (task == null || stage == null) break;
         _active.add(task.task_pk);

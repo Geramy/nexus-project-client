@@ -1731,6 +1731,10 @@ class NexusDatabase extends _$NexusDatabase {
     )..where((p) => p.client_fk.equals(clientPk))).watch();
   }
 
+  /// Every persona across all clients (used by launch-time reconciliation that
+  /// repairs role-default tool permissions on already-seeded personas).
+  Future<List<AgentPersona>> getAllAgentPersonas() => select(agentPersonas).get();
+
   Future<int> createAgentPersona(AgentPersonasCompanion entry) =>
       into(agentPersonas).insert(entry);
 

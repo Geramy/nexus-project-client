@@ -128,6 +128,18 @@ String? firstTtsModelId(List<ApiModelInfo> models) {
   return null;
 }
 
+/// First image-generation model id on the server, or null. Safety net so a
+/// diagram/image request never posts an empty model id (which the router 502s on
+/// — "All candidate backends failed") when a persona/collection didn't resolve
+/// an image model.
+String? firstImageModelId(List<ApiModelInfo> models) {
+  for (final m in models) {
+    if (m.isCollection) continue;
+    if (_isImageGen(m)) return m.id;
+  }
+  return null;
+}
+
 /// The Omni Collection id to use when a persona hasn't chosen one: the product
 /// default [kDefaultOmniCollection] if the server advertises it, otherwise the
 /// first collection the server lists. Null when the server exposes none.

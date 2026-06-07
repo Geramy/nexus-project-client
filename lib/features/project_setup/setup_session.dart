@@ -276,6 +276,11 @@ How to work:
             : SetupTools.buildToolSchemas(categories: tagCategories);
 
         final resp = await _completeWithRetry(messages, tools);
+        // The user tapped "stop" WHILE this round's (blocking) generation was in
+        // flight. Discard its output entirely — don't speak the text, record it,
+        // or execute its tools — so a runaway/looping answer is genuinely cut
+        // short instead of applying one last full round of effects.
+        if (_cancelled) return '';
         final msg = resp.choices.isNotEmpty ? resp.choices.first.message : null;
         final content = msg?.content ?? '';
         final toolCalls = msg?.toolCalls ?? const <ToolCall>[];

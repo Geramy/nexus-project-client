@@ -4,9 +4,12 @@
 
 import 'dart:convert';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
+import 'package:nexus_projects_client/features/agents/agent_role.dart';
+import 'package:nexus_projects_client/features/agents/agent_tool_permissions.dart';
 import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart';
 
 /// Seeds initial data and guarantees the built-in "Default" client always
@@ -37,6 +40,53 @@ Future<void> seedInitialData(NexusDatabase db) async {
   }
 
   await _maybeCreateDefaults(db);
+
+  // Repair tool permissions on already-seeded personas. The Project Manager and
+  // Coordinator must always be able to author user stories, but older seeds (and
+  // installs on other machines) baked a default-deny map that blocked the story
+  // tools because no skill bundle included them. Idempotent: only writes when a
+  // story tool isn't already granted.
+  try {
+    await _grantStoryToolsToManagers(db);
+  } catch (e) {
+    debugPrint('Seeder: story-permission reconcile warning (non-fatal): $e');
+  }
+}
+
+/// Ensures every Project Manager / Coordinator persona grants the full set of
+/// user-story tools, repairing personas seeded before `story-authoring` existed
+/// (their stored configJson explicitly denies these tools).
+Future<void> _grantStoryToolsToManagers(NexusDatabase db) async {
+  // Source of truth for the story tools — kept in sync with the catalog instead
+  // of a hand-copied list.
+  final storyTools = [
+    for (final s in kCoordinatorToolSpecs)
+      if (s.category == 'Stories') s.name,
+  ];
+  if (storyTools.isEmpty) return;
+
+  for (final p in await db.getAllAgentPersonas()) {
+    final role = agentRoleFromKey(p.title);
+    if (role != AgentRole.projectManager && role != AgentRole.coordinator) {
+      continue;
+    }
+    final perms = AgentToolPermissions.fromConfigJson(p.configJson);
+    final needs = storyTools.any((t) => perms.permFor(t) != ToolPerm.grant);
+    if (!needs) continue;
+
+    // Preserve every existing override; only force the story tools to grant.
+    final merged = Map<String, ToolPerm>.from(perms.overrides);
+    for (final t in storyTools) {
+      merged[t] = ToolPerm.grant;
+    }
+    final newJson = AgentToolPermissions.writeIntoConfigJson(
+      p.configJson,
+      merged,
+    );
+    await db.updateAgentPersona(
+      p.toCompanion(true).copyWith(configJson: Value(newJson)),
+    );
+  }
 }
 
 /// Bundled scoped-vocabulary catalog version. BUMP THIS whenever

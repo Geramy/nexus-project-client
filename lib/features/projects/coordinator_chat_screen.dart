@@ -102,6 +102,10 @@ class _ProjectCoordinatorChatScreenState
   /// Concrete backend for the selected server (LemonadeBackend via factory).
   InferenceClient? _inferenceClient;
   ProjectCoordinatorSession? _session;
+
+  /// Image-generation model id resolved for the active session (for the manual
+  /// "generate diagram" button). Empty model id → router 502.
+  String? _imageModel;
   CoordinatorDuplexVoiceSession?
   _duplexVoiceSession; // The one and only voice path for the Coordinator call (duplex VAD-driven, lemonade_mobile style)
   AudioRecorderService?
@@ -191,6 +195,7 @@ class _ProjectCoordinatorChatScreenState
       // resolved against the agent's own server.
       String? sttModel;
       String? ttsModel;
+      String? imageModel;
       String? ttsVoice = persona?.ttsVoice;
 
       // The coordinator voice ALWAYS defaults to the best Omni collection the
@@ -218,6 +223,7 @@ class _ProjectCoordinatorChatScreenState
         );
         sttModel = resolved.stt;
         ttsModel = resolved.tts;
+        imageModel = resolved.imageGen;
         // Default the coordinator's spoken voice to Bella on the Halo collection
         // when no explicit voice is set.
         if ((ttsVoice == null || ttsVoice.trim().isEmpty) &&
@@ -230,6 +236,10 @@ class _ProjectCoordinatorChatScreenState
       // `whisper-1` / empty TTS defaults, which 404 on Lemonade servers.
       sttModel ??= firstAudioModelId(serverModels);
       ttsModel ??= firstTtsModelId(serverModels);
+      // Image gen: prefer the collection's image component, else any image model
+      // the server advertises. Empty model id makes the router 502 ("All
+      // candidate backends failed"); the executor falls back to the chat model.
+      imageModel ??= firstImageModelId(serverModels);
 
       // Chat model: the routed Nexus Router serves the Omni COLLECTION id
       // (LMX-Omni-52B-Halo) DIRECTLY, so send it as-is and default to it — do NOT
@@ -313,6 +323,7 @@ class _ProjectCoordinatorChatScreenState
         projectName: widget.projectName,
         db: db,
         model: effectiveChatModel,
+        imageModel: imageModel ?? effectiveChatModel,
         openPlanPath: widget.openPlanPath,
         planStore: planStore,
         chatSessionPk: sessionId,
@@ -344,6 +355,8 @@ class _ProjectCoordinatorChatScreenState
 
       // Load the session's persisted messages + restore the LLM history.
       final restored = await _loadSessionMessages(sessionId);
+
+      _imageModel = imageModel ?? effectiveChatModel;
 
       _voiceRecorder = AudioRecorderService();
       final ttsSvc = TtsService(
@@ -791,6 +804,8 @@ class _ProjectCoordinatorChatScreenState
         prompt:
             'Professional project plan diagram for ${widget.projectName}. Clean, modern infographic style showing key phases and deliverables.',
         size: '1024x1024',
+        // Carry the resolved image model — an empty id 502s on the router.
+        model: _imageModel,
       );
 
       if (response.data.isNotEmpty) {
@@ -1150,18 +1165,34 @@ class _ProjectCoordinatorChatScreenState
                         ),
                         const SizedBox(width: AppSpacing.sm),
                         IconButton(
+                          // While the AI is responding the send button becomes a
+                          // STOP control — clickable the whole time (thinking AND
+                          // while the answer streams), so an infinite/runaway
+                          // stream can always be cut short. The stop glyph inside
+                          // the wheel signals it's tappable.
+                          tooltip: _isSending ? 'Stop' : 'Send',
                           icon: _isSending
-                              ? const SizedBox(
+                              ? SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      const CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                      Icon(
+                                        Icons.stop,
+                                        size: 12,
+                                        color: context.nx.danger,
+                                      ),
+                                    ],
                                   ),
                                 )
                               : const Icon(Icons.send),
-                          onPressed: (ready && !_isSending)
-                              ? _sendMessage
-                              : null,
+                          onPressed: _isSending
+                              ? _stopTurn
+                              : (ready ? _sendMessage : null),
                         ),
                         IconButton(
                           icon: const Icon(Icons.mic),

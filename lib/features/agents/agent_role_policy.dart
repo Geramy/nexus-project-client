@@ -117,6 +117,22 @@ const Map<String, Map<String, ToolPerm>> kSkillCatalog = {
   },
   'completion': {kToolSubmitForCompletion: ToolPerm.grant},
   'diagramming': {'generate_diagram': ToolPerm.grant},
+  // Build + maintain the user-story tree (the post-setup discovery interview) and
+  // its notes. Required by whoever runs discovery (the Project Manager /
+  // Coordinator) — without this skill the default-deny map blocks every story
+  // tool, so discovery can't add or edit stories.
+  'story-authoring': {
+    'draft_stories_from_text': ToolPerm.grant,
+    'add_user_story': ToolPerm.grant,
+    'update_user_story': ToolPerm.grant,
+    'move_user_story': ToolPerm.grant,
+    'list_user_stories': ToolPerm.grant,
+    'add_note': ToolPerm.grant,
+    'update_note': ToolPerm.grant,
+    'delete_note': ToolPerm.grant,
+    'get_notes': ToolPerm.grant,
+    'get_note': ToolPerm.grant,
+  },
 };
 
 /// Display metadata for each skill bundle: human description, category, and
@@ -190,6 +206,11 @@ const Map<String, SkillMeta> kSkillMeta = {
     'low',
   ),
   'diagramming': SkillMeta('Generate diagrams.', 'other', 'low'),
+  'story-authoring': SkillMeta(
+    'Build and maintain the user-story tree and its notes.',
+    'planning',
+    'low',
+  ),
 };
 
 /// Default skills per role. Workers share the same builder skill set; they
@@ -222,12 +243,14 @@ const Map<AgentRole, List<String>> kRoleSkills = {
     'review',
     'code-read',
     'diagramming',
+    'story-authoring',
   ],
   AgentRole.coordinator: [
     'code-read',
     'vcs-local',
     'vcs-integration',
     'build-ci',
+    'story-authoring',
   ],
   AgentRole.sdeGeneralist: _workerSkills,
   AgentRole.sdeNetworking: _workerSkills,

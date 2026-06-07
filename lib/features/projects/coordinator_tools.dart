@@ -1452,6 +1452,11 @@ class CoordinatorToolExecutor {
   /// chunk of input into clean stories) without dragging the session history.
   final String? model;
 
+  /// The image-generation model id for the diagram tool. Resolved from the
+  /// agent's Omni collection (or server) — sending an empty model id makes the
+  /// router 502 ("All candidate backends failed"). Falls back to [model].
+  final String? imageModel;
+
   /// Provenance: the chat session and/or plan this conversation is about, so
   /// created tasks can be backtracked to why/where they came from.
   final int? chatSessionPk;
@@ -1505,6 +1510,7 @@ class CoordinatorToolExecutor {
     required this.projectId,
     this.inference,
     this.model,
+    this.imageModel,
     this.chatSessionPk,
     this.openPlanPath,
     this.planStore,
@@ -2221,7 +2227,13 @@ class CoordinatorToolExecutor {
     }
 
     try {
-      final resp = await inference!.generateImage(prompt: prompt, size: size);
+      final resp = await inference!.generateImage(
+        prompt: prompt,
+        size: size,
+        // Never post an empty model id (router 502s). Prefer the resolved image
+        // model, fall back to the chat/collection id.
+        model: imageModel ?? model,
+      );
       final url = resp.data.isNotEmpty
           ? (resp.data.first.url ?? 'generated image')
           : 'generated image';

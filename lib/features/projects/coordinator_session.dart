@@ -36,6 +36,11 @@ class ProjectCoordinatorSession {
   /// callers should pass the server's selected model so requests don't 404.
   final String? model;
 
+  /// The image-generation model id (for generate_diagram). Resolved from the
+  /// agent's Omni collection / server; threaded into the tool executor so image
+  /// requests carry a real model id instead of an empty one (router 502).
+  final String? imageModel;
+
   /// When this conversation is about a specific plan, the AI can read/rewrite it
   /// (view_plan / update_plan) and any tasks it creates record the provenance.
   /// This is the plan's workspace path, e.g. `/PLANS/Roadmap.md`.
@@ -90,6 +95,7 @@ class ProjectCoordinatorSession {
     required this.projectName,
     this.db,
     this.model,
+    this.imageModel,
     this.openPlanPath,
     this.planStore,
     this.chatSessionPk,
@@ -435,6 +441,7 @@ class ProjectCoordinatorSession {
             projectId: projectId,
             inference: client,
             model: _effectiveModel,
+            imageModel: imageModel,
             chatSessionPk: chatSessionPk,
             openPlanPath: openPlanPath,
             planStore: planStore,
@@ -804,6 +811,7 @@ class ProjectCoordinatorSession {
       projectId: projectId,
       inference: client,
       model: _effectiveModel,
+      imageModel: imageModel,
       chatSessionPk: chatSessionPk,
       openPlanPath: openPlanPath,
       planStore: planStore,
