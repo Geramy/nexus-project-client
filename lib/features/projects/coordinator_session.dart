@@ -167,6 +167,13 @@ class ProjectCoordinatorSession {
 
   List<Map<String, dynamic>> get history => List.unmodifiable(_history);
 
+  /// A full OpenAI-shape conversation trace (system + history) for the training
+  /// sink. [sys] is the system prompt used this turn.
+  List<Map<String, dynamic>> _traceMessages(String sys) => _sanitizeForWire([
+        {'role': 'system', 'content': sys},
+        ..._history,
+      ]);
+
   /// Filter the full tool list to those active right now: every non-gated tool,
   /// plus the tools of any unlocked group, plus the `request_tools` meta-tool.
   /// When [leanTools] is off, returns the full list unchanged.
@@ -426,6 +433,7 @@ class ProjectCoordinatorSession {
     String userMessage, {
     void Function(String toolResult)? onToolResult,
     void Function(String b64Png, String caption)? onImage,
+    void Function(List<Map<String, dynamic>> messages)? onTrace,
     String? currentPlanContext,
     int maxToolRounds = 4,
   }) async* {
@@ -470,6 +478,10 @@ class ProjectCoordinatorSession {
           )
         : null;
 
+    // Whether the model actually used a tool this turn — gates training-trace
+    // shipping (keep tool-using turns, skip pure chatter).
+    var executedTool = false;
+    var lastSys = '';
     try {
       for (var round = 0; round < maxToolRounds; round++) {
         // Rebuilt each round so a request_tools unlock takes effect immediately.
@@ -479,6 +491,7 @@ class ProjectCoordinatorSession {
         final sys = await _buildSystemPrompt(
           currentPlanContext: currentPlanContext,
         );
+        lastSys = sys;
         final messages = _sanitizeForWire([
           {'role': 'system', 'content': sys},
           ..._history,
@@ -533,6 +546,7 @@ class ProjectCoordinatorSession {
         });
 
         if (toolCalls.isEmpty || executor == null) {
+          if (executedTool) onTrace?.call(_traceMessages(lastSys));
           yield ChatStreamFinish(
             finishReason: 'stop',
             toolCalls: const [],
@@ -542,6 +556,7 @@ class ProjectCoordinatorSession {
         }
 
         // Execute each tool call, append results, then loop for the spoken answer.
+        executedTool = true;
         for (final call in toolCalls) {
           Map<String, dynamic> args = {};
           try {
@@ -653,6 +668,7 @@ class ProjectCoordinatorSession {
       if (wrapStr.isNotEmpty) {
         _history.add({'role': 'assistant', 'content': wrapStr});
       }
+      if (executedTool) onTrace?.call(_traceMessages(wrapSys));
       yield ChatStreamFinish(
         finishReason: 'stop',
         toolCalls: const [],

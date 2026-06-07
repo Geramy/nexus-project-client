@@ -26,6 +26,7 @@ import 'package:nexus_projects_client/features/projects/coordinator_session.dart
 import 'package:nexus_projects_client/features/project_plans/plan_store.dart';
 import 'package:nexus_projects_client/features/agents/agent_tool_permissions.dart';
 import 'package:nexus_projects_client/features/agents/agent_role.dart';
+import 'package:nexus_projects_client/infrastructure/training/training_sink.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/workspace.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/workspace_provider.dart';
@@ -633,6 +634,12 @@ class _ProjectCoordinatorChatScreenState
         // can burn several tool rounds before the agent gets to speak/ask — give
         // it more headroom than the normal chat so it never stops mid-build.
         maxToolRounds: _session!.discoveryMode ? 8 : 4,
+        onTrace: (messages) {
+          final id = widget.discoveryMode
+              ? 'discovery:${widget.projectId}'
+              : 'coordinator:${widget.projectId}:${_sessionId ?? 0}';
+          ref.read(trainingSinkProvider).post(id, messages);
+        },
         onImage: (b64, caption) {
           if (!mounted) return;
           setState(() {

@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/database_provider.dart';
 import '../../core/providers/lean_context_provider.dart';
+import '../../infrastructure/training/training_sink.dart';
 import '../../infrastructure/database/nexus_database.dart';
 import '../../infrastructure/registry/verification_service.dart';
 import '../../infrastructure/workspace/workspace_provider.dart';
@@ -380,6 +381,9 @@ class SetupChatController extends ChangeNotifier {
       if (session == null) return;
       final reply = await session.send(
         text.trim(),
+        onTrace: (messages) => _ref
+            .read(trainingSinkProvider)
+            .post('setup:$projectId', messages),
         onThinking: (r) =>
             _append(SetupMsg(kind: SetupMsgKind.thinking, text: r)),
         onAssistantText: (t) {

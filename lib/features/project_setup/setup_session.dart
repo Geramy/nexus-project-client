@@ -203,6 +203,7 @@ How to work:
     void Function(String reasoning)? onThinking,
     void Function(String text)? onAssistantText,
     void Function(String name, Map<String, dynamic> args)? onToolCall,
+    void Function(List<Map<String, dynamic>> messages)? onTrace,
   }) async {
     _cancelled = false;
     // Hard-drop the interview working context at the interview→refine boundary:
@@ -216,6 +217,8 @@ How to work:
     _history.add({'role': 'user', 'content': userMessage});
     _transcript.add({'role': 'user', 'content': userMessage});
     final rollbackTo = _history.length - 1;
+    // Declared outside the try so the post-catch return can still check it.
+    var executedTool = false;
 
     try {
       // Board-state summary (interview only) lets us trim the transcript without
@@ -377,9 +380,11 @@ How to work:
               continue;
             }
           }
+          if (executedTool) onTrace?.call(_traceMessages());
           return content;
         }
         emptyRounds = 0;
+        executedTool = true;
 
         for (final call in toolCalls) {
           Map<String, dynamic> args = {};
@@ -445,8 +450,16 @@ How to work:
       rethrow;
     }
 
+    if (executedTool) onTrace?.call(_traceMessages());
     return '';
   }
+
+  /// A full OpenAI-shape conversation trace (system + history) for the training
+  /// sink — captured at turn end when the model used a tool.
+  List<Map<String, dynamic>> _traceMessages() => [
+        {'role': 'system', 'content': _systemPrompt()},
+        ..._history,
+      ];
 
   /// Calls the model with a bounded retry so a transient inference failure
   /// (dropped socket, 5xx, throttle) self-heals instead of surfacing an error
