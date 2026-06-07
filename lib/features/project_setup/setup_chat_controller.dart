@@ -29,7 +29,7 @@ import 'setup_tools.dart';
 /// outer panel can show the interview chat (instead of the Plan explorer).
 final projectSetupModeProvider = StateProvider<bool>((ref) => false);
 
-enum SetupMsgKind { user, assistant, thinking, tool, system, question }
+enum SetupMsgKind { user, assistant, thinking, tool, system, question, image }
 
 /// One entry in the interview transcript. For [SetupMsgKind.question] the extra
 /// fields drive the inline picker and carry the [completer] the tool awaits.
@@ -40,12 +40,17 @@ class SetupMsg {
     this.options = const [],
     this.multi = false,
     this.completer,
+    this.imageB64,
   });
 
   final SetupMsgKind kind;
   final String text;
   final List<String> options;
   final bool multi;
+
+  /// Base64 PNG for [SetupMsgKind.image] — a generated/edited picture rendered
+  /// inline in the interview transcript.
+  final String? imageB64;
   final Completer<SetupAnswer>? completer;
   bool answered = false;
   List<String> selected = const [];
@@ -185,6 +190,12 @@ class SetupChatController extends ChangeNotifier {
       askQuestion: _askQuestion,
       onPlansChanged: _bumpWorkspace,
       requiredCategories: _requiredCategories(flow),
+      // generate_image / edit_image: the resolved backend + the collection's
+      // image model; the callback renders the picture inline in the interview.
+      inference: resolved.backend,
+      imageModel: resolved.imageModel,
+      onImage: (b64, caption) =>
+          _append(SetupMsg(kind: SetupMsgKind.image, text: caption, imageB64: b64)),
     );
     _session = SetupSession(
       client: resolved.backend,

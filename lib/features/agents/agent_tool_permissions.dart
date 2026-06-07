@@ -304,6 +304,8 @@ const List<ToolSpec> kCoordinatorToolSpecs = [
     'Generate diagram (image)',
     ToolPerm.grant,
   ),
+  ToolSpec('generate_image', 'Other', 'Generate an image', ToolPerm.grant),
+  ToolSpec('edit_image', 'Other', 'Edit the current image', ToolPerm.grant),
 ];
 
 ToolSpec? toolSpecFor(String name) {

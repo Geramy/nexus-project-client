@@ -425,6 +425,7 @@ class ProjectCoordinatorSession {
   Stream<ChatStreamEvent> runTurn(
     String userMessage, {
     void Function(String toolResult)? onToolResult,
+    void Function(String b64Png, String caption)? onImage,
     String? currentPlanContext,
     int maxToolRounds = 4,
   }) async* {
@@ -463,6 +464,7 @@ class ProjectCoordinatorSession {
             buildService: buildService,
             onPlanningComplete: onPlanningComplete,
             onPlanReview: onPlanReview,
+            onImage: onImage,
             workBranch: workBranch,
             gitLane: gitLane,
           )

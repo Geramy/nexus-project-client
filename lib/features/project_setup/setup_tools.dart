@@ -2,7 +2,10 @@
 // Author: Geramy Loveless <support@nexus-projects.ai>
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
+import 'dart:convert';
+
 import '../../infrastructure/database/nexus_database.dart' hide ProjectTag;
+import '../../infrastructure/inference/inference_backend.dart';
 import '../../infrastructure/registry/registry_models.dart';
 import '../../infrastructure/registry/verification_service.dart';
 import '../project_plans/plan_store.dart';
@@ -56,6 +59,62 @@ class SetupTools {
           ]
         : categories;
     final tools = <Map<String, dynamic>>[
+      {
+        'type': 'function',
+        'function': {
+          'name': 'generate_image',
+          'description':
+              'Generate an image from a text description and show it to the user '
+              '(e.g. a mock-up of a screen, a logo, a concept illustration). Call '
+              'this whenever the user asks to see / make / draw / show a picture '
+              'or design during setup. Write a detailed visual prompt — the image '
+              'renders inline in the chat. Example: generate_image(prompt: '
+              '"mobile app launch screen for a lemonade stand, bright and '
+              'friendly, app-store style", size: "1024x1024").',
+          'parameters': {
+            'type': 'object',
+            'properties': {
+              'prompt': {
+                'type': 'string',
+                'description':
+                    'Detailed visual description of the image to create.',
+              },
+              'size': {
+                'type': 'string',
+                'description':
+                    'WxH — 1024x1024 (default), 1024x1792 (portrait), or '
+                    '1792x1024 (landscape).',
+              },
+            },
+            'required': ['prompt'],
+          },
+        },
+      },
+      {
+        'type': 'function',
+        'function': {
+          'name': 'edit_image',
+          'description':
+              'Modify the most recent image with a described change (e.g. "make '
+              'the background blue", "add a logo", "brighter"). The latest image '
+              'you generated is used as the source automatically. Call this when '
+              'the user asks to change / edit / adjust the picture you just showed.',
+          'parameters': {
+            'type': 'object',
+            'properties': {
+              'prompt': {
+                'type': 'string',
+                'description': 'The change to apply to the current image.',
+              },
+              'size': {
+                'type': 'string',
+                'description': 'Optional output size, e.g. 1024x1024.',
+              },
+            },
+            'required': ['prompt'],
+          },
+        },
+      },
       {
         'type': 'function',
         'function': {
@@ -406,11 +465,26 @@ class SetupToolExecutor {
     this.askQuestion,
     this.onPlansChanged,
     this.requiredCategories = const {},
+    this.inference,
+    this.imageModel,
+    this.onImage,
   });
 
   final NexusDatabase db;
   final int projectPk;
   final VerificationService verification;
+
+  /// Inference backend + image model id for the generate_image / edit_image
+  /// tools (null in background executors that never call them).
+  final InferenceBackend? inference;
+  final String? imageModel;
+
+  /// Side-channel that delivers a generated/edited image (base64 PNG) to the
+  /// setup chat UI to render inline; the text returned to the model stays short.
+  final void Function(String b64Png, String caption)? onImage;
+
+  /// Most recent image generated/edited this session — the source for edits.
+  String? _lastImageB64;
 
   /// Flow stage key → human label for the stages that MUST each have at least
   /// one (non-rejected) tag before `finalize_setup` is allowed. Empty disables
@@ -459,6 +533,10 @@ class SetupToolExecutor {
 
   Future<String> execute(String name, Map<String, dynamic> args) async {
     switch (name) {
+      case 'generate_image':
+        return _generateImage(args);
+      case 'edit_image':
+        return _editImage(args);
       case 'ask_question':
         return _ask(args);
       case 'scope_status':
@@ -483,6 +561,65 @@ class SetupToolExecutor {
         return _updatePlan(args);
       default:
         return 'Unknown setup tool "$name".';
+    }
+  }
+
+  Future<String> _generateImage(Map<String, dynamic> args) async {
+    final prompt = (args['prompt'] as String? ?? '').trim();
+    if (prompt.isEmpty) return 'generate_image needs a prompt.';
+    final size = (args['size'] as String?) ?? '1024x1024';
+    if (inference == null) {
+      return 'Image generation is not available (no inference backend).';
+    }
+    try {
+      final resp = await inference!.generateImage(
+        prompt: prompt,
+        size: size,
+        model: imageModel,
+        responseFormat: 'b64_json',
+      );
+      final b64 = resp.data.isNotEmpty ? resp.data.first.b64Json : null;
+      if (b64 != null && b64.isNotEmpty) {
+        _lastImageB64 = b64;
+        onImage?.call(b64, prompt);
+        return 'Generated the image and showed it to the user. You can refine it with edit_image.';
+      }
+      final url = resp.data.isNotEmpty ? resp.data.first.url : null;
+      return (url != null && url.isNotEmpty)
+          ? 'Generated the image: $url'
+          : 'Image generation returned no data.';
+    } catch (e) {
+      return 'Image generation failed: $e';
+    }
+  }
+
+  Future<String> _editImage(Map<String, dynamic> args) async {
+    final prompt = (args['prompt'] as String? ?? '').trim();
+    if (prompt.isEmpty) return 'edit_image needs a prompt describing the change.';
+    final size = (args['size'] as String?) ?? '1024x1024';
+    if (inference == null) {
+      return 'Image editing is not available (no inference backend).';
+    }
+    if (_lastImageB64 == null) {
+      return 'There is no image to edit yet — call generate_image first, then edit it.';
+    }
+    try {
+      final resp = await inference!.generateImageEdit(
+        imageBytes: base64Decode(_lastImageB64!),
+        prompt: prompt,
+        model: imageModel,
+        size: size,
+        responseFormat: 'b64_json',
+      );
+      final b64 = resp.data.isNotEmpty ? resp.data.first.b64Json : null;
+      if (b64 != null && b64.isNotEmpty) {
+        _lastImageB64 = b64;
+        onImage?.call(b64, prompt);
+        return 'Edited the image and showed the updated version to the user.';
+      }
+      return 'Image edit returned no data.';
+    } catch (e) {
+      return 'Image edit failed: $e';
     }
   }
 

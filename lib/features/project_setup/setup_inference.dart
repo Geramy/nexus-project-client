@@ -28,10 +28,14 @@ class ResolvedInference {
     this.sttModel,
     this.ttsModel,
     this.ttsVoice,
+    this.imageModel,
     this.enableThinking,
   });
   final InferenceBackend backend;
   final String model;
+
+  /// Image-generation model id (for the generate_image / edit_image tools).
+  final String? imageModel;
 
   /// Effective enable_thinking for the project agent (null omits the param).
   final bool? enableThinking;
@@ -107,6 +111,7 @@ final projectInferenceProvider = FutureProvider.family<ResolvedInference?, ({int
 
   String? sttModel;
   String? ttsModel;
+  String? imageModel;
   String? ttsVoice = persona?.ttsVoice as String?;
 
   // The Setup interview uses the Project Manager agent's Omni collection
@@ -129,12 +134,14 @@ final projectInferenceProvider = FutureProvider.family<ResolvedInference?, ({int
     );
     sttModel = resolved.stt;
     ttsModel = resolved.tts;
+    imageModel = resolved.imageGen;
   }
   // Safety net (any path, incl. no persona): never let voice fall back to the
   // backend's `whisper-1` / empty TTS defaults, which 404 on Lemonade servers.
-  // Resolve the server's own transcription/speech models instead.
+  // Resolve the server's own transcription/speech/image models instead.
   sttModel ??= firstAudioModelId(serverModels);
   ttsModel ??= firstTtsModelId(serverModels);
+  imageModel ??= firstImageModelId(serverModels);
 
   // The routed Nexus Router serves the Omni COLLECTION id directly, so send the
   // PM agent's Interview collection (or an explicit per-persona model) as-is — do
@@ -170,6 +177,7 @@ final projectInferenceProvider = FutureProvider.family<ResolvedInference?, ({int
     sttModel: sttModel,
     ttsModel: ttsModel,
     ttsVoice: ttsVoice,
+    imageModel: imageModel,
     // Agent-level thinking mode (Project Manager defaults Off, others Unset).
     enableThinking: resolveEnableThinking(
       agent: personaThinkingMode(

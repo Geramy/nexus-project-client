@@ -2,6 +2,8 @@
 // Author: Geramy Loveless <support@nexus-projects.ai>
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -303,7 +305,60 @@ class _MessageView extends StatelessWidget {
         return _NoteRow(icon: Icons.check_circle_outline, text: msg.text);
       case SetupMsgKind.question:
         return _QuestionCard(msg: msg, onAnswer: onAnswer);
+      case SetupMsgKind.image:
+        return _ImageBubble(b64: msg.imageB64, caption: msg.text);
     }
+  }
+}
+
+class _ImageBubble extends StatelessWidget {
+  const _ImageBubble({required this.b64, required this.caption});
+  final String? b64;
+  final String caption;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.all(8),
+        constraints: const BoxConstraints(maxWidth: 320),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainer,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (b64 != null && b64!.isNotEmpty)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.memory(
+                  base64Decode(b64!),
+                  fit: BoxFit.contain,
+                  gaplessPlayback: true,
+                  errorBuilder: (_, _, _) =>
+                      const Text('(image failed to render)'),
+                ),
+              ),
+            if (caption.trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  caption,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

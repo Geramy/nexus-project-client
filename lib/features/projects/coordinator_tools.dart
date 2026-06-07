@@ -1227,6 +1227,7 @@ class CoordinatorTools {
           },
         },
       },
+      ..._imageToolSchemas,
       if (includeStoryTools) ..._storyToolSchemas,
     ];
   }
@@ -1435,6 +1436,68 @@ class CoordinatorTools {
         },
       },
     },
+    ..._imageToolSchemas,
+  ];
+
+  /// Image tools — offered in BOTH discovery and the coordinator chat so the
+  /// agent can create and refine a picture that renders inline.
+  static const List<Map<String, dynamic>> _imageToolSchemas = [
+    {
+      'type': 'function',
+      'function': {
+        'name': 'generate_image',
+        'description':
+            'Generate an image from a text description and show it to the user '
+            '(a screen mock-up, logo, concept art, etc.). Call this whenever the '
+            'user asks to see / make / draw / show a picture or design. Write a '
+            'detailed visual prompt — the image renders inline in the chat. '
+            'Example: generate_image(prompt: "mobile app launch screen for a '
+            'lemonade stand, bright and friendly, app-store style", '
+            'size: "1024x1024").',
+        'parameters': {
+          'type': 'object',
+          'properties': {
+            'prompt': {
+              'type': 'string',
+              'description':
+                  'Detailed visual description of the image to create.',
+            },
+            'size': {
+              'type': 'string',
+              'description':
+                  'WxH — 1024x1024 (default), 1024x1792 (portrait), or '
+                  '1792x1024 (landscape).',
+            },
+          },
+          'required': ['prompt'],
+        },
+      },
+    },
+    {
+      'type': 'function',
+      'function': {
+        'name': 'edit_image',
+        'description':
+            'Modify the most recent image with a described change (e.g. "make '
+            'the background blue", "add a logo", "brighter"). The latest image '
+            'you generated is used as the source automatically. Call this when '
+            'the user asks to change / edit / adjust the picture you just showed.',
+        'parameters': {
+          'type': 'object',
+          'properties': {
+            'prompt': {
+              'type': 'string',
+              'description': 'The change to apply to the current image.',
+            },
+            'size': {
+              'type': 'string',
+              'description': 'Optional output size, e.g. 1024x1024.',
+            },
+          },
+          'required': ['prompt'],
+        },
+      },
+    },
   ];
 }
 
@@ -1497,6 +1560,15 @@ class CoordinatorToolExecutor {
   final void Function()? onPlanningComplete;
   final void Function(bool approved, String gaps)? onPlanReview;
 
+  /// Side-channel for image tools: delivers a generated/edited image (base64
+  /// PNG) to the UI to render inline. The text returned to the model stays
+  /// short, so the b64 never bloats the conversation history.
+  final void Function(String b64Png, String caption)? onImage;
+
+  /// The most recent image generated/edited this session — the source for
+  /// edit_image so the user can refine "the picture you just showed".
+  String? _lastImageB64;
+
   /// Per-task isolation (orchestrated worker): when set, [workspace] is an
   /// ISOLATED per-task working tree and `git_commit` snapshots it onto
   /// [workBranch] in the shared object DB, serialized through [gitLane]. The
@@ -1522,6 +1594,7 @@ class CoordinatorToolExecutor {
     this.buildService,
     this.onPlanningComplete,
     this.onPlanReview,
+    this.onImage,
     this.workBranch,
     this.gitLane,
   });
@@ -1613,6 +1686,10 @@ class CoordinatorToolExecutor {
           return await _updateTask(args);
         case 'generate_diagram':
           return await _generateDiagram(args);
+        case 'generate_image':
+          return await _generateImage(args);
+        case 'edit_image':
+          return await _editImage(args);
         case 'propose_plan_adjustment':
           return _proposePlanAdjustment(args);
         case 'list_open_tasks':
@@ -2240,6 +2317,66 @@ class CoordinatorToolExecutor {
       return 'Generated diagram for the plan. Image available at: $url (or embedded in chat if supported).';
     } catch (e) {
       return 'Image generation attempted for prompt "$prompt" but failed: $e';
+    }
+  }
+
+  Future<String> _generateImage(Map<String, dynamic> args) async {
+    final prompt = (args['prompt'] as String? ?? '').trim();
+    if (prompt.isEmpty) return 'generate_image needs a prompt.';
+    final size = (args['size'] as String?) ?? '1024x1024';
+    if (inference == null) {
+      return 'Image generation is not available (no inference backend).';
+    }
+    try {
+      final resp = await inference!.generateImage(
+        prompt: prompt,
+        size: size,
+        // Prefer the resolved image model from the collection; never send empty.
+        model: imageModel ?? model,
+        responseFormat: 'b64_json',
+      );
+      final b64 = resp.data.isNotEmpty ? resp.data.first.b64Json : null;
+      if (b64 != null && b64.isNotEmpty) {
+        _lastImageB64 = b64;
+        onImage?.call(b64, prompt);
+        return 'Generated the image and showed it to the user. You can refine it with edit_image.';
+      }
+      final url = resp.data.isNotEmpty ? resp.data.first.url : null;
+      return (url != null && url.isNotEmpty)
+          ? 'Generated the image: $url'
+          : 'Image generation returned no data.';
+    } catch (e) {
+      return 'Image generation failed: $e';
+    }
+  }
+
+  Future<String> _editImage(Map<String, dynamic> args) async {
+    final prompt = (args['prompt'] as String? ?? '').trim();
+    if (prompt.isEmpty) return 'edit_image needs a prompt describing the change.';
+    final size = (args['size'] as String?) ?? '1024x1024';
+    if (inference == null) {
+      return 'Image editing is not available (no inference backend).';
+    }
+    if (_lastImageB64 == null) {
+      return 'There is no image to edit yet — call generate_image first, then edit it.';
+    }
+    try {
+      final resp = await inference!.generateImageEdit(
+        imageBytes: base64Decode(_lastImageB64!),
+        prompt: prompt,
+        model: imageModel ?? model,
+        size: size,
+        responseFormat: 'b64_json',
+      );
+      final b64 = resp.data.isNotEmpty ? resp.data.first.b64Json : null;
+      if (b64 != null && b64.isNotEmpty) {
+        _lastImageB64 = b64;
+        onImage?.call(b64, prompt);
+        return 'Edited the image and showed the updated version to the user.';
+      }
+      return 'Image edit returned no data.';
+    } catch (e) {
+      return 'Image edit failed: $e';
     }
   }
 

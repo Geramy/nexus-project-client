@@ -90,6 +90,19 @@ abstract class InferenceBackend {
     int n = 1,
     String responseFormat = 'url',
   });
+
+  /// Image editing — modify [imageBytes] per [prompt] (POST /v1/images/edits).
+  /// Concrete default so backends that don't support editing still satisfy the
+  /// interface; override it where the API supports edits (see LemonadeBackend).
+  Future<ImageGenerationResponse> generateImageEdit({
+    required List<int> imageBytes,
+    required String prompt,
+    String imageMime = 'image/png',
+    String? model,
+    String size = '1024x1024',
+    String responseFormat = 'b64_json',
+  }) =>
+      throw UnimplementedError('Image editing is not supported by this backend.');
 }
 
 // -----------------------------------------------------------------------------

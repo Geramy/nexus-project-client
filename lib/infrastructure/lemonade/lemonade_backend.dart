@@ -15,6 +15,7 @@ import 'api/types/chat_request.dart';
 import 'api/types/chat_response.dart' as api_types;
 import 'api/types/tool_call.dart' as tc;
 import 'api/types/image_request.dart';
+import 'api/endpoints/images_endpoint.dart' show ImageEditRequest;
 import 'models/server_config.dart';
 import '../models/ui/inference_server.dart' as ui_model;
 
@@ -220,6 +221,33 @@ class LemonadeBackend implements iface.InferenceBackend {
       size: size,
     );
     final resp = await _client.images.generate(req);
+    return iface.ImageGenerationResponse(
+      data: resp.images
+          .map((img) => iface.ImageData(url: img.url, b64Json: img.b64Json))
+          .toList(),
+    );
+  }
+
+  @override
+  Future<iface.ImageGenerationResponse> generateImageEdit({
+    required List<int> imageBytes,
+    required String prompt,
+    String imageMime = 'image/png',
+    String? model,
+    String size = '1024x1024',
+    String responseFormat = 'b64_json',
+  }) async {
+    final resp = await _client.images.edit(
+      ImageEditRequest(
+        model: model ?? '',
+        prompt: prompt,
+        sourceImageBytes: imageBytes,
+        sourceImageMime: imageMime,
+        sourceFilename: 'image.${imageMime.split('/').last}',
+        size: size,
+        responseFormat: responseFormat,
+      ),
+    );
     return iface.ImageGenerationResponse(
       data: resp.images
           .map((img) => iface.ImageData(url: img.url, b64Json: img.b64Json))

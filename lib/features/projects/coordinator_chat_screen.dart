@@ -633,6 +633,17 @@ class _ProjectCoordinatorChatScreenState
         // can burn several tool rounds before the agent gets to speak/ask — give
         // it more headroom than the normal chat so it never stops mid-build.
         maxToolRounds: _session!.discoveryMode ? 8 : 4,
+        onImage: (b64, caption) {
+          if (!mounted) return;
+          setState(() {
+            _messages.add(
+              _ChatMessage(text: caption, isUser: false, imageB64: b64),
+            );
+            _isThinking = true;
+          });
+          needNewBubble = true;
+          assistantBuffer.clear();
+        },
         onToolResult: (r) {
           if (!mounted) return;
           setState(() {
@@ -1031,6 +1042,20 @@ class _ProjectCoordinatorChatScreenState
                               fontSize: isSystem ? 13 : 14,
                             ),
                           ),
+                        if (msg.imageB64 != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: ClipRRect(
+                              borderRadius: AppRadius.mdAll,
+                              child: Image.memory(
+                                base64Decode(msg.imageB64!),
+                                fit: BoxFit.contain,
+                                gaplessPlayback: true,
+                                errorBuilder: (_, _, _) =>
+                                    const Text('(image failed to render)'),
+                              ),
+                            ),
+                          ),
                         if (msg.audioPath != null)
                           Padding(
                             padding: const EdgeInsets.only(top: 6),
@@ -1303,11 +1328,15 @@ class _ChatMessage {
   /// Path to the synthesized reply audio (assistant voice turns only).
   final String? audioPath;
 
+  /// Base64 PNG of an image the agent generated/edited — rendered inline.
+  final String? imageB64;
+
   _ChatMessage({
     required this.text,
     required this.isUser,
     this.isSystem,
     this.isReasoning = false,
     this.audioPath,
+    this.imageB64,
   });
 }
