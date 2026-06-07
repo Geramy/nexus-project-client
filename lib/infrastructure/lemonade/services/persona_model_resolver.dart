@@ -10,6 +10,31 @@ import 'package:nexus_projects_client/infrastructure/lemonade/api/types/model_in
 /// component STT/TTS/LLM models via [resolvePersonaModels].
 const String kDefaultOmniCollection = 'LMX-Omni-52B-Halo';
 
+/// The Setup interview's default Omni collection — used by the **Project Manager**
+/// agent that hosts the setup screen.
+const String kInterviewOmniCollection = 'NXS-PJX-Interview';
+
+/// The Discovery / user-story default Omni collection — used by the **Coordinator**
+/// agent that hosts the user-story screen.
+const String kDiscoveryOmniCollection = 'NXS-PJX-Discovery';
+
+/// The default Omni collection for a persona, keyed by its role `title`
+/// (the `AgentRole.key` stored in the personas table):
+///   • `projectManager` → [kInterviewOmniCollection]
+///   • `coordinator`    → [kDiscoveryOmniCollection]
+///   • everything else  → [kDefaultOmniCollection]
+/// Keep these keys in sync with `AgentRole.key`.
+String defaultOmniCollectionForTitle(String? title) {
+  switch (title) {
+    case 'projectManager':
+      return kInterviewOmniCollection;
+    case 'coordinator':
+      return kDiscoveryOmniCollection;
+    default:
+      return kDefaultOmniCollection;
+  }
+}
+
 /// The concrete model id to use for each modality, resolved from a persona's
 /// saved configuration.
 ///

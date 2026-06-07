@@ -12,6 +12,7 @@ import '../../infrastructure/inference/inference_backend_factory.dart'
     show backendForServer;
 import '../../infrastructure/inference/routed_server.dart'
     show isRoutedProviderType;
+import '../../features/agents/agent_role.dart';
 import '../../features/agents/thinking_mode.dart';
 import '../../infrastructure/lemonade/services/persona_model_resolver.dart';
 import '../../infrastructure/models/ui/inference_server.dart' as ui_server;
@@ -62,10 +63,17 @@ final projectInferenceProvider = FutureProvider.family<ResolvedInference?, ({int
 
   final db = ref.read(nexusDatabaseProvider);
 
-  // The project's assigned agent owns the server + model config.
+  // Setup is hosted by the PROJECT MANAGER agent — resolve it by role so the
+  // interview always runs as the PM (and gets its NXS-PJX-Interview collection),
+  // regardless of the project's single assigned-agent FK.
   dynamic persona;
   try {
-    final personaId = await db.getProjectAgentPersonaId(args.projectId);
+    final personaId =
+        await db.getProjectRolePersonaId(
+          args.projectId,
+          AgentRole.projectManager.key,
+        ) ??
+        await db.getProjectAgentPersonaId(args.projectId);
     if (personaId != null) persona = await db.resolveAgentPersona(personaId);
   } catch (_) {}
 
@@ -99,23 +107,24 @@ final projectInferenceProvider = FutureProvider.family<ResolvedInference?, ({int
 
   String? sttModel;
   String? ttsModel;
-  String? ttsVoice;
-  if (persona != null) {
-    ttsVoice = persona.ttsVoice;
-    // Default to an Omni collection (the product's LMX-Omni-52B-Halo when the
-    // server advertises it, else the first collection it lists) when the persona
-    // hasn't picked one — so voice gets real STT/TTS components instead of null.
-    var omniCollection = persona.omniCollectionModel;
-    if (omniCollection == null || omniCollection.trim().isEmpty) {
-      omniCollection = defaultOmniCollectionId(serverModels);
-    }
+  String? ttsVoice = persona?.ttsVoice as String?;
+
+  // The Setup interview uses the Project Manager agent's Omni collection
+  // (NXS-PJX-Interview by default), falling back to the role default when the
+  // persona hasn't stored one. Resolve its STT/TTS components for voice.
+  final personaCollection = persona?.omniCollectionModel as String?;
+  final omniCollection =
+      (personaCollection != null && personaCollection.trim().isNotEmpty)
+      ? personaCollection.trim()
+      : defaultOmniCollectionForTitle(persona?.title as String?);
+  if (omniCollection.isNotEmpty) {
     final resolved = resolvePersonaModels(
       omniCollectionModel: omniCollection,
-      llmModel: persona.llmModel,
-      sttModel: persona.sttModel,
-      ttsModel: persona.ttsModel,
-      visionModel: persona.visionModel,
-      imageGenModel: persona.imageGenModel,
+      llmModel: persona?.llmModel as String?,
+      sttModel: persona?.sttModel as String?,
+      ttsModel: persona?.ttsModel as String?,
+      visionModel: persona?.visionModel as String?,
+      imageGenModel: persona?.imageGenModel as String?,
       models: serverModels,
     );
     sttModel = resolved.stt;
@@ -127,17 +136,23 @@ final projectInferenceProvider = FutureProvider.family<ResolvedInference?, ({int
   sttModel ??= firstAudioModelId(serverModels);
   ttsModel ??= firstTtsModelId(serverModels);
 
-  // The routed Nexus Router serves the Omni COLLECTION id (LMX-Omni-52B-Halo)
-  // DIRECTLY, so send it as-is and default to it — do NOT decompose to a raw
-  // sub-model, which fell through to a small 4B (e.g. Qwen3.5-4B): the wrong
-  // model. Local servers (which 500 on a bare collection) decompose from the
+  // The routed Nexus Router serves the Omni COLLECTION id directly, so send the
+  // PM agent's Interview collection (or an explicit per-persona model) as-is — do
+  // NOT decompose to a raw sub-model (which fell through to a small 4B: the wrong
+  // model). Local servers (which 500 on a bare collection) decompose from the
   // live list. STT/TTS components are still resolved above for voice.
-  final model = resolveAgentChatModel(
-    routed: isRoutedProviderType(chosen.providerType),
-    personaModel: persona?.llmModel as String?,
-    selectedModel: chosen.selectedModel,
-    serverModels: serverModels,
-  );
+  final routed = isRoutedProviderType(chosen.providerType);
+  final personaModel = persona?.llmModel as String?;
+  final model = routed
+      ? ((personaModel != null && personaModel.trim().isNotEmpty)
+            ? personaModel.trim()
+            : omniCollection)
+      : resolveAgentChatModel(
+          routed: false,
+          personaModel: personaModel,
+          selectedModel: chosen.selectedModel,
+          serverModels: serverModels,
+        );
 
   final uiServer = ui_server.InferenceServer(
     id: chosen.server_pk.toString(),

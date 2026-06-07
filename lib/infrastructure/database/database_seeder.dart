@@ -11,6 +11,8 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:nexus_projects_client/features/agents/agent_role.dart';
 import 'package:nexus_projects_client/features/agents/agent_tool_permissions.dart';
 import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart';
+import 'package:nexus_projects_client/infrastructure/lemonade/services/persona_model_resolver.dart'
+    show kDefaultOmniCollection, defaultOmniCollectionForTitle;
 
 /// Seeds initial data and guarantees the built-in "Default" client always
 /// exists. With integer auto-increment PKs we let the DB assign ids; on a fresh
@@ -50,6 +52,37 @@ Future<void> seedInitialData(NexusDatabase db) async {
     await _grantStoryToolsToManagers(db);
   } catch (e) {
     debugPrint('Seeder: story-permission reconcile warning (non-fatal): $e');
+  }
+
+  // Repair the Project Manager / Coordinator default collections (PM → Interview,
+  // Coordinator → Discovery) on installs seeded before per-role collections.
+  try {
+    await _setManagerDefaultCollections(db);
+  } catch (e) {
+    debugPrint('Seeder: collection-default reconcile warning (non-fatal): $e');
+  }
+}
+
+/// Repairs existing Project Manager / Coordinator personas to their purpose-built
+/// default Omni collections (PM → Interview, Coordinator → Discovery), for
+/// installs seeded before per-role collections existed. Idempotent and
+/// NON-DESTRUCTIVE: only updates a persona still on the generic product default
+/// (or with no collection set) — never overwrites a deliberately chosen one.
+Future<void> _setManagerDefaultCollections(NexusDatabase db) async {
+  for (final p in await db.getAllAgentPersonas()) {
+    final role = agentRoleFromKey(p.title);
+    if (role != AgentRole.projectManager && role != AgentRole.coordinator) {
+      continue;
+    }
+    final want = defaultOmniCollectionForTitle(p.title);
+    final cur = p.omniCollectionModel?.trim() ?? '';
+    if (cur == want) continue;
+    // Respect a deliberately chosen collection; only set when unset or still on
+    // the old generic default.
+    if (cur.isNotEmpty && cur != kDefaultOmniCollection) continue;
+    await db.updateAgentPersona(
+      p.toCompanion(true).copyWith(omniCollectionModel: Value(want)),
+    );
   }
 }
 

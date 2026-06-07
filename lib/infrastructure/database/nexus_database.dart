@@ -14,7 +14,7 @@ import 'package:path/path.dart' as p;
 
 import '../inference/routed_server.dart' show kRoutedProviderType;
 import '../lemonade/services/persona_model_resolver.dart'
-    show kDefaultOmniCollection;
+    show defaultOmniCollectionForTitle;
 import '../models/database/tables/client.dart';
 import '../models/database/tables/project.dart';
 import '../models/database/tables/task.dart';
@@ -750,7 +750,10 @@ class NexusDatabase extends _$NexusDatabase {
           description: Value(a.description),
           capabilitiesJson: Value(jsonEncode(a.skills)),
           configJson: Value(a.configJson),
-          omniCollectionModel: const Value(kDefaultOmniCollection),
+          // Each role gets its purpose-built default collection: Project Manager
+          // → Interview, Coordinator → Discovery, everyone else → the product
+          // default. (Decomposes into per-modality models out of the box.)
+          omniCollectionModel: Value(defaultOmniCollectionForTitle(a.title)),
           isPrefab: const Value(true),
         ),
       );
@@ -865,6 +868,30 @@ class NexusDatabase extends _$NexusDatabase {
 
     await setProjectAgentPersona(projectPk, pm.agent_pk);
     return pm.agent_pk;
+  }
+
+  /// The client's persona for a given role `title` (an [AgentRole] key), or null.
+  /// Lets a screen bind to a SPECIFIC role (Setup → Project Manager, Discovery →
+  /// Coordinator) independently of the project's single assigned-agent FK.
+  Future<int?> getPersonaIdByRole(int clientPk, String roleKey) async {
+    final p =
+        await (select(agentPersonas)
+              ..where(
+                (p) => p.client_fk.equals(clientPk) & p.title.equals(roleKey),
+              )
+              ..limit(1))
+            .getSingleOrNull();
+    return p?.agent_pk;
+  }
+
+  /// Resolve the persona for [roleKey] under the project's client. Returns null
+  /// if the project (or that role's persona) doesn't exist.
+  Future<int?> getProjectRolePersonaId(int projectPk, String roleKey) async {
+    final proj = await (select(
+      projects,
+    )..where((p) => p.project_pk.equals(projectPk))).getSingleOrNull();
+    if (proj == null) return null;
+    return getPersonaIdByRole(proj.client_fk, roleKey);
   }
 
   /// Reactive single-project query — the project controls watch this so the

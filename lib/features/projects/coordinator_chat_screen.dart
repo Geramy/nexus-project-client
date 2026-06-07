@@ -25,6 +25,7 @@ import 'package:nexus_projects_client/infrastructure/models/ui/inference_server.
 import 'package:nexus_projects_client/features/projects/coordinator_session.dart';
 import 'package:nexus_projects_client/features/project_plans/plan_store.dart';
 import 'package:nexus_projects_client/features/agents/agent_tool_permissions.dart';
+import 'package:nexus_projects_client/features/agents/agent_role.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/workspace.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/workspace_provider.dart';
@@ -148,12 +149,18 @@ class _ProjectCoordinatorChatScreenState
       // to a different server and get 500s.
       AgentPersona? persona;
       try {
-        // Falls back to (and persists) the Project Manager persona when the
-        // project has no agent assigned yet, so the coordinator chat always
-        // opens with a sensible default agent selected.
-        final personaId = await db.getOrAssignCoordinatorPersonaId(
-          widget.projectId,
-        );
+        // The User-Story (discovery) screen is hosted by the COORDINATOR agent;
+        // the normal project chat by the Project Manager. Resolve by role so each
+        // screen binds to its agent (and that agent's default Omni collection).
+        // Falls back to (and persists) the Project Manager when no role persona
+        // is found, so the chat always opens with a sensible default selected.
+        final personaId = widget.discoveryMode
+            ? (await db.getProjectRolePersonaId(
+                    widget.projectId,
+                    AgentRole.coordinator.key,
+                  ) ??
+                  await db.getOrAssignCoordinatorPersonaId(widget.projectId))
+            : await db.getOrAssignCoordinatorPersonaId(widget.projectId);
         if (personaId != null)
           persona = await db.resolveAgentPersona(personaId);
       } catch (e) {
@@ -198,20 +205,18 @@ class _ProjectCoordinatorChatScreenState
       String? imageModel;
       String? ttsVoice = persona?.ttsVoice;
 
-      // The coordinator voice ALWAYS defaults to the best Omni collection the
-      // chosen server advertises — the product default, LMX-Omni-52B-Halo — for
-      // the large chat model + HQ STT/TTS (Whisper-Large-v3-Turbo, not the tiny
-      // Lite components). This MUST run even when no persona is assigned to the
-      // project (the common case — the log shows Agent="(none)"): previously the
-      // whole block lived inside `if (persona != null)`, so with no persona the
-      // voice skipped the collection entirely and fell through to the
-      // per-modality "first model" safety nets below, which pick the small Lite
-      // models. We prefer the server default over any collection stored on the
-      // persona, and fall back to the persona's own pick only when the server
-      // advertises none.
+      // Each agent uses its OWN default Omni collection: the Coordinator (the
+      // discovery / user-story host) → NXS-PJX-Discovery, the Project Manager
+      // (normal chat) → NXS-PJX-Interview. Prefer the persona's stored collection,
+      // then its role default; this runs even with no persona (role default
+      // falls back to the product default), so the per-modality components are
+      // always resolved instead of the small "first model" safety nets below.
+      final personaCollection = persona?.omniCollectionModel;
       final omniCollection =
-          defaultOmniCollectionId(serverModels) ?? persona?.omniCollectionModel;
-      if (omniCollection != null && omniCollection.trim().isNotEmpty) {
+          (personaCollection != null && personaCollection.trim().isNotEmpty)
+          ? personaCollection.trim()
+          : defaultOmniCollectionForTitle(persona?.title);
+      if (omniCollection.isNotEmpty) {
         final resolved = resolvePersonaModels(
           omniCollectionModel: omniCollection,
           llmModel: persona?.llmModel,
@@ -224,8 +229,8 @@ class _ProjectCoordinatorChatScreenState
         sttModel = resolved.stt;
         ttsModel = resolved.tts;
         imageModel = resolved.imageGen;
-        // Default the coordinator's spoken voice to Bella on the Halo collection
-        // when no explicit voice is set.
+        // Default the spoken voice to Bella on the product Omni collection when
+        // no explicit voice is set.
         if ((ttsVoice == null || ttsVoice.trim().isEmpty) &&
             omniCollection == kDefaultOmniCollection) {
           ttsVoice = 'af_bella'; // Bella — US Female
@@ -241,21 +246,27 @@ class _ProjectCoordinatorChatScreenState
       // candidate backends failed"); the executor falls back to the chat model.
       imageModel ??= firstImageModelId(serverModels);
 
-      // Chat model: the routed Nexus Router serves the Omni COLLECTION id
-      // (LMX-Omni-52B-Halo) DIRECTLY, so send it as-is and default to it — do NOT
-      // decompose to a raw sub-model, which fell through to a small 4B (Qwen3.5-4B)
-      // and is the wrong model. Local servers (which 500 on a bare collection)
-      // decompose from their live model list. Voice STT/TTS resolved above.
-      final effectiveChatModel = resolveAgentChatModel(
-        routed: isRoutedProviderType(chosen.providerType),
-        personaModel: persona?.llmModel,
-        selectedModel: chosen.selectedModel,
-        serverModels: serverModels,
-      );
+      // Chat model: the routed Nexus Router serves the Omni COLLECTION id directly,
+      // so send the agent's collection (or an explicit per-persona model) as-is —
+      // do NOT decompose to a raw sub-model (which fell through to a small 4B: the
+      // wrong model). Local servers (which 500 on a bare collection) decompose from
+      // their live model list. Voice STT/TTS resolved above.
+      final pLlm = persona?.llmModel;
+      final routed = isRoutedProviderType(chosen.providerType);
+      final effectiveChatModel = routed
+          ? ((pLlm != null && pLlm.trim().isNotEmpty)
+                ? pLlm.trim()
+                : omniCollection)
+          : resolveAgentChatModel(
+              routed: false,
+              personaModel: pLlm,
+              selectedModel: chosen.selectedModel,
+              serverModels: serverModels,
+            );
       debugPrint(
         '[Voice] Coordinator models → chat=$effectiveChatModel stt=$sttModel '
         'tts=$ttsModel voice=${ttsVoice ?? "(default)"} '
-        'omni=${omniCollection ?? "(none)"} '
+        'omni=$omniCollection '
         'collectionsSeen=[${serverModels.where((m) => m.isCollection).map((m) => m.id).join(", ")}]',
       );
 
