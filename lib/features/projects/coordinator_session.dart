@@ -12,6 +12,8 @@ import 'package:nexus_projects_client/infrastructure/lemonade/api/exceptions.dar
 import 'package:nexus_projects_client/infrastructure/lemonade/services/persona_model_resolver.dart'
     show kDefaultOmniCollection;
 import 'package:nexus_projects_client/features/projects/coordinator_tools.dart';
+import 'package:nexus_projects_client/features/projects/project_baseline.dart'
+    show buildProjectBaseline;
 import 'package:nexus_projects_client/features/agents/agent_tool_permissions.dart';
 import 'package:nexus_projects_client/features/project_plans/plan_store.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/async_lock.dart';
@@ -247,6 +249,14 @@ class ProjectCoordinatorSession {
         .raw(OrchestratorPromptField.coordinatorSystem)
         .replaceAll('{projectName}', projectName);
     buffer.writeln(preamble);
+    // Inject the authoritative project baseline (the setup tags: platforms,
+    // stack, objectives, features, databases, libraries, services) so the
+    // Coordinator SEES the project profile and writes concrete, stack-specific
+    // tasks from it (e.g. "Create the PostgreSQL tables …", "Write the Dart …").
+    if (db != null) {
+      buffer.writeln();
+      buffer.writeln(await buildProjectBaseline(db!, projectId));
+    }
 
     final live = currentPlanContext ?? await getRichProjectContext();
     if (live.isNotEmpty) {

@@ -122,7 +122,7 @@ class CoordinatorTools {
         'function': {
           'name': 'create_task',
           'description':
-              'Create a new task (or subtask) in the current project. Use when the user asks to add work, break down a plan, or capture an action item. Every task MUST end up assigned to a worker agent: pass agent_persona_id with the best-fit specialist (call list_agents first to get real ids). If you omit it, a default worker is auto-assigned so the task is never left unassigned.',
+              'Create a new task (or subtask) in the current project. Use when the user asks to add work, break down a plan, or capture an action item. Write the description as a CONCRETE engineering instruction that names the project\'s actual stack (from the PROJECT BASELINE) and the specific artifact to build — e.g. "Create the PostgreSQL tables stands, orders, order_items with columns + foreign keys", "Write the Dart REST endpoint GET /stands/nearest", or "Build the Flutter StandDetailPanel widget" — rather than a vague goal. Every task MUST end up assigned to a worker agent: pass agent_persona_id with the best-fit specialist (call list_agents first to get real ids). If you omit it, a default worker is auto-assigned so the task is never left unassigned.',
           'parameters': {
             'type': 'object',
             'properties': {
