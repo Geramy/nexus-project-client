@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 
 import 'app/app.dart';
 import 'core/providers/database_provider.dart';
@@ -62,6 +63,12 @@ void _syncKeyboardOnFocusChange() {
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // just_audio (TTS playback) backends: iOS/Android/macOS are built into
+  // just_audio; Windows uses just_audio_windows; Linux has no native backend, so
+  // route it through media_kit (libmpv). `windows: false` leaves Windows to
+  // just_audio_windows; this self-guards by platform, so it's a no-op elsewhere.
+  JustAudioMediaKit.ensureInitialized(windows: false);
 
   // Print every framework + async error to the console (in addition to any
   // in-UI surfacing). Without this, exceptions thrown off the widget build

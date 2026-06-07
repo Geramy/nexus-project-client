@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.14.10+45
+version: 1.14.11+46
 
 environment:
   sdk: ^3.11.5
@@ -78,6 +78,14 @@ dependencies:
   # reliably on macOS desktop in ~/IdeaProjects/lemonade_mobile (record ^6 + vad 0.0.8).
   record: ^6.2.0
   just_audio: ^0.9.36
+  # Per-platform just_audio (TTS playback) backends. iOS/Android/macOS are built
+  # into just_audio itself; Windows + Linux need a federated/community backend or
+  # the plugin channel is unimplemented (voice → MissingPluginException).
+  just_audio_windows: ^0.2.0
+  # Linux backend for just_audio (libmpv via media_kit); wired on Linux only in
+  # main.dart via JustAudioMediaKit.ensureInitialized.
+  just_audio_media_kit: ^2.0.6
+  media_kit_libs_linux: ^1.1.3
   permission_handler: ^11.3.1
   http: ^1.2.0
   vad: ^0.0.8  # Same resolved version as lemonade_mobile (the one where audioStream: + v5 works on desktop)

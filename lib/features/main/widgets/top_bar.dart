@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nexus_projects_client/core/providers/app_shell_provider.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/features/main/widgets/agent_feed_indicator.dart';
+import 'package:nexus_projects_client/features/projects/project_switch.dart';
 
 /// Top bar extracted from main_shell.dart during organization refactor (2026-05).
 /// Contains prominent client indicator + project switcher + connection mode.
@@ -123,13 +124,7 @@ class TopBar extends ConsumerWidget {
                 return PopupMenuButton<int>(
                   tooltip: 'Switch project',
                   position: PopupMenuPosition.under,
-                  onSelected: (id) => _switchProject(
-                    context,
-                    ref,
-                    currentProjectId,
-                    projectName,
-                    id,
-                  ),
+                  onSelected: (id) => swapToProject(context, ref, id),
                   itemBuilder: (_) => [
                     for (final p in projects)
                       PopupMenuItem(
@@ -218,48 +213,5 @@ class TopBar extends ConsumerWidget {
         ],
       ),
     );
-  }
-
-  /// Switch the focused project. If the project we're leaving has its
-  /// orchestration RUNNING, confirm first and PAUSE it — so its agents stop
-  /// consuming the shared connection budget and an accidental switch can't strand
-  /// the project you actually want to work on.
-  Future<void> _switchProject(
-    BuildContext context,
-    WidgetRef ref,
-    int currentId,
-    String currentName,
-    int newId,
-  ) async {
-    if (newId == currentId) return;
-    final db = ref.read(nexusDatabaseProvider);
-    final proj = await db.getProjectById(currentId);
-    final running = proj?.orchestrationState == 'running';
-    if (running) {
-      if (!context.mounted) return;
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Swap projects?'),
-          content: Text(
-            'Are you sure you want to swap projects? This will pause the agents '
-            'currently working on "$currentName" until you focus it again.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Swap & pause'),
-            ),
-          ],
-        ),
-      );
-      if (ok != true) return;
-      await db.setProjectOrchestrationState(currentId, 'paused');
-    }
-    ref.read(currentProjectIdProvider.notifier).selectProject(newId);
   }
 }

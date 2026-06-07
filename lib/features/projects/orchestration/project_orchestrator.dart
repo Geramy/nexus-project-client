@@ -1095,13 +1095,14 @@ class ProjectOrchestrator {
 /// The pipeline stage a task is ready for, in execution order.
 enum _Stage { implement, verify, build, merge }
 
-/// One [ProjectOrchestrator] per project. Kept alive while anything (e.g. the
-/// project workspace view) watches it; it self-starts on creation.
-final projectOrchestratorProvider = Provider.family<ProjectOrchestrator, int>((
-  ref,
-  projectId,
-) {
-  final orchestrator = ProjectOrchestrator(ref, projectId)..start();
-  ref.onDispose(orchestrator.dispose);
-  return orchestrator;
-});
+/// One [ProjectOrchestrator] per project. AUTO-DISPOSED: it lives only while the
+/// project is FOCUSED (the shell + workspace watch the current project's
+/// orchestrator). Switching to another project disposes this one, so the old
+/// project stops spawning agents and stops competing for the connection budget —
+/// it self-starts again (and resumes if still `running`) when you refocus it.
+final projectOrchestratorProvider =
+    Provider.autoDispose.family<ProjectOrchestrator, int>((ref, projectId) {
+      final orchestrator = ProjectOrchestrator(ref, projectId)..start();
+      ref.onDispose(orchestrator.dispose);
+      return orchestrator;
+    });

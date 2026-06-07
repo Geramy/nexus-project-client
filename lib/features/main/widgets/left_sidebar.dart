@@ -10,6 +10,9 @@ import 'package:nexus_projects_client/infrastructure/database/nexus_database.dar
 import 'package:nexus_projects_client/infrastructure/lemonade/providers/lemonade_servers_provider.dart';
 import 'package:nexus_projects_client/features/onboarding/widgets/create_with_packs_dialog.dart';
 import 'package:nexus_projects_client/features/onboarding/project_setup_dialog.dart';
+import 'package:nexus_projects_client/infrastructure/inference/inference_backend_factory.dart'
+    show resetInferenceConnections;
+import 'package:nexus_projects_client/features/projects/project_switch.dart';
 import 'package:nexus_projects_client/features/projects/types/project_type.dart';
 import 'package:nexus_projects_client/features/projects/types/project_type_providers.dart';
 import 'package:nexus_projects_client/shared/ui/nexus_ui.dart';
@@ -249,6 +252,10 @@ class LeftSidebar extends ConsumerWidget {
                         const _SectionLabel('PROJECTS'),
                         const SizedBox(height: 4),
 
+                        // Only the FOCUSED project shows here, in a box; tapping it
+                        // opens a dropdown of every project to switch to. Switching
+                        // away from a running project confirms + pauses it (so it
+                        // can't keep eating the connection budget).
                         Consumer(
                           builder: (context, ref, _) {
                             final clientId = ref.watch(currentClientIdProvider);
@@ -260,77 +267,126 @@ class LeftSidebar extends ConsumerWidget {
                             );
 
                             return projsAsync.when(
-                              data: (projs) => Column(
-                                children: projs.map((p) {
-                                  final sel = p.project_pk == currProj;
-                                  return InkWell(
-                                    onTap: () => ref
-                                        .read(currentProjectIdProvider.notifier)
-                                        .selectProject(p.project_pk),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: AppSpacing.sm,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: sel
-                                            ? Theme.of(context)
-                                                  .colorScheme
-                                                  .primary
-                                                  .withValues(alpha: 0.12)
-                                            : null,
-                                        borderRadius: AppRadius.smAll,
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              p.name,
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: sel
-                                                    ? FontWeight.w600
-                                                    : FontWeight.normal,
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
+                              data: (projs) {
+                                final current = projs
+                                    .where((p) => p.project_pk == currProj)
+                                    .firstOrNull;
+                                final currentName =
+                                    current?.name ?? currProj.toString();
+                                return PopupMenuButton<int>(
+                                  tooltip: 'Switch project',
+                                  position: PopupMenuPosition.under,
+                                  onSelected: (id) =>
+                                      swapToProject(context, ref, id),
+                                  itemBuilder: (_) => [
+                                    for (final p in projs)
+                                      PopupMenuItem(
+                                        value: p.project_pk,
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              p.project_pk == currProj
+                                                  ? Icons.check
+                                                  : Icons.folder_open,
+                                              size: 16,
                                             ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                p.name,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
+                                  child: Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: AppSpacing.sm,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context).colorScheme.primary
+                                          .withValues(alpha: 0.10),
+                                      border: Border.all(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary
+                                            .withValues(alpha: 0.3),
+                                      ),
+                                      borderRadius: AppRadius.smAll,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.folder_open, size: 14),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            currentName,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
                                           ),
+                                        ),
+                                        const Icon(
+                                          Icons.arrow_drop_down,
+                                          size: 18,
+                                        ),
+                                        if (current != null)
                                           IconButton(
                                             icon: const Icon(
                                               Icons.delete_outline,
-                                              size: 16,
+                                              size: 14,
                                             ),
                                             padding: EdgeInsets.zero,
+                                            visualDensity: VisualDensity.compact,
                                             constraints: const BoxConstraints(),
-                                            onPressed: () =>
-                                                _deleteProject(context, ref, p),
-                                            tooltip: 'Delete project',
+                                            tooltip: 'Delete this project',
+                                            onPressed: () => _deleteProject(
+                                              context,
+                                              ref,
+                                              current,
+                                            ),
                                           ),
-                                        ],
-                                      ),
+                                      ],
                                     ),
-                                  );
-                                }).toList(),
-                              ),
+                                  ),
+                                );
+                              },
                               loading: () => const SizedBox(),
                               error: (_, __) => const Text('Error'),
                             );
                           },
                         ),
 
-                        TextButton.icon(
-                          // Reuse the SAME project-setup screen + workflow as the
-                          // onboarding wizard (name + agent packs), instead of a
-                          // separate dialog.
-                          onPressed: () => showProjectSetupDialog(context),
-                          icon: const Icon(Icons.add, size: 14),
-                          label: const Text(
-                            'New Project',
-                            style: TextStyle(fontSize: 11),
-                          ),
-                          style: TextButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            minimumSize: Size.zero,
+                        Consumer(
+                          builder: (context, ref, _) => TextButton.icon(
+                            // Reuse the SAME project-setup screen + workflow as the
+                            // onboarding wizard. Creating a new project pauses the
+                            // currently-running one first (same swap behaviour).
+                            onPressed: () async {
+                              // Stop + free the current project (like swapping)
+                              // before creating a new one.
+                              if (await confirmLeaveProject(context, ref)) {
+                                resetInferenceConnections();
+                                if (context.mounted) {
+                                  showProjectSetupDialog(context);
+                                }
+                              }
+                            },
+                            icon: const Icon(Icons.add, size: 14),
+                            label: const Text(
+                              'New Project',
+                              style: TextStyle(fontSize: 11),
+                            ),
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: Size.zero,
+                            ),
                           ),
                         ),
                       ],

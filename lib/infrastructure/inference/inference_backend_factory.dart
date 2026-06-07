@@ -42,6 +42,20 @@ http.Client _sharedClientFor(ui_model.InferenceServer server) {
   });
 }
 
+/// Immediately free ALL inference connections: closing the shared clients aborts
+/// every in-flight request (a worker mid-turn, a streaming chat) and drops their
+/// sockets, so the router's concurrent-connection count returns to zero at once.
+/// The next request lazily creates a fresh pooled client. Used when leaving a
+/// project so the next one gets the full connection budget immediately (pausing/
+/// stopping the orchestrator alone leaves an in-flight turn holding its socket).
+void resetInferenceConnections() {
+  final clients = _sharedClients.values.toList();
+  _sharedClients.clear();
+  for (final c in clients) {
+    c.close();
+  }
+}
+
 /// Returns a concrete InferenceBackend for the given server row.
 ///
 /// [agentName] is forwarded as the `X-Nexus-Agent` header so the Router can
