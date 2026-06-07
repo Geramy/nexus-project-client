@@ -106,69 +106,50 @@ class SetupSession {
   List<String> get tagCategories => flow.stages.map((s) => s.key).toList();
 
   String _interviewPrompt() {
-    final topics = StringBuffer();
+    final steps = StringBuffer();
+    var n = 1;
     for (final s in flow.stages) {
-      topics.writeln('- ${s.title} (category `${s.key}`): ${s.guidance}');
-      if (s.vocab == SetupVocab.closed && s.suggestions.isNotEmpty) {
-        topics.writeln('    Allowed values ONLY: ${s.suggestions.join(', ')}.');
-      } else if (s.suggestions.isNotEmpty) {
-        topics.writeln('    Examples: ${s.suggestions.join(', ')}.');
-      }
+      final opts = s.suggestions.isEmpty
+          ? ' Offer a few relevant options.'
+          : (s.vocab == SetupVocab.closed
+                ? ' Offer ONLY these options: ${s.suggestions.join(', ')}.'
+                : ' Suggested options: ${s.suggestions.join(', ')}.');
+      steps.writeln(
+        '$n. ${s.title} — ask about ${s.guidance.trim()}'
+        '${s.required ? '' : ' (optional — skip if it does not apply)'}'
+        ' [category: `${s.key}`]$opts',
+      );
+      n++;
     }
+    final stepCount = flow.stages.length;
     return '''
-You are the Project Setup host for "$projectName" (${flow.name}).
+You are the Setup host for "$projectName" (${flow.name}). Your job is to build the project profile by TAGGING it. Keep every reply to 1-2 short sentences.
 
 ${flow.intro}
 
-This is a CONVERSATION, not a form. Let the user describe their project in their
-own words; react, ask natural follow-ups, and build the profile from what they
-say. The topics below are what to COVER over the chat — in any sensible order,
-revisited as you learn more — NOT a script to march through:
-$topics
-How to work:
-- Talk like a helpful product partner. A spoken reply with NO tool call is fine —
-  that's how you ask an open question or react to what they said. You do not need
-  to call a tool every turn.
-- Use `ask_question` as a GUARDRAIL when bounded choices help the user decide, or
-  to confirm a direction — not for every exchange. Selection questions are
-  MULTI-SELECT by default (leave `multi` true); set `multi:false` only for a
-  strict single choice (yes/no, "continue vs. add more").
-- Propose tags ONLY for what the user has EXPLICITLY said or picked. Do NOT
-  fill the board ahead of them: answering one question (e.g. "iOS, Android, Web")
-  should propose ONLY that category's tags (platforms) — never silently invent
-  objectives, features, databases, or services they haven't mentioned yet. Ask
-  about the next topic instead. Tags save as `proposed` for the user to accept.
-- RECORD-BEFORE-MOVING-ON: the moment the user answers an ask_question with
-  selections (e.g. they pick several features), your VERY NEXT action MUST be a
-  `propose_tags` call saving those selections under that category. Do not just
-  say "great choices" and move on — acknowledging without recording leaves the
-  section empty and blocks the user from finishing setup.
-- DELIBERATION CONTRACT: whenever you weigh several candidates ("let me think
-  about this — here are some options…"), call `consider_items` with them FIRST,
-  then resolve EACH with `propose_tags` (add) or `dismiss_item` (skip) — and do
-  the same after every `lookup_package`. Never just list options in prose and
-  move on: setup will not let you finish while any considered item is undecided.
-- The technical STACK is AI-DERIVED: you MUST derive and propose at least one
-  `languages` tag AND one `frameworks` tag before finalizing — never skip these,
-  even if the user never mentioned them. Derive them once platforms/objectives are
-  known, kept minimal and appropriate to the platforms. `libraries` are
-  best-effort/OPTIONAL — propose specific packages (verify via `lookup_package`,
-  set `forLanguage`) when you can, but if verification is slow or unclear, move on:
-  libraries do NOT block finishing setup. For `databases`/`services`, propose a tag
-  only when the user's description clearly implies it (orders/users → PostgreSQL;
-  payments → Stripe); otherwise ask.
-- ADAPTIVE SCOPE (optional helpers): after proposing `industries` you may call
-  `scope_status` to surface a sub-axis (e.g. Gaming → Genre) and `scope_options`
-  for industry/platform-tailored vocabulary. Use them when they help — honor the
-  platform-specific stack they return (e.g. desktop games → C#/C++ engines, not
-  Flutter); don't call them mechanically.
-- Only these `propose_tags` categories are valid: ${tagCategories.join(', ')}.
-- REQUIRED before finalizing — every one of these sections must have at least one
-  tag (and any sub-axis like Genre must be answered): ${_requiredTitles()}. Don't
-  call `finalize_setup` until they're all covered; it will refuse and tell you
-  what's still missing otherwise.
+You have $stepCount topics to fill (listed below). Tag what the user already told you FIRST, then ask about whatever is still open — one at a time, in flexible order.
+
+$steps
+START FROM WHAT THEY SAID:
+- Read the user's description and FIRST call `propose_tags` for everything it already implies, mapping their words to the closest option for each topic. Reasonable inferences are welcome — e.g. "a mobile app for a lemonade stand where users find and order" → propose_tags([{category:"industries", value:"Food & Beverage"}, {category:"platforms", value:"iOS"}, {category:"platforms", value:"Android"}, {category:"objectives", value:"Ordering"}, {category:"objectives", value:"Store locator"}]).
+- Then reflect back in one short sentence what you recorded.
+
+HOW TO ASK (for the topics still open):
+- Each remaining question goes through the `ask_question` tool — it shows the options as buttons the user taps, so calling it is how you get their answer.
+- Put any progress label inside the tool call, e.g. ask_question(question: "Objectives — anything else it should do?", options: ["…","…"], multi: true).
+
+FOR EACH REMAINING TOPIC (one the description did not already answer):
+1. Call the `ask_question` tool with the question + its options (multi-select unless it is a yes/no).
+2. Right after the user answers, call `propose_tags` to save their picks under that topic's `category`, then continue.
+3. Move to the next open topic.
+
+RULES:
+- Base every tag on what the user picked or said. Use the `category` shown in each question's brackets.
+- Each tag VALUE is a SHORT label — a few words (≤5), one idea per tag. Give several items as several tags. Example: "track orders and notify users" → propose_tags([{category:"objectives", value:"Order tracking"}, {category:"objectives", value:"User notifications"}]).
+- If a tool result says "NEXT: …", do that next (some answers unlock a follow-up question, e.g. Industry → Genre).
+- STACK: once platforms are known, also `propose_tags` at least one `languages` and one `frameworks` value yourself (minimal, fitting the platforms) — the user usually will not mention these.
+- When every required question has at least one tag (${_requiredTitles()}), call `finalize_setup`. It refuses and lists what is missing if you call it too early.
 - ${flow.finalizeGuidance}
-- Keep spoken replies to 1-3 sentences. Be concrete and friendly.
 ''';
   }
 
@@ -257,6 +238,10 @@ How to work:
       // (the common "picked some features → model says 'great!' → stops without
       // propose_tags" stall that leaves a required section empty).
       var selectionNudges = 0;
+      // Bounds how many times per turn we push the model to re-ask via the
+      // ask_question TOOL after it typed a question (with options) as a plain
+      // message — which renders no buttons, so the user can't answer.
+      var askToolNudges = 0;
       for (var round = 0; round < maxToolRounds; round++) {
         // The user tapped "stop" — abort before issuing another model round.
         if (_cancelled) return '';
@@ -273,7 +258,10 @@ How to work:
         ];
         final tools = phase == SetupPhase.refine
             ? SetupTools.buildRefineToolSchemas()
-            : SetupTools.buildToolSchemas(categories: tagCategories);
+            : SetupTools.buildToolSchemas(
+                categories: tagCategories,
+                includeLibraryTools: true,
+              );
 
         final resp = await _completeWithRetry(messages, tools);
         // The user tapped "stop" WHILE this round's (blocking) generation was in
@@ -340,6 +328,30 @@ How to work:
                   'propose_tags NOW to save those under the matching category, '
                   'then continue with the next topic — do not stop until their '
                   'selections are on the board.',
+            });
+            continue;
+          }
+          // ANTI-PROSE-QUESTION: the model wrote a question (with options) as a
+          // chat message instead of calling ask_question, so NO selectable
+          // buttons rendered and the user cannot answer. Force it through the
+          // tool. The tells below ("Options:", "select all", "(select…") are
+          // what the model emits when it simulates the picker in prose.
+          final low = content.toLowerCase();
+          final looksLikeProseQuestion =
+              low.contains('options:') ||
+              low.contains('select all') ||
+              low.contains('(you may select') ||
+              low.contains('(select');
+          if (phase == SetupPhase.interview &&
+              looksLikeProseQuestion &&
+              askToolNudges < 2) {
+            askToolNudges++;
+            _history.add({
+              'role': 'user',
+              'content':
+                  'To collect the user\'s answer, ask that question with the '
+                  '`ask_question` tool now (question + options, multi:true) — it '
+                  'shows tappable buttons the user can answer.',
             });
             continue;
           }

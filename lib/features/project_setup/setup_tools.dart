@@ -40,6 +40,7 @@ class SetupTools {
   /// (the flow's stage keys). Defaults to the software profile's seven sections.
   static List<Map<String, dynamic>> buildToolSchemas({
     List<String>? categories,
+    bool includeLibraryTools = false,
   }) {
     final cats = (categories == null || categories.isEmpty)
         ? const [
@@ -54,25 +55,32 @@ class SetupTools {
             'services',
           ]
         : categories;
-    return [
+    final tools = <Map<String, dynamic>>[
       {
         'type': 'function',
         'function': {
           'name': 'ask_question',
           'description':
-              'OPTIONAL guardrail: ask ONE bounded multiple-choice question when '
-              'picking from options helps the user decide or confirms a '
-              'direction. You can also just talk in plain text — use this only '
-              'when bounded choices are genuinely useful, not every turn. The '
-              'user answers by picking from the options you provide.',
+              'Ask the user ONE interview question and get their answer. This is '
+              'how you ask every setup question: it shows the options as buttons '
+              'the user taps and returns their selection to you, so the user can '
+              'answer. Use it for each step (platforms, objectives, features, and '
+              'so on). Give a clear question plus 2-8 short options, and keep '
+              'multi=true so the user can pick several. Example: '
+              'ask_question(question: "Question 2 of 7 — Which platforms should '
+              'it run on?", options: ["iOS", "Android", "Web"], multi: true).',
           'parameters': {
             'type': 'object',
             'properties': {
-              'question': {'type': 'string'},
+              'question': {
+                'type': 'string',
+                'description':
+                    'The question to show the user (a single, clear question).',
+              },
               'options': {
                 'type': 'array',
                 'items': {'type': 'string'},
-                'description': 'The selectable choices (2-8).',
+                'description': '2-8 short, selectable choices for the user.',
               },
               'multi': {
                 'type': 'boolean',
@@ -236,12 +244,16 @@ class SetupTools {
         'function': {
           'name': 'propose_tags',
           'description':
-              'Propose one or more tags for the project profile. Batch as many as '
-              'you like in ONE call, across categories (e.g. a database + a '
-              'service + features together) — no need to call this after every '
-              'single message. Saved as `proposed` for the user to accept/'
-              'reject. Languages and platforms must use the allowed vocab; '
-              'databases/services/frameworks accept free entry.',
+              'Save the user\'s answer(s) to the project profile as tags. Call '
+              'this right after the user answers a question, recording their '
+              'picks under that question\'s category. Each tag value is a SHORT '
+              'label (a few words, ≤5) for ONE concept — give several items as '
+              'several tag objects. Batch tags across categories in one call. '
+              'Saved as `proposed` for the user to accept. Languages and '
+              'platforms use the allowed vocab; databases/services/frameworks '
+              'accept free entry. Example: propose_tags(tags: ['
+              '{"category": "objectives", "value": "Order tracking"}, '
+              '{"category": "objectives", "value": "Push notifications"}]).',
           'parameters': {
             'type': 'object',
             'properties': {
@@ -257,7 +269,14 @@ class SetupTools {
                           'sub-axis category reported by scope_status '
                           '(e.g. `genre`).',
                     },
-                    'value': {'type': 'string'},
+                    'value': {
+                      'type': 'string',
+                      'description':
+                          'A SHORT label — a few words (≤5), one concept per '
+                          'tag. Give multiple items as SEPARATE tag objects '
+                          '(e.g. two tags "Order tracking" and "Push '
+                          'notifications").',
+                    },
                     'layerKey': {
                       'type': 'string',
                       'enum': ['client', 'server', 'db', 'worker', 'module'],
@@ -295,6 +314,20 @@ class SetupTools {
         },
       },
     ];
+    // Library deliberation tools (lookup_package / consider_items / dismiss_item)
+    // add tool-selection load and can trap small models in the unresolved-decision
+    // guard, so they are OFF by default for the setup interview. Enable them only
+    // for capable models that benefit from registry verification.
+    if (!includeLibraryTools) {
+      tools.removeWhere(
+        (t) => const {
+          'lookup_package',
+          'consider_items',
+          'dismiss_item',
+        }.contains((t['function'] as Map)['name']),
+      );
+    }
+    return tools;
   }
 
   /// The toolset for the post-finalize REFINE phase. The plans already exist as
@@ -668,6 +701,20 @@ class SetupToolExecutor {
     }
   }
 
+  /// Split a tag value on list delimiters into atomic values, so a crammed
+  /// "a, b, c" — or a model that lists several items in one value — becomes
+  /// separate tags. Trimmed; empties dropped.
+  static List<String> _splitTagValues(String raw) => raw
+      .split(RegExp(r'[,;\n]+'))
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty)
+      .toList();
+
+  /// A tag value must be a short label. Reject run-on sentences/paragraphs —
+  /// the model's failure mode of dumping ~100 words into one objective.
+  static bool _tooLongForTag(String v) =>
+      v.split(RegExp(r'\s+')).length > 6 || v.length > 64;
+
   Future<String> _propose(Map<String, dynamic> args) async {
     // The model is recording choices now → the user's last answer is no longer
     // "unrecorded", so the session's anti-stall nudge stands down.
@@ -676,6 +723,7 @@ class SetupToolExecutor {
     final controller = TagController(db, projectPk);
     final accepted = <String>[];
     final skipped = <String>[];
+    final tooLong = <String>[];
     final proposedIndustries = <String>[];
 
     for (final entry in raw) {
@@ -684,74 +732,92 @@ class SetupToolExecutor {
       // categories we keep the legacy enum semantics (closed-vocab, library
       // verification); non-software (IVR) categories pass through as-is.
       final catStr = (entry['category'] ?? '').toString().trim();
-      final value = (entry['value'] ?? '').toString().trim();
-      if (catStr.isEmpty || value.isEmpty) continue;
+      final rawValue = (entry['value'] ?? '').toString().trim();
+      if (catStr.isEmpty || rawValue.isEmpty) continue;
       final known = TagCategoryX.fromWire(catStr);
 
-      // Enforce closed vocab for known closed categories (languages/platforms).
-      if (known != null &&
-          known.vocab == VocabKind.closed &&
-          !known.vocabulary
-              .map((v) => v.toLowerCase())
-              .contains(value.toLowerCase())) {
-        skipped.add('$value (not an allowed ${known.label} value)');
-        continue;
-      }
-
-      // Libraries can attach to the language they're used with (closed vocab).
+      // Per-entry attributes shared by every value split out of this entry.
       String? forLanguage;
       if (known == TagCategory.libraries) {
-        final raw = entry['forLanguage']?.toString().trim();
-        if (raw != null && raw.isNotEmpty) {
+        final fl = entry['forLanguage']?.toString().trim();
+        if (fl != null && fl.isNotEmpty) {
           for (final lang in kLanguages) {
-            if (lang.toLowerCase() == raw.toLowerCase()) {
+            if (lang.toLowerCase() == fl.toLowerCase()) {
               forLanguage = lang;
               break;
             }
           }
         }
       }
-
-      // Library tags must carry a verified verdict.
-      String? verdict;
-      DateTime? verifiedAt;
       final sourceUrl = entry['sourceUrl']?.toString();
-      if (known == TagCategory.libraries) {
-        try {
-          final eco = (sourceUrl != null && sourceUrl.contains('github.com'))
-              ? 'github'
-              : 'pubdev';
-          final r = await verification.verify(name: value, ecosystem: eco);
-          verdict = r.verdict.wire;
-          verifiedAt = r.checkedAt;
-        } catch (_) {}
-      }
+      final rationale = entry['rationale']?.toString();
+      final layerKey = entry['layerKey']?.toString();
 
-      await controller.upsert(
-        ProjectTag(
-          category: catStr,
-          value: value,
-          source: TagSource.ai,
-          origin: 'setup',
-          status: TagStatus.proposed,
-          layerKey: entry['layerKey']?.toString(),
-          forLanguage: forLanguage,
-          rationale: entry['rationale']?.toString(),
-          sourceUrl: sourceUrl,
-          verdict: verdict,
-          verifiedAt: verifiedAt,
-        ),
-      );
-      accepted.add(value);
-      // Adding a tag resolves any pending lookup for the same package (matched
-      // by normalized name) — it satisfies the "add it" half of the contract.
-      _pendingDecisions.remove(_normPkg(value));
-      if (catStr == 'industries') proposedIndustries.add(value);
+      // Tag values MUST be short atomic labels. Split a crammed list into
+      // separate tags, then REJECT anything still too long, so the model can't
+      // dump a sentence/paragraph into one value (the real failure mode).
+      for (final value in _splitTagValues(rawValue)) {
+        if (_tooLongForTag(value)) {
+          tooLong.add(value);
+          continue;
+        }
+
+        // Enforce closed vocab for known closed categories (languages/platforms).
+        if (known != null &&
+            known.vocab == VocabKind.closed &&
+            !known.vocabulary
+                .map((v) => v.toLowerCase())
+                .contains(value.toLowerCase())) {
+          skipped.add('$value (not an allowed ${known.label} value)');
+          continue;
+        }
+
+        // Library tags must carry a verified verdict.
+        String? verdict;
+        DateTime? verifiedAt;
+        if (known == TagCategory.libraries) {
+          try {
+            final eco = (sourceUrl != null && sourceUrl.contains('github.com'))
+                ? 'github'
+                : 'pubdev';
+            final r = await verification.verify(name: value, ecosystem: eco);
+            verdict = r.verdict.wire;
+            verifiedAt = r.checkedAt;
+          } catch (_) {}
+        }
+
+        await controller.upsert(
+          ProjectTag(
+            category: catStr,
+            value: value,
+            source: TagSource.ai,
+            origin: 'setup',
+            status: TagStatus.proposed,
+            layerKey: layerKey,
+            forLanguage: forLanguage,
+            rationale: rationale,
+            sourceUrl: sourceUrl,
+            verdict: verdict,
+            verifiedAt: verifiedAt,
+          ),
+        );
+        accepted.add(value);
+        // Adding a tag resolves any pending lookup for the same package.
+        _pendingDecisions.remove(_normPkg(value));
+        if (catStr == 'industries') proposedIndustries.add(value);
+      }
     }
 
     final b = StringBuffer();
     if (accepted.isNotEmpty) b.write('Proposed: ${accepted.join(', ')}.');
     if (skipped.isNotEmpty) b.write(' Skipped: ${skipped.join('; ')}.');
+    if (tooLong.isNotEmpty) {
+      b.write(
+        ' REJECTED (too long — each tag must be a SHORT label, ≤5 words, one '
+        'idea each): "${tooLong.join('", "')}". Re-propose these as several '
+        'short tags.',
+      );
+    }
     // When an industry is chosen, deterministically tell the host about the
     // sub-axis it introduces (e.g. Gaming → Genre) so it asks that next without
     // relying on it to remember to call scope_status.
@@ -869,14 +935,10 @@ class SetupToolExecutor {
           'for them, and only call finalize_setup once every required section '
           'has at least one tag.';
     }
-    // Guard: every looked-up OR considered item must have an explicit add/skip
-    // decision before the plans are generated, so nothing the host "checked" or
-    // "was thinking about" is silently dropped.
-    if (_pendingDecisions.isNotEmpty) {
-      return 'Not ready to finalize — you were still weighing '
-          '${pendingDecisions.join(', ')} without a decision. For EACH, call '
-          'propose_tags to add it or dismiss_item to skip it, then finalize.';
-    }
+    // A looked-up/considered item left undecided at finalize is simply NOT added
+    // — clear it and proceed. The in-turn reconcile nudge already prompts a
+    // decision; finalize must never HARD-BLOCK on it (that trapped the model).
+    _pendingDecisions.clear();
     final generated = await generatePlans();
     // Enter the REFINE phase rather than completing outright: the plans now
     // exist, but the user keeps fleshing them out in Setup before tasks.
