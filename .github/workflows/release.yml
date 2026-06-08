@@ -24,23 +24,15 @@ jobs:
     with:
       version: ${{ github.ref_name }}
 
-  # Capture the live setup-flow UI screenshots + timing for this release; the
-  # ZIP it uploads (artifact `installer-screenshots`) is bundled below.
-  screenshots:
-    uses: ./.github/workflows/setup-screenshots.yml
-    secrets: inherit
-    with:
-      version: ${{ github.ref_name }}
-
   publish:
-    # Wait for BOTH to finish so the screenshots ZIP can be bundled when it's
-    # ready — but only REQUIRE the installer build to succeed. The live-AI
-    # screenshot capture is best-effort: a stalled inference request (12-min
-    # timeout) or any screenshot failure must never block shipping installers,
-    # which the in-app updater depends on. Whatever screenshots WERE captured
-    # still get bundled; if none, the release just ships without them.
-    needs: [build, screenshots]
-    if: ${{ always() && needs.build.result == 'success' }}
+    # Ship the installers as soon as the desktop build succeeds. The live-AI
+    # setup screenshots are intentionally DECOUPLED from the release path: they
+    # used to be a `uses:` reusable-workflow call here, but if GitHub fails to
+    # resolve/parse that called workflow the ENTIRE release run is invalidated
+    # before any job starts — which blocked shipping installers (the in-app
+    # updater depends on them). Screenshots are best-effort, so run them on
+    # demand via the "Setup screenshots" workflow (workflow_dispatch) instead.
+    needs: [build]
     runs-on: ubuntu-latest
     steps:
       - name: Download installers
