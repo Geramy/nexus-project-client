@@ -15,14 +15,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/database_provider.dart';
 import '../../../infrastructure/database/nexus_database.dart';
+import '../task_workflow.dart' show TaskStatus, TaskExecStatus;
 import 'story_pdf_export.dart';
 import 'story_providers.dart';
 import 'task_generator.dart';
 
 const double kStoryNodeWidth = 224;
 const double kStoryNodeHeight = 92;
-const double _canvasW = 4000;
-const double _canvasH = 2600;
+
+/// The canvas is sized dynamically to fit every node plus this much empty space
+/// on the right/bottom, so a node never sits flush against an invisible wall —
+/// there's always room to drag further, and the surface grows to keep an
+/// off-to-the-side node reachable (a fixed box used to clip detailed trees).
+const double _canvasBuffer = 700;
+
+/// Floor so an empty/small tree still gets a comfortable working area.
+const double _minCanvasW = 1600;
+const double _minCanvasH = 1000;
 
 /// Full User-Stories surface: the tree canvas + (when a node is selected) an
 /// inspector. Used both as the persistent "User Stories" tab and inside the
@@ -34,18 +43,130 @@ class UserStoriesView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selected = ref.watch(selectedStoryProvider(projectId));
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Column(
       children: [
-        Expanded(child: StoryTreeCanvas(projectId: projectId)),
-        if (selected != null) ...[
-          const VerticalDivider(width: 1),
-          SizedBox(
-            width: 340,
-            child: _StoryInspector(projectId: projectId, storyPk: selected),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: StoryTreeCanvas(projectId: projectId)),
+              if (selected != null) ...[
+                const VerticalDivider(width: 1),
+                SizedBox(
+                  width: 340,
+                  child: _StoryInspector(projectId: projectId, storyPk: selected),
+                ),
+              ],
+            ],
           ),
-        ],
+        ),
+        // Always-visible (scroll-independent) task rollup once stories have been
+        // turned into tasks. Hidden until then.
+        _TaskProgressBar(projectId: projectId),
       ],
+    );
+  }
+}
+
+/// A thin, static bar across the bottom of the User-Stories surface showing how
+/// the project's tasks are progressing: green for done, orange for in-flight,
+/// and an empty track for everything still to do. Reactive to the live task
+/// stream; renders nothing until at least one task exists.
+class _TaskProgressBar extends ConsumerWidget {
+  const _TaskProgressBar({required this.projectId});
+  final int projectId;
+
+  /// Orchestration phases that mean a task is actively being worked.
+  static const _activeExec = {
+    TaskExecStatus.queued,
+    TaskExecStatus.running,
+    TaskExecStatus.submitted,
+    TaskExecStatus.verifying,
+    TaskExecStatus.verified,
+    TaskExecStatus.building,
+    TaskExecStatus.built,
+    TaskExecStatus.merging,
+  };
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tasks =
+        ref.watch(allTasksForProjectProvider(projectId)).valueOrNull ??
+        const <Task>[];
+    if (tasks.isEmpty) return const SizedBox.shrink();
+
+    var done = 0, working = 0, todo = 0;
+    for (final t in tasks) {
+      if (t.status == TaskStatus.done ||
+          t.executionStatus == TaskExecStatus.done) {
+        done++;
+      } else if (t.status == TaskStatus.inProgress ||
+          t.status == TaskStatus.review ||
+          _activeExec.contains(t.executionStatus)) {
+        working++;
+      } else {
+        todo++; // Todo (idle), Blocked, failed-on-board
+      }
+    }
+    final total = tasks.length;
+    final scheme = Theme.of(context).colorScheme;
+    const green = Color(0xFF2E9E5B);
+    const orange = Color(0xFFE8870E);
+
+    return Material(
+      color: scheme.surface,
+      elevation: 3,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text(
+                  'Task progress',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                Text(
+                  '$done done · $working in progress · $todo to do  ·  '
+                  '$total total',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: SizedBox(
+                height: 12,
+                child: Row(
+                  children: [
+                    if (done > 0)
+                      Expanded(flex: done, child: const ColoredBox(color: green)),
+                    if (working > 0)
+                      Expanded(
+                        flex: working,
+                        child: const ColoredBox(color: orange),
+                      ),
+                    if (todo > 0)
+                      Expanded(
+                        flex: todo,
+                        child: ColoredBox(
+                          color: scheme.surfaceContainerHighest,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -139,6 +260,22 @@ class _StoryTreeCanvasState extends ConsumerState<StoryTreeCanvas> {
           return auto[s.story_pk] ?? const Offset(160, 80);
         }
 
+        // Size the canvas to fit every node (incl. one being dragged, since
+        // posOf returns the live drag position) plus a buffer. Because this
+        // recomputes on every drag frame, the wall stays ahead of the node — it
+        // can never be pushed somewhere the user can't scroll to.
+        var canvasW = _minCanvasW;
+        var canvasH = _minCanvasH;
+        for (final s in stories) {
+          final p = posOf(s);
+          if (p.dx + kStoryNodeWidth + _canvasBuffer > canvasW) {
+            canvasW = p.dx + kStoryNodeWidth + _canvasBuffer;
+          }
+          if (p.dy + kStoryNodeHeight + _canvasBuffer > canvasH) {
+            canvasH = p.dy + kStoryNodeHeight + _canvasBuffer;
+          }
+        }
+
         return Stack(
           children: [
             ColoredBox(
@@ -150,8 +287,8 @@ class _StoryTreeCanvasState extends ConsumerState<StoryTreeCanvas> {
                 minScale: 0.3,
                 maxScale: 2.0,
                 child: SizedBox(
-                  width: _canvasW,
-                  height: _canvasH,
+                  width: canvasW,
+                  height: canvasH,
                   child: Stack(
                     children: [
                       Positioned.fill(
@@ -195,10 +332,13 @@ class _StoryTreeCanvasState extends ConsumerState<StoryTreeCanvas> {
                             onPanEnd: () {
                               final p = _dragPos;
                               if (p != null) {
+                                // Only floor at 0 (don't strand a node off the
+                                // top-left). No upper wall — the canvas grows to
+                                // fit, so a node dragged far out stays reachable.
                                 _db.setUserStoryPosition(
                                   s.story_pk,
-                                  p.dx.clamp(0, _canvasW - kStoryNodeWidth),
-                                  p.dy.clamp(0, _canvasH - kStoryNodeHeight),
+                                  p.dx.clamp(0.0, double.infinity),
+                                  p.dy.clamp(0.0, double.infinity),
                                 );
                               }
                               setState(() {

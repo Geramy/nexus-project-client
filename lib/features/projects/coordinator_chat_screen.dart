@@ -183,13 +183,6 @@ class _ProjectCoordinatorChatScreenState
           }
         }
       }
-      debugPrint(
-        '[Voice] Agent="${persona?.name ?? "(none)"}" → server "${chosen.name}" @ ${chosen.baseUrl}',
-      );
-
-      final models =
-          (jsonDecode(chosen.availableModelsJson) as List).cast<String>();
-
       // Live model list from the chosen (agent's) server.
       final cache = ref.read(aiServersCacheProvider.notifier);
       var entry = cache.entryFor(chosen.server_pk);
@@ -197,7 +190,41 @@ class _ProjectCoordinatorChatScreenState
         await cache.refreshServer(chosen.server_pk);
         entry = cache.entryFor(chosen.server_pk);
       }
+
+      // Fallback: if the agent's bound server is unreachable (no models came
+      // back — e.g. a stopped Local Lemonade → "connection refused localhost"),
+      // switch to the routed Nexus Router server when one exists. Otherwise the
+      // discovery Coordinator dead-ends on the dead local server and "cuts out
+      // instantly", even though the working subscription server (the same one
+      // Setup ran on) is right there. Keeps both phases on one backend.
+      if (entry == null || entry.models.isEmpty) {
+        final routedMatches = servers.where(
+          (s) =>
+              isRoutedProviderType(s.providerType) &&
+              s.server_pk != chosen.server_pk,
+        );
+        if (routedMatches.isNotEmpty) {
+          final routedServer = routedMatches.first;
+          debugPrint(
+            '[Coordinator] server "${chosen.name}" @ ${chosen.baseUrl} '
+            'unreachable — falling back to routed "${routedServer.name}".',
+          );
+          chosen = routedServer;
+          entry = cache.entryFor(chosen.server_pk);
+          if (entry == null || entry.models.isEmpty) {
+            await cache.refreshServer(chosen.server_pk);
+            entry = cache.entryFor(chosen.server_pk);
+          }
+        }
+      }
       final serverModels = entry?.models ?? const <ApiModelInfo>[];
+
+      debugPrint(
+        '[Voice] Agent="${persona?.name ?? "(none)"}" → server "${chosen.name}" @ ${chosen.baseUrl}',
+      );
+
+      final models =
+          (jsonDecode(chosen.availableModelsJson) as List).cast<String>();
 
       // Per-modality models from the agent (omni components or individual fields),
       // resolved against the agent's own server.
@@ -1010,7 +1037,14 @@ class _ProjectCoordinatorChatScreenState
                 // a long think is visible (and inspectable for debugging) without
                 // crowding the answer.
                 if (msg.isReasoning) {
-                  return _ReasoningTile(text: msg.text);
+                  // "Active" while this reasoning block is the last thing in the
+                  // list and the turn is still in flight — i.e. the model is
+                  // currently thinking (no answer text after it yet). That drives
+                  // the animated ellipsis so the user can tell it isn't stalled.
+                  return _ReasoningTile(
+                    text: msg.text,
+                    active: _isSending && index == _messages.length - 1,
+                  );
                 }
 
                 return Align(
@@ -1256,19 +1290,59 @@ class _ProjectCoordinatorChatScreenState
 /// tokens. Default-expanded so a long think shows live progress (and is there to
 /// inspect for debugging); tap the header to collapse.
 class _ReasoningTile extends StatefulWidget {
-  const _ReasoningTile({required this.text});
+  const _ReasoningTile({required this.text, this.active = false});
   final String text;
+
+  /// True while the model is still emitting this reasoning block — drives the
+  /// animated "Thinking…" ellipsis so the user can tell it isn't stalled.
+  final bool active;
 
   @override
   State<_ReasoningTile> createState() => _ReasoningTileState();
 }
 
 class _ReasoningTileState extends State<_ReasoningTile> {
-  bool _open = true;
+  // Collapsed by default so a long think doesn't crowd the chat — tap to expand.
+  bool _open = false;
+  Timer? _dotTimer;
+  int _dots = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.active) _startDots();
+  }
+
+  @override
+  void didUpdateWidget(_ReasoningTile old) {
+    super.didUpdateWidget(old);
+    if (widget.active && _dotTimer == null) _startDots();
+    if (!widget.active && _dotTimer != null) _stopDots();
+  }
+
+  void _startDots() {
+    _dotTimer = Timer.periodic(const Duration(milliseconds: 400), (_) {
+      if (mounted) setState(() => _dots = (_dots + 1) % 4);
+    });
+  }
+
+  void _stopDots() {
+    _dotTimer?.cancel();
+    _dotTimer = null;
+    if (mounted) setState(() => _dots = 0);
+  }
+
+  @override
+  void dispose() {
+    _dotTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final nx = context.nx;
+    // "Thinking" + 0-3 trailing dots while active; plain "Thinking" once done.
+    final label = widget.active ? 'Thinking${'.' * _dots}' : 'Thinking';
     return Container(
       margin: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -1294,13 +1368,21 @@ class _ReasoningTileState extends State<_ReasoningTile> {
                 const SizedBox(width: AppSpacing.xs),
                 Icon(Icons.psychology_outlined, size: 14, color: nx.textMuted),
                 const SizedBox(width: AppSpacing.xs),
-                Text(
-                  'Thinking',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: nx.textMuted,
+                // Fixed width so the animating dots don't shift the layout.
+                SizedBox(
+                  width: 64,
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: nx.textMuted,
+                    ),
                   ),
+                ),
+                Text(
+                  _open ? 'hide' : 'show',
+                  style: TextStyle(fontSize: 11, color: nx.textFaint),
                 ),
               ],
             ),

@@ -299,10 +299,95 @@ String configJsonForSkills(Iterable<String> skills) =>
       toolPermissionsForSkills(skills),
     );
 
+/// The Generalist worker's authoritative tool permissions — the exact map the
+/// project owner tuned by hand (story + image tools on, push/merge/pull and the
+/// plan/task-mutation + verifier tools off). Captured verbatim so a fresh
+/// install seeds the SAME Generalist the owner runs, instead of the older
+/// skill-derived default the Generalist was misbehaving with.
+///
+/// This is intentionally GENERALIST-ONLY: every other role keeps its own
+/// distinct, skill-derived permissions — agent permissions are unique per agent.
+const Map<String, ToolPerm> kGeneralistToolPermissions = {
+  'add_note': ToolPerm.grant,
+  'add_user_story': ToolPerm.grant,
+  'approve_task': ToolPerm.deny,
+  'assign_agent_to_task': ToolPerm.deny,
+  'build_docker_image': ToolPerm.grant,
+  'create_directory': ToolPerm.grant,
+  'create_file': ToolPerm.grant,
+  'create_plan': ToolPerm.deny,
+  'create_task': ToolPerm.grant,
+  'delete_file': ToolPerm.ask,
+  'delete_folder': ToolPerm.ask,
+  'delete_note': ToolPerm.grant,
+  'delete_path': ToolPerm.ask,
+  'delete_plan': ToolPerm.deny,
+  'delete_task': ToolPerm.deny,
+  'draft_stories_from_text': ToolPerm.grant,
+  'edit_file': ToolPerm.grant,
+  'edit_image': ToolPerm.grant,
+  'generate_diagram': ToolPerm.deny,
+  'generate_image': ToolPerm.grant,
+  'get_ci_run': ToolPerm.grant,
+  'get_note': ToolPerm.grant,
+  'get_notes': ToolPerm.grant,
+  'get_task': ToolPerm.grant,
+  'git_branches': ToolPerm.grant,
+  'git_checkout_branch': ToolPerm.grant,
+  'git_commit': ToolPerm.grant,
+  'git_create_branch': ToolPerm.grant,
+  'git_log': ToolPerm.grant,
+  'git_merge': ToolPerm.deny,
+  'git_pull': ToolPerm.deny,
+  'git_push': ToolPerm.deny,
+  'git_status': ToolPerm.grant,
+  'link_task_to_plan': ToolPerm.deny,
+  'list_agents': ToolPerm.grant,
+  'list_ci_runs': ToolPerm.grant,
+  'list_directory': ToolPerm.grant,
+  'list_files': ToolPerm.grant,
+  'list_open_tasks': ToolPerm.grant,
+  'list_plans': ToolPerm.grant,
+  'list_tasks': ToolPerm.grant,
+  'list_user_stories': ToolPerm.grant,
+  'move_path': ToolPerm.ask,
+  'move_user_story': ToolPerm.grant,
+  'propose_plan_adjustment': ToolPerm.deny,
+  'read_file': ToolPerm.grant,
+  'read_file_chunk': ToolPerm.grant,
+  'read_plan': ToolPerm.grant,
+  'reject_task': ToolPerm.deny,
+  'rename_plan': ToolPerm.deny,
+  'review_submission': ToolPerm.grant,
+  'run_verification': ToolPerm.deny,
+  'run_workflow': ToolPerm.grant,
+  'scaffold_ci_workflow': ToolPerm.grant,
+  'search_directory': ToolPerm.grant,
+  'search_file_content': ToolPerm.grant,
+  'set_task_build_config': ToolPerm.deny,
+  'set_task_dates': ToolPerm.deny,
+  'submit_for_completion': ToolPerm.grant,
+  'submit_verdict': ToolPerm.deny,
+  'sync_plans_to_tasks': ToolPerm.grant,
+  'update_note': ToolPerm.grant,
+  'update_plan': ToolPerm.deny,
+  'update_task': ToolPerm.deny,
+  'update_task_status': ToolPerm.deny,
+  'update_user_story': ToolPerm.grant,
+  'view_current_plan': ToolPerm.grant,
+  'view_plan': ToolPerm.grant,
+  'write_file': ToolPerm.grant,
+  'write_plan': ToolPerm.deny,
+};
+
 /// Builds the full default tool-permission map for [role]. Tools outside the
-/// role's skills are denied.
+/// role's skills are denied. The Generalist is the one exception: it ships with
+/// the owner's hand-tuned [kGeneralistToolPermissions] verbatim (still unique to
+/// the Generalist — no other role is affected).
 Map<String, ToolPerm> defaultToolPermissions(AgentRole role) =>
-    toolPermissionsForSkills(defaultSkillNames(role));
+    role == AgentRole.sdeGeneralist
+    ? Map<String, ToolPerm>.from(kGeneralistToolPermissions)
+    : toolPermissionsForSkills(defaultSkillNames(role));
 
 /// Serializes [role]'s default permissions into a `configJson` string, ready to
 /// store on a seeded persona (the executor reads `configJson.toolPermissions`).

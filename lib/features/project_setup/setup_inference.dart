@@ -97,17 +97,37 @@ final projectInferenceProvider = FutureProvider.family<ResolvedInference?, ({int
     }
   }
 
-  final models = chosen.availableModelsJson.isNotEmpty
-      ? (jsonDecode(chosen.availableModelsJson) as List).cast<String>()
-      : const <String>[];
-
   final cache = ref.read(aiServersCacheProvider.notifier);
   var entry = cache.entryFor(chosen.server_pk);
   if (entry == null || entry.models.isEmpty) {
     await cache.refreshServer(chosen.server_pk);
     entry = cache.entryFor(chosen.server_pk);
   }
+
+  // Fallback: an unreachable bound server (no models — e.g. a stopped Local
+  // Lemonade) drops to the routed Nexus Router server when one exists, so the
+  // interview and the Coordinator both land on the same working backend instead
+  // of dead-ending on localhost.
+  if (entry == null || entry.models.isEmpty) {
+    final routedMatches = servers.where(
+      (s) =>
+          isRoutedProviderType(s.providerType) &&
+          s.server_pk != chosen.server_pk,
+    );
+    if (routedMatches.isNotEmpty) {
+      chosen = routedMatches.first;
+      entry = cache.entryFor(chosen.server_pk);
+      if (entry == null || entry.models.isEmpty) {
+        await cache.refreshServer(chosen.server_pk);
+        entry = cache.entryFor(chosen.server_pk);
+      }
+    }
+  }
   final serverModels = entry?.models ?? const [];
+
+  final models = chosen.availableModelsJson.isNotEmpty
+      ? (jsonDecode(chosen.availableModelsJson) as List).cast<String>()
+      : const <String>[];
 
   String? sttModel;
   String? ttsModel;

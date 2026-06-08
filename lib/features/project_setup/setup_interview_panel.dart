@@ -2,6 +2,7 @@
 // Author: Geramy Loveless <support@nexus-projects.ai>
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -178,6 +179,10 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
                     itemBuilder: (context, i) => _MessageView(
                       msg: messages[i],
                       onAnswer: controller.answerQuestion,
+                      // The last message while a turn is in flight is the live
+                      // one — animates the "Thinking…" ellipsis so it reads as
+                      // working, not stalled.
+                      active: controller.busy && i == messages.length - 1,
                     ),
                   ),
           ),
@@ -285,10 +290,18 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _MessageView extends StatelessWidget {
-  const _MessageView({required this.msg, required this.onAnswer});
+  const _MessageView({
+    required this.msg,
+    required this.onAnswer,
+    this.active = false,
+  });
 
   final SetupMsg msg;
   final void Function(SetupMsg msg, List<String> picks) onAnswer;
+
+  /// True when this is the live (last, in-flight) message — drives the animated
+  /// "Thinking…" ellipsis on a thinking tile.
+  final bool active;
 
   @override
   Widget build(BuildContext context) {
@@ -298,7 +311,7 @@ class _MessageView extends StatelessWidget {
       case SetupMsgKind.assistant:
         return _Bubble(text: msg.text, isUser: false);
       case SetupMsgKind.thinking:
-        return _ThinkingTile(text: msg.text);
+        return _ThinkingTile(text: msg.text, active: active);
       case SetupMsgKind.tool:
         return _NoteRow(icon: Icons.build_outlined, text: msg.text);
       case SetupMsgKind.system:
@@ -393,19 +406,59 @@ class _Bubble extends StatelessWidget {
 }
 
 class _ThinkingTile extends StatefulWidget {
-  const _ThinkingTile({required this.text});
+  const _ThinkingTile({required this.text, this.active = false});
   final String text;
+
+  /// True while the model is still working on this turn — drives the animated
+  /// "Thinking…" ellipsis so the user can tell it isn't stalled.
+  final bool active;
+
   @override
   State<_ThinkingTile> createState() => _ThinkingTileState();
 }
 
 class _ThinkingTileState extends State<_ThinkingTile> {
+  // Collapsed by default so a long think doesn't crowd the chat — tap to expand.
   bool _open = false;
+  Timer? _dotTimer;
+  int _dots = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.active) _startDots();
+  }
+
+  @override
+  void didUpdateWidget(_ThinkingTile old) {
+    super.didUpdateWidget(old);
+    if (widget.active && _dotTimer == null) _startDots();
+    if (!widget.active && _dotTimer != null) _stopDots();
+  }
+
+  void _startDots() {
+    _dotTimer = Timer.periodic(const Duration(milliseconds: 400), (_) {
+      if (mounted) setState(() => _dots = (_dots + 1) % 4);
+    });
+  }
+
+  void _stopDots() {
+    _dotTimer?.cancel();
+    _dotTimer = null;
+    if (mounted) setState(() => _dots = 0);
+  }
+
+  @override
+  void dispose() {
+    _dotTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.outline;
+    final label = widget.active ? 'Thinking${'.' * _dots}' : 'Thinking';
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: Column(
@@ -423,9 +476,19 @@ class _ThinkingTileState extends State<_ThinkingTile> {
                 ),
                 Icon(Icons.psychology_outlined, size: 14, color: muted),
                 const SizedBox(width: 4),
+                // Fixed width so the animating dots don't shift the layout.
+                SizedBox(
+                  width: 56,
+                  child: Text(
+                    label,
+                    style: theme.textTheme.labelSmall?.copyWith(color: muted),
+                  ),
+                ),
                 Text(
-                  'Thinking',
-                  style: theme.textTheme.labelSmall?.copyWith(color: muted),
+                  _open ? 'hide' : 'show',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: muted.withValues(alpha: 0.7),
+                  ),
                 ),
               ],
             ),

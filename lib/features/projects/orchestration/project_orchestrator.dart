@@ -21,7 +21,7 @@ import 'package:nexus_projects_client/infrastructure/models/ui/inference_server.
 import 'package:nexus_projects_client/infrastructure/lemonade/api/types/model_info.dart'
     show ApiModelInfo;
 import 'package:nexus_projects_client/infrastructure/lemonade/services/persona_model_resolver.dart'
-    show resolveAgentChatModel;
+    show resolveAgentChatModel, defaultOmniCollectionForTitle;
 import 'package:nexus_projects_client/infrastructure/lemonade/api/exceptions.dart'
     show LemonadeApiException;
 import 'package:nexus_projects_client/features/ai_providers/providers/ai_servers_cache_provider.dart'
@@ -446,6 +446,12 @@ class ProjectOrchestrator {
       );
 
       var kickoff = prompts.render(OrchestratorPromptField.workerKickoff, vars);
+      // Diagnostics carried across turns: did the model ever actually use a tool,
+      // and did the backend ever drop tools (model can't tool-call)? A worker
+      // that "hits turn cap without submission" on every task is almost always
+      // one of these — surface it instead of failing silently.
+      var sawToolActivity = false;
+      var toolsRejected = false;
       for (var turn = 0; turn < _maxTurnsPerTask && !_disposed; turn++) {
         // Stop promptly if the human paused/stopped the project mid-task — return
         // the task to the board instead of leaving it parked "In Progress".
@@ -468,7 +474,24 @@ class ProjectOrchestrator {
         }
 
         try {
-          await for (final _ in session.runTurn(kickoff)) {
+          await for (final _ in session.runTurn(
+            kickoff,
+            // Coders need to read → edit → commit → submit; 4 rounds often isn't
+            // enough to finish in one turn, so give the worker more room before
+            // the turn's forced no-tools wrap-up (which can't submit).
+            maxToolRounds: 8,
+            onToolResult: (r) {
+              sawToolActivity = true;
+              // The session emits this exact note when the backend rejected
+              // tool-calling and re-ran the round WITHOUT tools — a worker can
+              // never submit in that state.
+              if (r.contains('rejected tool-calling')) toolsRejected = true;
+              debugPrint(
+                '[Orchestrator p$projectId] task ${task.task_pk} turn $turn '
+                'tool → ${r.length > 140 ? '${r.substring(0, 140)}…' : r}',
+              );
+            },
+          )) {
             // Drain the stream; tool effects are applied inside runTurn.
           }
         } catch (e) {
@@ -504,8 +527,13 @@ class ProjectOrchestrator {
       }
       // Ran out of turns without submitting — back to the board (a fresh attempt
       // will re-pick it, up to the retry cap) rather than stuck "In Progress".
+      // The diagnostics tell you WHY: `toolsRejected` = the model/server can't
+      // tool-call (so it can never submit — the usual cause of every task
+      // blocking); `!sawToolActivity` = the model only chatted and never touched
+      // a tool. Both point at the worker model, not the task.
       debugPrint(
-        '[Orchestrator p$projectId] task ${task.task_pk}: hit turn cap without submission.',
+        '[Orchestrator p$projectId] task ${task.task_pk}: hit turn cap without '
+        'submission (toolsRejected=$toolsRejected, usedTools=$sawToolActivity).',
       );
       await _db.markTaskYieldedBack(task.task_pk);
     } finally {
@@ -1079,11 +1107,28 @@ class ProjectOrchestrator {
       }
       serverModels = entry?.models ?? const <ApiModelInfo>[];
     }
-    final model = resolveAgentChatModel(
-      routed: routed,
-      personaModel: persona.llmModel,
-      selectedModel: chosen.selectedModel,
-      serverModels: serverModels,
+    // Resolve the worker's model the SAME way the coordinator/setup now do: honor
+    // the persona's own Omni collection (its per-role default — e.g. a dedicated
+    // coding collection), not just the global product default. On the routed
+    // Router the collection id is sent as-is; an explicit per-persona llmModel
+    // still wins. Local servers decompose from their live model list.
+    final personaCollection = persona.omniCollectionModel;
+    final collection =
+        (personaCollection != null && personaCollection.trim().isNotEmpty)
+        ? personaCollection.trim()
+        : defaultOmniCollectionForTitle(persona.title);
+    final pLlm = persona.llmModel;
+    final model = routed
+        ? ((pLlm != null && pLlm.trim().isNotEmpty) ? pLlm.trim() : collection)
+        : resolveAgentChatModel(
+            routed: false,
+            personaModel: pLlm,
+            selectedModel: chosen.selectedModel,
+            serverModels: serverModels,
+          );
+    debugPrint(
+      '[Orchestrator p$projectId] worker "${persona.name}" → server '
+      '"${chosen.name}" model=$model (routed=$routed, collection=$collection)',
     );
 
     final uiServer = ui_server.InferenceServer(
