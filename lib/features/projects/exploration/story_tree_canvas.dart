@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/database_provider.dart';
 import '../../../infrastructure/database/nexus_database.dart';
+import '../../../shared/ui/design_tokens.dart';
 import '../task_workflow.dart' show TaskStatus, TaskExecStatus;
 import 'story_pdf_export.dart';
 import 'story_providers.dart';
@@ -95,23 +96,28 @@ class _TaskProgressBar extends ConsumerWidget {
         const <Task>[];
     if (tasks.isEmpty) return const SizedBox.shrink();
 
-    var done = 0, working = 0, todo = 0;
+    var done = 0, working = 0, blocked = 0, todo = 0;
     for (final t in tasks) {
       if (t.status == TaskStatus.done ||
           t.executionStatus == TaskExecStatus.done) {
         done++;
+      } else if (t.status == TaskStatus.blocked) {
+        blocked++; // stuck / exhausted retries — surfaced in red
       } else if (t.status == TaskStatus.inProgress ||
           t.status == TaskStatus.review ||
           _activeExec.contains(t.executionStatus)) {
         working++;
       } else {
-        todo++; // Todo (idle), Blocked, failed-on-board
+        todo++; // Todo / idle — not started yet
       }
     }
     final total = tasks.length;
+    final nx = context.nx;
     final scheme = Theme.of(context).colorScheme;
-    const green = Color(0xFF2E9E5B);
-    const orange = Color(0xFFE8870E);
+    // Theme-aware status colors (adapt to daylight / midnight / nebula):
+    //   done → success (green), in progress → warning (orange),
+    //   blocked → danger (red), not started → an empty track.
+    final track = scheme.surfaceContainerHighest;
 
     return Material(
       color: scheme.surface,
@@ -129,12 +135,13 @@ class _TaskProgressBar extends ConsumerWidget {
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                 ),
                 const Spacer(),
-                Text(
-                  '$done done · $working in progress · $todo to do  ·  '
-                  '$total total',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: scheme.onSurfaceVariant,
+                Flexible(
+                  child: Text(
+                    '$done done · $working in progress · $blocked blocked · '
+                    '$todo to do  ·  $total total',
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    style: TextStyle(fontSize: 11, color: nx.textMuted),
                   ),
                 ),
               ],
@@ -142,24 +149,27 @@ class _TaskProgressBar extends ConsumerWidget {
             const SizedBox(height: 6),
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
-              child: SizedBox(
+              // The track is the empty "not started" remainder; coloured
+              // segments fill from the left as tasks progress.
+              child: Container(
                 height: 12,
+                color: track,
                 child: Row(
                   children: [
                     if (done > 0)
-                      Expanded(flex: done, child: const ColoredBox(color: green)),
+                      Expanded(flex: done, child: ColoredBox(color: nx.success)),
                     if (working > 0)
                       Expanded(
                         flex: working,
-                        child: const ColoredBox(color: orange),
+                        child: ColoredBox(color: nx.warning),
                       ),
-                    if (todo > 0)
+                    if (blocked > 0)
                       Expanded(
-                        flex: todo,
-                        child: ColoredBox(
-                          color: scheme.surfaceContainerHighest,
-                        ),
+                        flex: blocked,
+                        child: ColoredBox(color: nx.danger),
                       ),
+                    // `todo` is the uncoloured remainder — the track shows through.
+                    if (todo > 0) Expanded(flex: todo, child: const SizedBox()),
                   ],
                 ),
               ),

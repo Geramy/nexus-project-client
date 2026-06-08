@@ -52,7 +52,16 @@ jobs:
       - name: Generate checksums
         working-directory: artifacts
         run: |
-          sha256sum *.pkg *.exe *.deb *.tar.gz *.zip 2>/dev/null > SHA256SUMS.txt
+          # nullglob so a missing installer TYPE (e.g. no .zip now that the
+          # screenshots ZIP is decoupled) expands to nothing instead of a literal
+          # pattern that makes sha256sum exit non-zero and fail the whole publish.
+          shopt -s nullglob
+          files=(*.pkg *.exe *.deb *.tar.gz *.zip)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No installer files found to checksum!" >&2
+            exit 1
+          fi
+          sha256sum "${files[@]}" > SHA256SUMS.txt
           echo "----- SHA256SUMS.txt -----"
           cat SHA256SUMS.txt
 
