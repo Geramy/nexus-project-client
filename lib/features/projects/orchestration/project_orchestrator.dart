@@ -43,7 +43,6 @@ import 'package:nexus_projects_client/features/projects/coordinator_session.dart
 import 'package:nexus_projects_client/features/projects/orchestration/orchestrator_prompts.dart';
 import 'package:nexus_projects_client/features/projects/project_baseline.dart'
     show buildProjectBaseline;
-import 'package:nexus_projects_client/features/projects/orchestration/weighted_scheduler.dart';
 import 'package:nexus_projects_client/features/projects/project_working_hours.dart';
 import 'package:nexus_projects_client/features/projects/task_workflow.dart';
 
@@ -89,16 +88,35 @@ class ProjectOrchestrator {
   /// failing to submit rather than spinning forever.
   final Map<int, int> _attempts = {};
 
+  /// File-claim table for the same-file queue: normalized workspace path → the
+  /// task_pk that currently OWNS it. A worker claims a file the first time it
+  /// edits it and holds it until the task merges, so two tasks never submit
+  /// conflicting changes to the same file in parallel; a second task that needs
+  /// the file is parked and retried. Reset whenever the orchestrator is disposed
+  /// (project swap / app close), and swept every pump so a lock is never held by
+  /// a task that isn't actively running or awaiting integration (no indefinite
+  /// hogging — the exact failure mode we hit with agent slots).
+  final Map<String, int> _fileOwners = {};
+
+  /// Release every file lock held by [taskPk].
+  void _releaseLocks(int taskPk) =>
+      _fileOwners.removeWhere((_, owner) => owner == taskPk);
+
+  /// Normalize a workspace path for lock identity (case-insensitive FS, ignore a
+  /// leading slash) so "/Assets/X.cs" and "assets/x.cs" are the same lock.
+  static String _normFile(String path) {
+    var p = path.trim().replaceAll('\\', '/').toLowerCase();
+    while (p.startsWith('/')) {
+      p = p.substring(1);
+    }
+    return p;
+  }
+
   /// After hitting the plan's concurrent-connection cap (HTTP 429), pause NEW
   /// agent dispatch until this time so we stop piling past the cap — in-flight
   /// stages keep running, and the task that 429'd goes back to the board (it is
   /// NOT counted as a failure or Blocked; it's pure backpressure).
   DateTime? _connBackoffUntil;
-
-  /// Fair, backlog-weighted scheduler over the pipeline stages, so verify/build/
-  /// merge aren't starved by a long implement queue while busier stages still
-  /// get proportionally more turns.
-  final WeightedRoundRobin<_Stage> _scheduler = WeightedRoundRobin<_Stage>();
 
   // Per-task retry budget within ONE run before a task is surfaced as Blocked.
   // Kept generous so a couple of transient hiccups (a flaky worker turn, a
@@ -152,6 +170,9 @@ class ProjectOrchestrator {
     _disposed = true;
     _projectSub?.cancel();
     _ticker?.cancel();
+    // Drop all file claims so a fresh orchestrator (e.g. after a project swap)
+    // never inherits a stale lock — the anti-hog reset.
+    _fileOwners.clear();
   }
 
   /// Fill up to N agent slots (N = the account's max concurrency) with the next
@@ -232,7 +253,26 @@ class ProjectOrchestrator {
             'Blocked.',
           );
           await _db.markTaskBlocked(t.task_pk);
+          // Wipe the in-memory retry count so a human who later moves this task
+          // Blocked → Todo gets a FRESH budget. Without this the stale count
+          // (already ≥ cap) makes it re-block on the very next pump without ever
+          // running again.
+          _attempts.remove(t.task_pk);
         }
+      }
+
+      // File-claim safety sweep (the anti-hog guarantee): a file may only stay
+      // locked by a task that is either actively running a stage (in _active) or
+      // sitting in Review awaiting integration (submitted → … → merging). Any
+      // other owner — Done, Blocked, or a task that fell back to the Todo board —
+      // has its claims dropped here, so no lock can be held indefinitely even if
+      // an explicit release was somehow missed.
+      if (_fileOwners.isNotEmpty) {
+        final holding = <int>{..._active};
+        for (final t in tasks) {
+          if (t.status == TaskStatus.review) holding.add(t.task_pk);
+        }
+        _fileOwners.removeWhere((_, owner) => !holding.contains(owner));
       }
     } catch (e) {
       debugPrint('[Orchestrator p$projectId] stall surface failed: $e');
@@ -330,11 +370,22 @@ class ProjectOrchestrator {
           .toList(),
     );
 
-    final stage = _scheduler.pick({
-      for (final e in pools.entries) e.key: e.value.length,
-    });
-    if (stage == null) return (null, null);
-    return (pools[stage]!.first, stage);
+    // DRAIN-FIRST priority: always advance work that's already in flight before
+    // starting anything new, so a task's file locks (held from first edit until
+    // merge) are released as soon as possible instead of many tasks piling into
+    // Review holding locks and starving the Todo queue behind them. Order:
+    // merge → build → verify → implement. A new Todo is only picked up when
+    // there's no in-flight task left to push toward Done.
+    for (final stage in const [
+      _Stage.merge,
+      _Stage.build,
+      _Stage.verify,
+      _Stage.implement,
+    ]) {
+      final pool = pools[stage];
+      if (pool != null && pool.isNotEmpty) return (pool.first, stage);
+    }
+    return (null, null);
   }
 
   List<Task> _sortByPriority(List<Task> list) {
@@ -413,9 +464,34 @@ class ProjectOrchestrator {
     // Root the task branch on its base and hydrate this task's tree from it,
     // serialized through the lane (shared object/ref DB is single-isolate).
     await th.lane.run(() async {
+      // RE-ROOT every (re)attempt: drop any prior branch first so a redo after a
+      // merge conflict — or a task resuming after being parked for a file lock —
+      // rebases onto the CURRENT target instead of its stale, diverged work.
+      // This is what makes the merge-conflict "reject → worker rebases" recovery
+      // actually rebase (createBranchAt alone no-ops on an existing branch).
+      await th.git.deleteBranch(branch);
       await th.git.createBranchAt(branch, base: base);
       await th.git.materializeInto(branch, th.tree);
     });
+
+    // File-claim queue: claim a file the first time this worker edits it; if
+    // another task holds it, deny (the tool returns a "queued" message) and flag
+    // the task to PARK. Locks are kept past submission (until merge) so no two
+    // tasks submit conflicting edits to the same file; a non-submitting run
+    // releases them in the finally below. Declared OUTSIDE the try so the finally
+    // can read `submitted`.
+    var parked = false;
+    var submitted = false;
+    bool claim(String path) {
+      final p = _normFile(path);
+      final owner = _fileOwners[p];
+      if (owner == null || owner == task.task_pk) {
+        _fileOwners[p] = task.task_pk;
+        return true;
+      }
+      parked = true;
+      return false;
+    }
 
     try {
       final prompts = await _loadPrompts();
@@ -455,6 +531,7 @@ class ProjectOrchestrator {
         // snapshots it onto its branch under the lane.
         workBranch: branch,
         gitLane: th.lane,
+        fileClaim: claim,
         // Autonomous coders need file/git/build tools directly — no progressive
         // disclosure (that's for the interactive PM chat).
         leanTools: false,
@@ -523,16 +600,11 @@ class ProjectOrchestrator {
             // Drain the stream; tool effects are applied inside runTurn.
           }
         } catch (e) {
-          if (_isConnCap(e)) {
-            // Connection-cap backpressure, NOT a failure: undo this attempt so a
-            // 429 can never push the task toward Blocked. It returns to the board
-            // and is retried once a connection frees.
-            final n = (_attempts[task.task_pk] ?? 1) - 1;
-            if (n <= 0) {
-              _attempts.remove(task.task_pk);
-            } else {
-              _attempts[task.task_pk] = n;
-            }
+          if (_isNotTaskFault(e)) {
+            // 429 backpressure or a transient 5xx — NOT a failure. Undo this
+            // attempt so a busy/flaky gateway can never push the task to Blocked.
+            // It returns to the board and is retried once things recover.
+            _undoAttempt(task.task_pk);
           } else {
             debugPrint(
               '[Orchestrator p$projectId] task ${task.task_pk}: turn $turn failed: $e',
@@ -545,9 +617,27 @@ class ProjectOrchestrator {
         final fresh = await _db.getTaskById(task.task_pk);
         if (fresh == null) return;
         if (fresh.executionStatus == TaskExecStatus.submitted) {
+          // KEEP this task's file locks — they're held through the merge so no
+          // other task can submit conflicting edits to the same files meanwhile.
+          submitted = true;
           debugPrint(
             '[Orchestrator p$projectId] task ${task.task_pk}: submitted for review.',
           );
+          return;
+        }
+
+        // Parked: the worker needs a file another task holds. Don't burn an
+        // attempt (it's waiting, not failing) — yield back and retry later; the
+        // finally releases this task's own locks so it can't block others while
+        // it waits, and the re-root on its next attempt rebuilds against current
+        // main once the holder has merged.
+        if (parked) {
+          _undoAttempt(task.task_pk);
+          debugPrint(
+            '[Orchestrator p$projectId] task ${task.task_pk}: parked — a file it '
+            'needs is held by another task; will retry after that task merges.',
+          );
+          await _db.markTaskYieldedBack(task.task_pk);
           return;
         }
 
@@ -565,6 +655,10 @@ class ProjectOrchestrator {
       );
       await _db.markTaskYieldedBack(task.task_pk);
     } finally {
+      // Unless this task SUBMITTED (and so should hold its files through merge),
+      // drop its file claims now — a parked/failed/turn-capped run must not keep
+      // others queued behind it.
+      if (!submitted) _releaseLocks(task.task_pk);
       // Free this task's isolated working tree (the committed work lives on the
       // task branch in the shared object DB; the scratch tree is disposable).
       await _releaseTaskTree(task.task_pk);
@@ -697,7 +791,9 @@ class ProjectOrchestrator {
         try {
           await for (final _ in session.runTurn(kickoff)) {}
         } catch (e) {
-          if (!_isConnCap(e)) {
+          if (_isNotTaskFault(e)) {
+            _undoAttempt(task.task_pk); // backpressure/transient — don't penalize
+          } else {
             debugPrint(
               '[Orchestrator p$projectId] task ${task.task_pk}: verify turn $turn failed: $e',
             );
@@ -931,7 +1027,9 @@ class ProjectOrchestrator {
       try {
         await for (final _ in session.runTurn(kickoff)) {}
       } catch (e) {
-        if (!_isConnCap(e)) {
+        if (_isNotTaskFault(e)) {
+          _undoAttempt(task.task_pk); // backpressure/transient — don't penalize
+        } else {
           debugPrint(
             '[Orchestrator p$projectId] task ${task.task_pk}: merge turn $turn failed: $e',
           );
@@ -1039,6 +1137,29 @@ class ProjectOrchestrator {
       );
     }
     return hit;
+  }
+
+  /// True if [e] is a TRANSIENT upstream/server hiccup (502/503/504) — the
+  /// gateway momentarily couldn't serve the request. Like 429, this is NOT the
+  /// task's fault, so it must not burn the retry budget; the caller undoes the
+  /// attempt and the task is retried.
+  static bool _isTransientServer(Object e) =>
+      e is LemonadeApiException &&
+      (e.statusCode == 502 || e.statusCode == 503 || e.statusCode == 504);
+
+  /// Backpressure (429) OR a transient 5xx — neither should count as a failed
+  /// attempt against the task.
+  bool _isNotTaskFault(Object e) => _isConnCap(e) || _isTransientServer(e);
+
+  /// Undo one attempt for [taskPk] (used when a turn failed for a reason that
+  /// isn't the task's fault, so a flaky gateway can't drive it to Blocked).
+  void _undoAttempt(int taskPk) {
+    final n = (_attempts[taskPk] ?? 1) - 1;
+    if (n <= 0) {
+      _attempts.remove(taskPk);
+    } else {
+      _attempts[taskPk] = n;
+    }
   }
 
   /// How many agents may run at once: the routed (subscription) server's

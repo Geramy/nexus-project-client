@@ -271,6 +271,21 @@ class NxtprjGitEngine {
     );
   }
 
+  /// Delete a branch ref outright. Used to RE-ROOT a task branch: deleting it and
+  /// then [createBranchAt] again rebases the next attempt onto the CURRENT target,
+  /// so a redo after a merge conflict (or a parked task resuming) builds on the
+  /// latest main instead of its stale, diverged work. No-op if absent. Orphaned
+  /// commits are reclaimed by later GC. Never pass a branch that is checked out
+  /// as a live HEAD — task branches are re-rooted while detached on their own
+  /// scratch tree, which is safe.
+  Future<void> deleteBranch(String name) async {
+    final clean = name.trim();
+    if (clean.isEmpty) return;
+    _ws.database.execute('DELETE FROM git_refs WHERE name=?', [
+      'refs/heads/$clean',
+    ]);
+  }
+
   /// Build the nested tree from a flat path→bytes map and return the root tree
   /// oid (hex). Directories are materialized bottom-up: subtrees are written
   /// first and their oids inserted into the parent treebuilder.

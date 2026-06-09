@@ -84,6 +84,11 @@ class ProjectCoordinatorSession {
   final String? workBranch;
   final AsyncLock? gitLane;
 
+  /// Orchestrator file-claim guard (workers only): true if this task may edit the
+  /// given path, false if another task currently holds it. Plumbed to the tool
+  /// executor so same-file work is queued instead of producing merge conflicts.
+  final bool Function(String path)? fileClaim;
+
   final List<Map<String, dynamic>> _history = [];
 
   /// Detects when the coordinator agent gets stuck repeating the same tool call
@@ -114,6 +119,7 @@ class ProjectCoordinatorSession {
     this.onPlanReview,
     this.workBranch,
     this.gitLane,
+    this.fileClaim,
     this.discoveryMode = false,
   });
 
@@ -475,6 +481,7 @@ class ProjectCoordinatorSession {
             onImage: onImage,
             workBranch: workBranch,
             gitLane: gitLane,
+            claimFile: fileClaim,
           )
         : null;
 
@@ -851,6 +858,7 @@ class ProjectCoordinatorSession {
       buildService: buildService,
       workBranch: workBranch,
       gitLane: gitLane,
+      claimFile: fileClaim,
     );
 
     final results = <String>[];

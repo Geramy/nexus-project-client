@@ -1577,6 +1577,13 @@ class CoordinatorToolExecutor {
   final String? workBranch;
   final AsyncLock? gitLane;
 
+  /// File-claim guard for orchestrated workers: returns true if THIS task may
+  /// edit [path] (it's free or already ours), false if another task holds it.
+  /// The orchestrator owns the lock table and holds a file from first edit until
+  /// merge, so two tasks never submit changes to the same file in parallel.
+  /// Null in the interactive chat (no queue).
+  final bool Function(String path)? claimFile;
+
   CoordinatorToolExecutor({
     required this.db,
     required this.projectId,
@@ -1597,7 +1604,22 @@ class CoordinatorToolExecutor {
     this.onImage,
     this.workBranch,
     this.gitLane,
+    this.claimFile,
   });
+
+  /// Gate a file mutation through the orchestrator's file-claim queue. Returns a
+  /// "busy, queued" message to hand back to the model when another task holds the
+  /// file, or null when the edit may proceed. No-op outside an orchestrated
+  /// worker (interactive chat has no [claimFile]).
+  String? _fileBusy(String path) {
+    final claim = claimFile;
+    if (claim == null) return null;
+    if (claim(path)) return null;
+    return 'File "$path" is held by another task right now (to avoid a merge '
+        'conflict) and is queued. Do NOT keep trying to edit it — work on a '
+        'different file if you can; this task will automatically resume and '
+        'redo against the latest code once the other task finishes.';
+  }
 
   /// True when running as an orchestrated worker on an isolated task tree.
   bool get _isolatedTask =>
@@ -2825,6 +2847,8 @@ class CoordinatorToolExecutor {
     final content = args['content'] as String?;
     if (path.isEmpty || content == null)
       return 'write_file failed: path and content are required.';
+    final busy = _fileBusy(path);
+    if (busy != null) return busy;
     try {
       final existed = await workspace!.exists(path);
       await workspace!.writeString(path, content);
@@ -2852,6 +2876,10 @@ class CoordinatorToolExecutor {
     final to = (args['to'] as String? ?? '').trim();
     if (from.isEmpty || to.isEmpty)
       return 'move_path failed: from and to are required.';
+    final busyFrom = _fileBusy(from);
+    if (busyFrom != null) return busyFrom;
+    final busyTo = _fileBusy(to);
+    if (busyTo != null) return busyTo;
     try {
       await workspace!.move(from, to);
       return 'Moved "$from" → "$to".';
@@ -2864,6 +2892,8 @@ class CoordinatorToolExecutor {
     if (workspace == null) return 'File access is unavailable in this context.';
     final path = (args['path'] as String? ?? '').trim();
     if (path.isEmpty) return 'delete_path failed: path is required.';
+    final busy = _fileBusy(path);
+    if (busy != null) return busy;
     try {
       if (!await workspace!.exists(path))
         return 'Nothing to delete at "$path".';
@@ -2878,6 +2908,8 @@ class CoordinatorToolExecutor {
     if (workspace == null) return 'File access is unavailable in this context.';
     final path = (args['path'] as String? ?? '').trim();
     if (path.isEmpty) return 'delete_file failed: path is required.';
+    final busy = _fileBusy(path);
+    if (busy != null) return busy;
     try {
       if (!await workspace!.exists(path))
         return 'Nothing to delete at "$path".';
@@ -3024,6 +3056,8 @@ class CoordinatorToolExecutor {
     final path = (args['path'] as String? ?? '').trim();
     final content = args['content'] as String? ?? '';
     if (path.isEmpty) return 'create_file failed: path is required.';
+    final busy = _fileBusy(path);
+    if (busy != null) return busy;
     try {
       if (await workspace!.exists(path)) {
         return 'create_file failed: "$path" already exists. Use edit_file or write_file to modify it.';
@@ -3043,6 +3077,8 @@ class CoordinatorToolExecutor {
     if (path.isEmpty || oldText == null || newText == null) {
       return 'edit_file failed: path, old_text and new_text are required.';
     }
+    final busy = _fileBusy(path);
+    if (busy != null) return busy;
     try {
       if (!await workspace!.exists(path)) {
         return 'edit_file failed: "$path" does not exist. Use create_file first.';
