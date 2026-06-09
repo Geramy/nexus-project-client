@@ -361,6 +361,47 @@ class SetupTools {
       {
         'type': 'function',
         'function': {
+          'name': 'remove_tags',
+          'description':
+              'Remove tag(s) from the project profile that the user has '
+              'explicitly said are WRONG. ONLY call this when the user corrects '
+              'or rejects a tag (e.g. "this isn\'t a logistics app", "that\'s not '
+              'ecommerce", "we\'re not B2B — take that off"). Never remove a tag '
+              'the user has not disowned. Give each tag as its category + exact '
+              'value (the mirror of propose_tags). After removing, propose_tags '
+              'the correct value if the user named one.',
+          'parameters': {
+            'type': 'object',
+            'properties': {
+              'tags': {
+                'type': 'array',
+                'items': {
+                  'type': 'object',
+                  'properties': {
+                    'category': {
+                      'type': 'string',
+                      'description':
+                          'The tag\'s category (${cats.join(', ')}, or a '
+                          'sub-axis like `genre`).',
+                    },
+                    'value': {
+                      'type': 'string',
+                      'description':
+                          'The EXACT label to remove, as it was previously '
+                          'tagged.',
+                    },
+                  },
+                  'required': ['category', 'value'],
+                },
+              },
+            },
+            'required': ['tags'],
+          },
+        },
+      },
+      {
+        'type': 'function',
+        'function': {
           'name': 'finalize_setup',
           'description':
               'Resolve the architecture from the confirmed tags and generate the '
@@ -549,6 +590,8 @@ class SetupToolExecutor {
         return _consider(args);
       case 'propose_tags':
         return _propose(args);
+      case 'remove_tags':
+        return _remove(args);
       case 'dismiss_item':
         return _dismiss(args);
       case 'finalize_setup':
@@ -972,6 +1015,59 @@ class SetupToolExecutor {
       }
     }
     return b.isEmpty ? 'No valid tags to propose.' : b.toString();
+  }
+
+  /// Remove tags the user explicitly disowned. Matches each {category, value}
+  /// against the board (case-insensitive, ignoring already-rejected rows) and
+  /// deletes the matches; the correct value, if the user named one, is re-added
+  /// by a following propose_tags. Only acts on what the model passed — never a
+  /// blanket clear.
+  Future<String> _remove(Map<String, dynamic> args) async {
+    final raw = (args['tags'] as List?) ?? const [];
+    if (raw.isEmpty) {
+      return 'remove_tags needs a `tags` list of {category, value} to remove.';
+    }
+    final existing = await db.getTagsForProject(projectPk);
+    final controller = TagController(db, projectPk);
+    final removed = <String>[];
+    final notFound = <String>[];
+
+    for (final entry in raw) {
+      if (entry is! Map) continue;
+      final cat = (entry['category'] ?? '').toString().trim();
+      final val = (entry['value'] ?? '').toString().trim();
+      if (cat.isEmpty || val.isEmpty) continue;
+
+      final matches = existing
+          .where(
+            (t) =>
+                t.status != 'rejected' &&
+                t.category.toLowerCase() == cat.toLowerCase() &&
+                t.value.toLowerCase() == val.toLowerCase(),
+          )
+          .toList();
+      if (matches.isEmpty) {
+        notFound.add('$cat: $val');
+        continue;
+      }
+      for (final m in matches) {
+        await controller.remove(m.tag_pk);
+        removed.add(m.value);
+        _pendingDecisions.remove(_normPkg(m.value));
+      }
+    }
+
+    final b = StringBuffer();
+    if (removed.isNotEmpty) {
+      b.write('Removed ${removed.length} tag(s): ${removed.join(', ')}.');
+    }
+    if (notFound.isNotEmpty) {
+      b.write(
+        '${b.isEmpty ? '' : ' '}Not on the board (nothing to remove): '
+        '${notFound.join('; ')}.',
+      );
+    }
+    return b.isEmpty ? 'No matching tags — nothing removed.' : b.toString();
   }
 
   /// Register a shortlist of options the host is weighing ("let me think about

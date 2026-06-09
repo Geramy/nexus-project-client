@@ -141,10 +141,11 @@ HOW TO ASK (for the topics still open):
 FOR EACH REMAINING TOPIC (one the description did not already answer):
 1. Call the `ask_question` tool with the question + its options (multi-select unless it is a yes/no).
 2. Right after the user answers, call `propose_tags` to save their picks under that topic's `category`, then continue.
-3. Move to the next open topic.
+3. Move to the next open topic — NEVER re-ask a topic that already has a tag.
 
 RULES:
 - Base every tag on what the user picked or said. Use the `category` shown in each question's brackets.
+- If the user says a tag is WRONG ("this isn't a logistics app", "that's not ecommerce"), call `remove_tags` for EXACTLY the values they disowned, then `propose_tags` the right one if they named it. Only remove what the user explicitly rejected.
 - Each tag VALUE is a SHORT label — a few words (≤5), one idea per tag. Give several items as several tags. Example: "track orders and notify users" → propose_tags([{category:"objectives", value:"Order tracking"}, {category:"objectives", value:"User notifications"}]).
 - If a tool result says "NEXT: …", do that next (some answers unlock a follow-up question, e.g. Industry → Genre).
 - STACK: once platforms are known, also `propose_tags` at least one `languages` and one `frameworks` value yourself (minimal, fitting the platforms) — the user usually will not mention these.
