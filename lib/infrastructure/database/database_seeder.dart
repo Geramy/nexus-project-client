@@ -61,6 +61,42 @@ Future<void> seedInitialData(NexusDatabase db) async {
   } catch (e) {
     debugPrint('Seeder: collection-default reconcile warning (non-fatal): $e');
   }
+
+  // Ensure the Coordinator can FINALIZE a merge (approve a clean one / reject a
+  // conflicted one for rework). Without these the orchestrator's merge stage
+  // loops every conflicting task to the cap and Blocks it. Repairs personas
+  // seeded before the `merge-integration` skill existed.
+  try {
+    await _ensureCoordinatorCanFinalizeMerges(db);
+  } catch (e) {
+    debugPrint('Seeder: merge-permission reconcile warning (non-fatal): $e');
+  }
+}
+
+/// Grants the Coordinator the two tools its merge-integration duty requires —
+/// `approve_task` (ask; the autonomous merge stage auto-approves) and
+/// `reject_task` (grant) — on existing Coordinator personas that still deny them
+/// (the seed gap that left conflicting tasks unable to drain). Coordinator-only;
+/// idempotent (writes only when a tool is currently denied/absent).
+Future<void> _ensureCoordinatorCanFinalizeMerges(NexusDatabase db) async {
+  for (final p in await db.getAllAgentPersonas()) {
+    if (agentRoleFromKey(p.title) != AgentRole.coordinator) continue;
+    final perms = AgentToolPermissions.fromConfigJson(p.configJson);
+    final approveOk = perms.permFor('approve_task') != ToolPerm.deny;
+    final rejectOk = perms.permFor('reject_task') != ToolPerm.deny;
+    if (approveOk && rejectOk) continue;
+
+    final merged = Map<String, ToolPerm>.from(perms.overrides)
+      ..['approve_task'] = ToolPerm.ask
+      ..['reject_task'] = ToolPerm.grant;
+    final newJson = AgentToolPermissions.writeIntoConfigJson(
+      p.configJson,
+      merged,
+    );
+    await db.updateAgentPersona(
+      p.toCompanion(true).copyWith(configJson: Value(newJson)),
+    );
+  }
 }
 
 /// Repairs existing Project Manager / Coordinator personas to their purpose-built

@@ -216,12 +216,20 @@ class ProjectOrchestrator {
     try {
       final tasks = await _db.getTasksForProject(projectId);
       for (final t in tasks) {
+        // Block any task that has burned its retry budget and isn't actively
+        // being worked — whether it's stalled on Todo (never started) OR stuck
+        // in Review (a verify/merge that never resolves). The latter is what
+        // left tasks frozen in Review holding a slot; now they go Blocked (red)
+        // so they're visible and stop consuming the connection pool.
+        final stalled =
+            t.status == TaskStatus.todo || t.status == TaskStatus.review;
         if ((_attempts[t.task_pk] ?? 0) >= _maxAttemptsPerTask &&
-            t.status == TaskStatus.todo &&
+            stalled &&
             !_active.contains(t.task_pk)) {
           debugPrint(
-            '[Orchestrator p$projectId] task ${t.task_pk} exhausted '
-            '$_maxAttemptsPerTask attempts → Blocked.',
+            '[Orchestrator p$projectId] task ${t.task_pk} (${t.status}/'
+            '${t.executionStatus}) exhausted $_maxAttemptsPerTask attempts → '
+            'Blocked.',
           );
           await _db.markTaskBlocked(t.task_pk);
         }
@@ -274,11 +282,24 @@ class ProjectOrchestrator {
       if (list.isNotEmpty) pools[s] = _sortByPriority(list);
     }
 
+    // A Review task whose retry budget is spent is NOT re-picked here — it's
+    // surfaced to Blocked by _surfaceStalledTasks instead of looping forever.
+    bool live(Task t) => (_attempts[t.task_pk] ?? 0) < _maxAttemptsPerTask;
+
     addPool(_Stage.implement, _assignableTasks(tasks));
     addPool(
       _Stage.verify,
       review
-          .where((t) => t.executionStatus == TaskExecStatus.submitted)
+          // `verifying` is included so a verify stage that was interrupted
+          // (turn cap / crash / app restart) AFTER run_verification set the task
+          // to `verifying` is RE-PICKED rather than stranded — that strand was
+          // the "stuck in Review forever, holding a slot" bug.
+          .where(
+            (t) =>
+                (t.executionStatus == TaskExecStatus.submitted ||
+                    t.executionStatus == TaskExecStatus.verifying) &&
+                live(t),
+          )
           .toList(),
     );
     addPool(
@@ -286,18 +307,25 @@ class ProjectOrchestrator {
       review
           .where(
             (t) =>
-                t.executionStatus == TaskExecStatus.verified && t.requiresBuild,
+                ((t.executionStatus == TaskExecStatus.verified &&
+                        t.requiresBuild) ||
+                    t.executionStatus == TaskExecStatus.building) &&
+                live(t),
           )
           .toList(),
     );
     addPool(
       _Stage.merge,
       review
+          // `merging` is included for the same reason: an interrupted merge
+          // (after beginTaskMerge set `merging`) is re-driven instead of stuck.
           .where(
             (t) =>
-                t.executionStatus == TaskExecStatus.built ||
-                (t.executionStatus == TaskExecStatus.verified &&
-                    !t.requiresBuild),
+                (t.executionStatus == TaskExecStatus.built ||
+                    t.executionStatus == TaskExecStatus.merging ||
+                    (t.executionStatus == TaskExecStatus.verified &&
+                        !t.requiresBuild)) &&
+                live(t),
           )
           .toList(),
     );
@@ -600,6 +628,9 @@ class ProjectOrchestrator {
   /// board on failure. If no Verification Agent persona exists, the task is left
   /// submitted for a human to verify.
   Future<void> _runVerifyStage(Task task) async {
+    // Count this Review attempt against the retry budget so a task that can
+    // never get a verdict is surfaced to Blocked instead of cycling forever.
+    _attempts[task.task_pk] = (_attempts[task.task_pk] ?? 0) + 1;
     final persona = await _findPersonaForRole(AgentRole.verificationAgent);
     if (persona == null) {
       debugPrint(
@@ -700,6 +731,7 @@ class ProjectOrchestrator {
   /// board on failure. The run is started with `taskPk: null` so BuildService's
   /// auto-approve-on-green rule doesn't fire — this stage owns the outcome.
   Future<void> _runBuildStage(Task task) async {
+    _attempts[task.task_pk] = (_attempts[task.task_pk] ?? 0) + 1;
     final project = await _db.getProjectById(projectId);
     if (project == null) return;
     final handles = await _resolveWorkspaceHandles();
@@ -788,6 +820,7 @@ class ProjectOrchestrator {
   /// role allowed to merge. If no Coordinator persona exists, the task is left
   /// awaiting a human merge.
   Future<void> _runMergeStage(Task task) async {
+    _attempts[task.task_pk] = (_attempts[task.task_pk] ?? 0) + 1;
     final handles = await _resolveWorkspaceHandles();
     final git = handles.git;
     final lane = ref.read(gitLaneProvider(projectId));

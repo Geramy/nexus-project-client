@@ -104,6 +104,16 @@ const Map<String, Map<String, ToolPerm>> kSkillCatalog = {
     'git_merge': ToolPerm.grant,
     'git_push': ToolPerm.ask,
   },
+  // Finalize an integration: approve a clean merge (Done) or reject a conflicted
+  // one so the worker rebases. The orchestrator's merge stage drives the
+  // Coordinator to call exactly these; without them every conflicting task loops
+  // to the turn cap and gets Blocked instead of bouncing back for rework.
+  // approve_task stays `ask` (matches the catalog default — the autonomous merge
+  // stage auto-approves, the interactive Coordinator still confirms).
+  'merge-integration': {
+    'approve_task': ToolPerm.ask,
+    'reject_task': ToolPerm.grant,
+  },
   'build-ci': {
     'build_docker_image': ToolPerm.grant,
     'run_workflow': ToolPerm.grant,
@@ -211,6 +221,11 @@ const Map<String, SkillMeta> kSkillMeta = {
     'planning',
     'low',
   ),
+  'merge-integration': SkillMeta(
+    'Finalize integrations: approve a clean merge or reject a conflict for rework.',
+    'git',
+    'medium',
+  ),
 };
 
 /// Default skills per role. Workers share the same builder skill set; they
@@ -251,6 +266,7 @@ const Map<AgentRole, List<String>> kRoleSkills = {
     'vcs-integration',
     'build-ci',
     'story-authoring',
+    'merge-integration',
   ],
   AgentRole.sdeGeneralist: _workerSkills,
   AgentRole.sdeNetworking: _workerSkills,
