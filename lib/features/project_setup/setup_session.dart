@@ -430,8 +430,14 @@ How to work:
           onToolResult?.call(call.function.name, result);
           // Generating the plans flips the host into the refine stage so the
           // rest of this turn (and the next) uses the plan-editing toolset —
-          // but ONLY when finalize actually succeeded.
-          if (!threw && call.function.name == 'finalize_setup') {
+          // but ONLY when finalize actually succeeded. A rejected finalize
+          // ("Not ready to finalize — …") returns WITHOUT throwing, so gate on
+          // the success message too or one premature call would flip the live
+          // interview into refine mid-turn (board state stops being injected,
+          // the toolset changes) while required sections are still missing.
+          if (!threw &&
+              call.function.name == 'finalize_setup' &&
+              result.startsWith('Setup finalized')) {
             phase = SetupPhase.refine;
           }
           final body = action == LoopAction.warn

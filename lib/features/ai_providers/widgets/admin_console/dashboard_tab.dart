@@ -95,7 +95,6 @@ class _AdminDashboardTabState extends ConsumerState<AdminDashboardTab> {
           _Row('Status', h['status']?.toString() ?? '—'),
           _Row('Version', h['version']?.toString() ?? '—'),
           _Row('Loaded models', '${loaded.length}'),
-          _Row('WebSocket port', h['websocket_port']?.toString() ?? '—'),
         ],
       ),
       const SizedBox(height: 12),

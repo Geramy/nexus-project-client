@@ -12,10 +12,11 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 /// Subscribes to the Lemonade server's `/logs/stream` WebSocket.
 ///
-/// Discover the WebSocket port via [health] (`websocket_port` field), then
-/// pass it into [connect]. After connection, [subscribe] with optional [afterSeq] to
-/// resume from a known sequence number; the server first sends a `logs.snapshot` of
-/// up to 5000 entries, then live `logs.entry` messages.
+/// The server serves all WebSocket streaming on the MAIN API port, so [connect]
+/// derives the ws/wss URL straight from [serverUrl] — no separate port discovery.
+/// After connection, [subscribe] with optional [afterSeq] to resume from a known
+/// sequence number; the server first sends a `logs.snapshot` of up to 5000
+/// entries, then live `logs.entry` messages.
 class LogsSocket {
   final String serverUrl;
   WebSocketChannel? _channel;
@@ -34,13 +35,17 @@ class LogsSocket {
     if (!_events.isClosed) _events.add(event);
   }
 
-  Future<void> connect({required int port}) async {
-    final apiUri = Uri.parse(serverUrl);
+  Future<void> connect() async {
+    // WS streaming lives on the main API port — reuse the server URL's
+    // scheme/host/port verbatim (no port means the scheme default, same as HTTP).
+    var url = serverUrl.trim();
+    if (!url.contains('://')) url = 'https://$url';
+    final apiUri = Uri.parse(url);
     final scheme = apiUri.scheme == 'https' ? 'wss' : 'ws';
     final uri = Uri(
       scheme: scheme,
       host: apiUri.host,
-      port: port,
+      port: apiUri.hasPort ? apiUri.port : null,
       path: '/logs/stream',
     );
 

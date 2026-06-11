@@ -186,8 +186,8 @@ bool _nameHasAny(String id, List<String> needles) {
 // Capability classification — label-first, then name heuristics, matching
 // lemonade_mobile's ModelUtils.detectCapabilities label conventions.
 bool _isAudio(ApiModelInfo m) =>
-    m.hasAnyLabel(const ['audio', 'transcription']) ||
-    _nameHasAny(m.id, const ['whisper', 'transcrib']);
+    m.hasAnyLabel(const ['audio', 'transcription', 'realtime-transcription']) ||
+    _nameHasAny(m.id, const ['whisper', 'transcrib', 'moonshine']);
 bool _isTts(ApiModelInfo m) =>
     m.hasAnyLabel(const ['tts', 'speech']) ||
     _nameHasAny(m.id, const ['tts', 'kokoro']);

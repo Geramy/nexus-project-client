@@ -51,15 +51,11 @@ class _AdminLogsTabState extends ConsumerState<AdminLogsTab> {
     final client = ref.read(adminConsoleClientProvider);
     if (client == null) return;
     try {
-      final health = await client.admin.health();
-      final port = (health['websocket_port'] as num?)?.toInt();
-      if (port == null) {
-        setState(() => _error = 'Server did not advertise a websocket port.');
-        return;
-      }
+      // WS streaming is served on the main API port — connect straight to the
+      // server's base URL, no websocket_port discovery needed.
       final s = LogsSocket(client.server.baseUrl);
       _socket = s;
-      await s.connect(port: port);
+      await s.connect();
       s.subscribe(afterSeq: _lastSeq);
       _sub = s.events.listen(_handleEvent);
       if (mounted) setState(() => _connected = true);
