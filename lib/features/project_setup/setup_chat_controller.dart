@@ -381,9 +381,20 @@ class SetupChatController extends ChangeNotifier {
       if (session == null) return;
       final reply = await session.send(
         text.trim(),
-        onTrace: (messages) => _ref
-            .read(trainingSinkProvider)
-            .post('setup:$projectId', messages),
+        onTrace: (messages) {
+          final id = 'setup:$projectId';
+          _ref.read(trainingSinkProvider).post(id, messages);
+          // Persist the SAME rich trace locally so it can be exported from
+          // Account → Export Tracking (Setup AI).
+          unawaited(
+            _ref.read(nexusDatabaseProvider).upsertTrainingTrace(
+                  projectPk: projectId,
+                  aiKind: 'setup',
+                  conversationId: id,
+                  messagesJson: jsonEncode(messages),
+                ),
+          );
+        },
         onThinking: (r) =>
             _append(SetupMsg(kind: SetupMsgKind.thinking, text: r)),
         onAssistantText: (t) {

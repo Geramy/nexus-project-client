@@ -20,6 +20,7 @@ import '../../infrastructure/nexus/providers/nexus_account_providers.dart';
 import '../../shared/ui/nexus_ui.dart';
 import 'widgets/account_auth_forms.dart';
 import 'widgets/account_dashboard.dart';
+import 'widgets/export_tracking_card.dart';
 import 'widgets/update_settings_card.dart';
 
 class AccountView extends ConsumerWidget {
@@ -43,6 +44,7 @@ class AccountView extends ConsumerWidget {
                   _AppearancePicker(),
                   _LeanContextToggle(),
                   UpdateSettingsCard(),
+                  ExportTrackingCard(),
                   AccountDashboard(),
                 ],
               ),
@@ -53,6 +55,7 @@ class AccountView extends ConsumerWidget {
                 const _AppearancePicker(),
                 const _LeanContextToggle(),
                 const UpdateSettingsCard(),
+                const ExportTrackingCard(),
                 Expanded(
                   // While hydrating the saved token from secure storage, show a
                   // spinner instead of flashing the login form.

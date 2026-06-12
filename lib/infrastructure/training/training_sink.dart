@@ -49,13 +49,24 @@ class TrainingSink {
       })));
       final resp = await req.close().timeout(const Duration(seconds: 5));
       await resp.drain();
-    } catch (e) {
-      // Studio not running / unreachable — that's fine, just skip.
-      debugPrint('TrainingSink: skip ($e)');
+    } catch (_) {
+      // Studio not running / unreachable — that's fine, just skip. Traces are
+      // still captured locally (Account → Export Tracking), so this upload is
+      // optional. Log ONCE per session instead of spamming a line every turn.
+      if (!_warnedUnreachable) {
+        _warnedUnreachable = true;
+        debugPrint(
+          'TrainingSink: local Training Studio not reachable — skipping uploads '
+          'this session (conversation traces are still saved locally for export).',
+        );
+      }
     } finally {
       client?.close(force: true);
     }
   }
+
+  /// One-shot guard so an unreachable studio doesn't log on every turn.
+  static bool _warnedUnreachable = false;
 }
 
 /// Default sink → on, pointed at the local studio. (Toggle/URL can later be

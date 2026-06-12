@@ -62,6 +62,12 @@ class SetupSession {
   /// persisted transcript (and UI restore) survives the working-context trim.
   final List<Map<String, dynamic>> _transcript = [];
 
+  /// Append-only FULL trace for training export: real user/assistant/tool
+  /// messages (with tool_calls) PLUS the model's reasoning ('thinking'), in
+  /// order. Unlike [_history] it excludes internal anti-stall nudges and is never
+  /// trimmed, and unlike [_transcript] it keeps tool calls + thoughts.
+  final List<Map<String, dynamic>> _fullTrace = [];
+
   /// How many recent user-initiated turns of [_history] to send each request.
   /// Older turns are represented by the injected board-state summary.
   static const int _historyWindowTurns = 4;
@@ -217,6 +223,7 @@ How to work:
 
     _history.add({'role': 'user', 'content': userMessage});
     _transcript.add({'role': 'user', 'content': userMessage});
+    _fullTrace.add({'role': 'user', 'content': userMessage});
     final rollbackTo = _history.length - 1;
     // Declared outside the try so the post-catch return can still check it.
     var executedTool = false;
@@ -280,13 +287,14 @@ How to work:
         final reasoning = msg?.reasoning;
         if (reasoning != null && reasoning.trim().isNotEmpty) {
           onThinking?.call(reasoning.trim());
+          _fullTrace.add({'role': 'thinking', 'content': reasoning.trim()});
         }
         if (content.trim().isNotEmpty) {
           onAssistantText?.call(content.trim());
           _transcript.add({'role': 'assistant', 'content': content.trim()});
         }
 
-        _history.add({
+        final assistantEntry = <String, dynamic>{
           'role': 'assistant',
           'content': (toolCalls.isNotEmpty && content.isEmpty) ? null : content,
           if (toolCalls.isNotEmpty)
@@ -301,7 +309,9 @@ How to work:
                   },
                 },
             ],
-        });
+        };
+        _history.add(assistantEntry);
+        _fullTrace.add(Map<String, dynamic>.from(assistantEntry));
 
         if (toolCalls.isEmpty) {
           // A SPOKEN reply with no tool is a normal conversational turn now (an
@@ -402,11 +412,13 @@ How to work:
           if (action == LoopAction.block) {
             final note = _loopGuard.feedback(call.function.name, action);
             onToolResult?.call(call.function.name, note);
-            _history.add({
+            final blockEntry = <String, dynamic>{
               'role': 'tool',
               'tool_call_id': call.id,
               'content': note,
-            });
+            };
+            _history.add(blockEntry);
+            _fullTrace.add(Map<String, dynamic>.from(blockEntry));
             continue; // refuse the looping call; model must change course
           }
 
@@ -443,11 +455,13 @@ How to work:
           final body = action == LoopAction.warn
               ? '$result\n\n${_loopGuard.feedback(call.function.name, action)}'
               : result;
-          _history.add({
+          final toolEntry = <String, dynamic>{
             'role': 'tool',
             'tool_call_id': call.id,
             'content': body,
-          });
+          };
+          _history.add(toolEntry);
+          _fullTrace.add(Map<String, dynamic>.from(toolEntry));
         }
       }
     } catch (e) {
@@ -465,7 +479,7 @@ How to work:
   /// sink — captured at turn end when the model used a tool.
   List<Map<String, dynamic>> _traceMessages() => [
         {'role': 'system', 'content': _systemPrompt()},
-        ..._history,
+        ..._fullTrace,
       ];
 
   /// Calls the model with a bounded retry so a transient inference failure
@@ -520,6 +534,7 @@ How to work:
   void clearHistory() {
     _history.clear();
     _transcript.clear();
+    _fullTrace.clear();
     _interviewDropped = false;
     _loopGuard.reset();
   }

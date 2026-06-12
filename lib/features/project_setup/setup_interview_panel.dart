@@ -12,7 +12,9 @@ import '../../services/audio/audio_recorder_service.dart';
 import '../../services/audio/coordinator_duplex_voice_session.dart'
     show VoiceState;
 import '../../widgets/live_mic_visualizer.dart';
+import '../../infrastructure/training/ai_export.dart' show aiMessageRef;
 import '../../shared/ui/chat_markdown.dart';
+import '../../shared/ui/rated_message_bar.dart';
 import '../../shared/ui/sticky_scroll.dart';
 import '../../shared/ui/submit_on_enter.dart';
 import 'setup_chat_controller.dart';
@@ -183,6 +185,7 @@ class _SetupInterviewPanelState extends ConsumerState<SetupInterviewPanel> {
                       // one — animates the "Thinking…" ellipsis so it reads as
                       // working, not stalled.
                       active: controller.busy && i == messages.length - 1,
+                      projectId: widget.projectId,
                     ),
                   ),
           ),
@@ -294,6 +297,7 @@ class _MessageView extends StatelessWidget {
     required this.msg,
     required this.onAnswer,
     this.active = false,
+    this.projectId,
   });
 
   final SetupMsg msg;
@@ -303,13 +307,20 @@ class _MessageView extends StatelessWidget {
   /// "Thinking…" ellipsis on a thinking tile.
   final bool active;
 
+  /// For the star-rating row under an assistant reply (Setup AI).
+  final int? projectId;
+
   @override
   Widget build(BuildContext context) {
     switch (msg.kind) {
       case SetupMsgKind.user:
         return _Bubble(text: msg.text, isUser: true);
       case SetupMsgKind.assistant:
-        return _Bubble(text: msg.text, isUser: false);
+        return _Bubble(
+          text: msg.text,
+          isUser: false,
+          ratingProjectId: projectId,
+        );
       case SetupMsgKind.thinking:
         return _ThinkingTile(text: msg.text, active: active);
       case SetupMsgKind.tool:
@@ -376,30 +387,59 @@ class _ImageBubble extends StatelessWidget {
 }
 
 class _Bubble extends StatelessWidget {
-  const _Bubble({required this.text, required this.isUser});
+  const _Bubble({
+    required this.text,
+    required this.isUser,
+    this.ratingProjectId,
+  });
   final String text;
   final bool isUser;
+
+  /// When set (assistant replies only), a star-rating row renders beneath the
+  /// bubble, keyed on `setup:<projectId>` + the message's content hash.
+  final int? ratingProjectId;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final bubble = Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.all(10),
+      constraints: const BoxConstraints(maxWidth: 320),
+      decoration: BoxDecoration(
+        color: isUser
+            ? theme.colorScheme.primaryContainer
+            : theme.colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      // The interviewer's replies render as Markdown (lists, **bold**, code);
+      // the user's own typed/spoken text stays plain.
+      child: isUser
+          ? SelectableText(text, style: const TextStyle(fontSize: 14))
+          : ChatMarkdown(text),
+    );
+    final showRating =
+        !isUser && ratingProjectId != null && text.trim().isNotEmpty;
+    if (!showRating) {
+      return Align(
+        alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+        child: bubble,
+      );
+    }
     return Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.all(10),
-        constraints: const BoxConstraints(maxWidth: 320),
-        decoration: BoxDecoration(
-          color: isUser
-              ? theme.colorScheme.primaryContainer
-              : theme.colorScheme.surfaceContainer,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        // The interviewer's replies render as Markdown (lists, **bold**, code);
-        // the user's own typed/spoken text stays plain.
-        child: isUser
-            ? SelectableText(text, style: const TextStyle(fontSize: 14))
-            : ChatMarkdown(text),
+      alignment: Alignment.centerLeft,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          bubble,
+          RatedMessageBar(
+            projectId: ratingProjectId!,
+            aiKind: 'setup',
+            conversationId: 'setup:${ratingProjectId!}',
+            messageRef: aiMessageRef(text),
+          ),
+        ],
       ),
     );
   }

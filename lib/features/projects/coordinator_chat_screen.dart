@@ -27,6 +27,8 @@ import 'package:nexus_projects_client/features/project_plans/plan_store.dart';
 import 'package:nexus_projects_client/features/agents/agent_tool_permissions.dart';
 import 'package:nexus_projects_client/features/agents/agent_role.dart';
 import 'package:nexus_projects_client/infrastructure/training/training_sink.dart';
+import 'package:nexus_projects_client/infrastructure/training/ai_export.dart'
+    show aiMessageRef;
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/workspace.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/workspace_provider.dart';
@@ -43,6 +45,7 @@ import 'package:nexus_projects_client/services/audio/coordinator_duplex_voice_se
 import 'package:nexus_projects_client/widgets/live_mic_visualizer.dart';
 
 import '../../shared/ui/nexus_ui.dart';
+import '../../shared/ui/rated_message_bar.dart';
 import '../../shared/ui/sticky_scroll.dart';
 import '../../shared/ui/submit_on_enter.dart';
 import '../../core/providers/lean_context_provider.dart';
@@ -108,6 +111,14 @@ class _ProjectCoordinatorChatScreenState
   /// Image-generation model id resolved for the active session (for the manual
   /// "generate diagram" button). Empty model id → router 502.
   String? _imageModel;
+
+  /// Rating-feedback context: which AI this chat belongs to and the conversation
+  /// id its traces/ratings key on — MUST match the `onTrace` ids above so a
+  /// rating lines up with the exported trace.
+  String get _ratingAiKind => widget.discoveryMode ? 'stories' : 'coordinator';
+  String get _ratingConversationId => widget.discoveryMode
+      ? 'discovery:${widget.projectId}'
+      : 'coordinator:${widget.projectId}:${_sessionId ?? 0}';
   CoordinatorDuplexVoiceSession?
   _duplexVoiceSession; // The one and only voice path for the Coordinator call (duplex VAD-driven, lemonade_mobile style)
   AudioRecorderService?
@@ -666,6 +677,15 @@ class _ProjectCoordinatorChatScreenState
               ? 'discovery:${widget.projectId}'
               : 'coordinator:${widget.projectId}:${_sessionId ?? 0}';
           ref.read(trainingSinkProvider).post(id, messages);
+          // Persist the same rich trace locally for Account → Export Tracking.
+          unawaited(
+            ref.read(nexusDatabaseProvider).upsertTrainingTrace(
+                  projectPk: widget.projectId,
+                  aiKind: widget.discoveryMode ? 'stories' : 'coordinator',
+                  conversationId: id,
+                  messagesJson: jsonEncode(messages),
+                ),
+          );
         },
         onImage: (b64, caption) {
           if (!mounted) return;
@@ -1032,6 +1052,11 @@ class _ProjectCoordinatorChatScreenState
                 final msg = _messages[index];
                 final isSystem = msg.isSystem == true;
                 final nx = context.nx;
+                // A rateable assistant reply (text, not a user/system/reasoning
+                // line or a bare image). Rated by a content hash so it lines up
+                // with the exported trace regardless of position.
+                final isAssistant =
+                    !msg.isUser && !isSystem && !msg.isReasoning;
 
                 // Reasoning ("thinking") blocks render as a collapsible tile so
                 // a long think is visible (and inspectable for debugging) without
@@ -1117,6 +1142,17 @@ class _ProjectCoordinatorChatScreenState
                                 ],
                               ),
                             ),
+                          ),
+                        // Star rating (training feedback) under each assistant
+                        // reply. Image-only cards aren't rateable text replies.
+                        if (isAssistant &&
+                            msg.imageB64 == null &&
+                            msg.text.trim().isNotEmpty)
+                          RatedMessageBar(
+                            projectId: widget.projectId,
+                            aiKind: _ratingAiKind,
+                            conversationId: _ratingConversationId,
+                            messageRef: aiMessageRef(msg.text),
                           ),
                       ],
                     ),

@@ -1949,6 +1949,196 @@ class NexusDatabase extends _$NexusDatabase {
   Future<void> deleteChatMessage(int messagePk) =>
       (delete(chatMessages)..where((m) => m.message_pk.equals(messagePk))).go();
 
+  // ==================== Training data (Export Tracking) ====================
+  // Stored in plain SQLite tables managed by raw SQL (no drift codegen) so the
+  // Account → Export Tracking exporters can read full conversation traces +
+  // per-message ratings. Created on launch by [ensureTrainingTables].
+
+  /// Idempotently create the training/rating tables. Safe to call every launch.
+  Future<void> ensureTrainingTables() async {
+    await customStatement(
+      'CREATE TABLE IF NOT EXISTS training_traces ('
+      'trace_pk INTEGER PRIMARY KEY AUTOINCREMENT, '
+      'project_fk INTEGER NOT NULL, '
+      'ai_kind TEXT NOT NULL, '
+      'conversation_id TEXT NOT NULL UNIQUE, '
+      "messages_json TEXT NOT NULL DEFAULT '[]', "
+      'updated_at TEXT NOT NULL)',
+    );
+    await customStatement(
+      'CREATE TABLE IF NOT EXISTS ai_ratings ('
+      'rating_pk INTEGER PRIMARY KEY AUTOINCREMENT, '
+      'project_fk INTEGER NOT NULL, '
+      'ai_kind TEXT NOT NULL, '
+      'conversation_id TEXT NOT NULL, '
+      'message_ref TEXT NOT NULL, '
+      'stars INTEGER NOT NULL, '
+      'reasons_json TEXT, '
+      'created_at TEXT NOT NULL, '
+      'updated_at TEXT NOT NULL, '
+      'UNIQUE(conversation_id, message_ref))',
+    );
+  }
+
+  /// Upsert one conversation trace, keeping the LONGEST version — re-posting a
+  /// growing conversation collapses to its final, complete form (no prefix spam).
+  Future<void> upsertTrainingTrace({
+    required int projectPk,
+    required String aiKind,
+    required String conversationId,
+    required String messagesJson,
+  }) async {
+    int countOf(String json) {
+      try {
+        final v = jsonDecode(json);
+        return v is List ? v.length : 0;
+      } catch (_) {
+        return 0;
+      }
+    }
+
+    final now = DateTime.now().toIso8601String();
+    final existing = await customSelect(
+      'SELECT messages_json FROM training_traces WHERE conversation_id = ?',
+      variables: [Variable<String>(conversationId)],
+    ).get();
+    if (existing.isEmpty) {
+      await customInsert(
+        'INSERT INTO training_traces '
+        '(project_fk, ai_kind, conversation_id, messages_json, updated_at) '
+        'VALUES (?, ?, ?, ?, ?)',
+        variables: [
+          Variable<int>(projectPk),
+          Variable<String>(aiKind),
+          Variable<String>(conversationId),
+          Variable<String>(messagesJson),
+          Variable<String>(now),
+        ],
+      );
+      return;
+    }
+    if (countOf(messagesJson) <
+        countOf(existing.first.read<String>('messages_json'))) {
+      return;
+    }
+    await customUpdate(
+      'UPDATE training_traces SET messages_json = ?, ai_kind = ?, '
+      'project_fk = ?, updated_at = ? WHERE conversation_id = ?',
+      variables: [
+        Variable<String>(messagesJson),
+        Variable<String>(aiKind),
+        Variable<int>(projectPk),
+        Variable<String>(now),
+        Variable<String>(conversationId),
+      ],
+    );
+  }
+
+  /// All trace rows for the given projects, optionally filtered to one [aiKind].
+  /// Each row is a raw map (conversation_id, project_fk, ai_kind, messages_json,
+  /// updated_at).
+  Future<List<Map<String, Object?>>> getTrainingTraces(
+    List<int> projectPks, {
+    String? aiKind,
+  }) async {
+    if (projectPks.isEmpty) return const [];
+    final placeholders = List.filled(projectPks.length, '?').join(',');
+    final vars = <Variable>[for (final p in projectPks) Variable<int>(p)];
+    var sql =
+        'SELECT project_fk, ai_kind, conversation_id, messages_json, updated_at '
+        'FROM training_traces WHERE project_fk IN ($placeholders)';
+    if (aiKind != null) {
+      sql += ' AND ai_kind = ?';
+      vars.add(Variable<String>(aiKind));
+    }
+    sql += ' ORDER BY project_fk';
+    final rows = await customSelect(sql, variables: vars).get();
+    return [for (final r in rows) r.data];
+  }
+
+  /// The current star rating for a single message, or null.
+  Future<int?> getAiRating(String conversationId, String messageRef) async {
+    final rows = await customSelect(
+      'SELECT stars FROM ai_ratings WHERE conversation_id = ? AND '
+      'message_ref = ?',
+      variables: [
+        Variable<String>(conversationId),
+        Variable<String>(messageRef),
+      ],
+    ).get();
+    if (rows.isEmpty) return null;
+    return rows.first.read<int>('stars');
+  }
+
+  /// Insert or update a per-message rating (one per conversation + messageRef).
+  Future<void> upsertAiRating({
+    required int projectPk,
+    required String aiKind,
+    required String conversationId,
+    required String messageRef,
+    required int stars,
+    String? reasonsJson,
+  }) async {
+    final now = DateTime.now().toIso8601String();
+    final existing = await customSelect(
+      'SELECT rating_pk FROM ai_ratings WHERE conversation_id = ? AND '
+      'message_ref = ?',
+      variables: [
+        Variable<String>(conversationId),
+        Variable<String>(messageRef),
+      ],
+    ).get();
+    if (existing.isEmpty) {
+      await customInsert(
+        'INSERT INTO ai_ratings (project_fk, ai_kind, conversation_id, '
+        'message_ref, stars, reasons_json, created_at, updated_at) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        variables: [
+          Variable<int>(projectPk),
+          Variable<String>(aiKind),
+          Variable<String>(conversationId),
+          Variable<String>(messageRef),
+          Variable<int>(stars),
+          Variable<String>(reasonsJson),
+          Variable<String>(now),
+          Variable<String>(now),
+        ],
+      );
+      return;
+    }
+    await customUpdate(
+      'UPDATE ai_ratings SET stars = ?, reasons_json = ?, updated_at = ? '
+      'WHERE conversation_id = ? AND message_ref = ?',
+      variables: [
+        Variable<int>(stars),
+        Variable<String>(reasonsJson),
+        Variable<String>(now),
+        Variable<String>(conversationId),
+        Variable<String>(messageRef),
+      ],
+    );
+  }
+
+  /// All rating rows for the given conversations (for export).
+  Future<List<Map<String, Object?>>> getAiRatingsForProjects(
+    List<int> projectPks, {
+    String? aiKind,
+  }) async {
+    if (projectPks.isEmpty) return const [];
+    final placeholders = List.filled(projectPks.length, '?').join(',');
+    final vars = <Variable>[for (final p in projectPks) Variable<int>(p)];
+    var sql =
+        'SELECT project_fk, ai_kind, conversation_id, message_ref, stars, '
+        'reasons_json, updated_at FROM ai_ratings WHERE project_fk IN '
+        '($placeholders)';
+    if (aiKind != null) {
+      sql += ' AND ai_kind = ?';
+      vars.add(Variable<String>(aiKind));
+    }
+    final rows = await customSelect(sql, variables: vars).get();
+    return [for (final r in rows) r.data];
+  }
+
   // ==================== Activity Logs (placeholder) ====================
   Future<List<ActivityLog>> getActivityLogsForClient(int clientPk) {
     return (select(

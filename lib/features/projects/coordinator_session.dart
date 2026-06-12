@@ -91,6 +91,13 @@ class ProjectCoordinatorSession {
 
   final List<Map<String, dynamic>> _history = [];
 
+  /// Append-only FULL trace for training export: mirrors the real
+  /// user/assistant/tool messages PLUS the model's reasoning ('thinking'), in
+  /// order. Separate from [_history] (the wire context) so the model never sees
+  /// the 'thinking' entries and the trace keeps tool calls + thoughts.
+  final List<Map<String, dynamic>> _fullTrace = [];
+  final StringBuffer _reasonBuf = StringBuffer();
+
   /// Detects when the coordinator agent gets stuck repeating the same tool call
   /// (same name + args) across rounds/turns and escalates warn → block so the
   /// model breaks out instead of burning rounds. The round cap is the backstop.
@@ -175,10 +182,10 @@ class ProjectCoordinatorSession {
 
   /// A full OpenAI-shape conversation trace (system + history) for the training
   /// sink. [sys] is the system prompt used this turn.
-  List<Map<String, dynamic>> _traceMessages(String sys) => _sanitizeForWire([
+  List<Map<String, dynamic>> _traceMessages(String sys) => [
         {'role': 'system', 'content': sys},
-        ..._history,
-      ]);
+        ..._fullTrace,
+      ];
 
   /// Filter the full tool list to those active right now: every non-gated tool,
   /// plus the tools of any unlocked group, plus the `request_tools` meta-tool.
@@ -444,11 +451,14 @@ class ProjectCoordinatorSession {
     int maxToolRounds = 4,
   }) async* {
     _history.add({'role': 'user', 'content': userMessage});
+    _fullTrace.add({'role': 'user', 'content': userMessage});
+    _reasonBuf.clear();
     // If this turn fails we roll back to here so a failed/retried send never
     // leaves an orphan `user` message behind. Accumulating consecutive user
     // messages corrupts the chat template and makes the server reject (400) or
     // crash (empty 500) on subsequent turns.
     final rollbackTo = _history.length - 1;
+    final traceRollback = _fullTrace.length - 1;
 
     // Offer the plan tools whenever a plan store is available — not only when a
     // specific plan is open — so the coordinator can list/read/create plans in
@@ -518,12 +528,22 @@ class ProjectCoordinatorSession {
             buf.write(ev.text);
             yield ev; // forward live (do NOT also re-yield the full content below)
           } else if (ev is ChatReasoningDelta) {
+            _reasonBuf.write(ev.text); // capture thoughts for the training trace
             yield ev; // forward thinking tokens live; not part of the answer text
           } else if (ev is ChatStreamFinish) {
             toolCalls = ev.toolCalls;
           }
         }
         final contentStr = buf.toString();
+        // Record this round's reasoning into the export trace (before the
+        // assistant message it produced), then reset for the next round.
+        if (_reasonBuf.isNotEmpty) {
+          _fullTrace.add({
+            'role': 'thinking',
+            'content': _reasonBuf.toString().trim(),
+          });
+          _reasonBuf.clear();
+        }
         if (toolsDropped && round == 0) {
           onToolResult?.call(
             '(This model rejected tool-calling, so live task/plan actions are off for this reply.)',
@@ -533,7 +553,7 @@ class ProjectCoordinatorSession {
         // Record the assistant message in history. When there are tool calls and
         // no text, content must be null (not "") — servers reject empty-string
         // content alongside tool_calls.
-        _history.add({
+        final assistantEntry = <String, dynamic>{
           'role': 'assistant',
           'content': (toolCalls.isNotEmpty && contentStr.isEmpty)
               ? null
@@ -550,7 +570,9 @@ class ProjectCoordinatorSession {
                   },
                 },
             ],
-        });
+        };
+        _history.add(assistantEntry);
+        _fullTrace.add(Map<String, dynamic>.from(assistantEntry));
 
         if (toolCalls.isEmpty || executor == null) {
           if (executedTool) onTrace?.call(_traceMessages(lastSys));
@@ -593,6 +615,11 @@ class ProjectCoordinatorSession {
               'tool_call_id': call.id,
               'content': note,
             });
+            _fullTrace.add({
+              'role': 'tool',
+              'tool_call_id': call.id,
+              'content': note,
+            });
             continue;
           }
 
@@ -601,6 +628,11 @@ class ProjectCoordinatorSession {
             final note = _loopGuard.feedback(call.function.name, action);
             onToolResult?.call(note);
             _history.add({
+              'role': 'tool',
+              'tool_call_id': call.id,
+              'content': note,
+            });
+            _fullTrace.add({
               'role': 'tool',
               'tool_call_id': call.id,
               'content': note,
@@ -636,6 +668,11 @@ class ProjectCoordinatorSession {
             'tool_call_id': call.id,
             'content': body,
           });
+          _fullTrace.add({
+            'role': 'tool',
+            'tool_call_id': call.id,
+            'content': body,
+          });
         }
       }
     } catch (e) {
@@ -643,6 +680,10 @@ class ProjectCoordinatorSession {
       // tool messages) so the conversation stays well-formed for the next try.
       if (rollbackTo < _history.length)
         _history.removeRange(rollbackTo, _history.length);
+      if (traceRollback >= 0 && traceRollback < _fullTrace.length) {
+        _fullTrace.removeRange(traceRollback, _fullTrace.length);
+      }
+      _reasonBuf.clear();
       rethrow;
     }
 
@@ -668,12 +709,21 @@ class ProjectCoordinatorSession {
           wrapBuf.write(ev.text);
           yield ev;
         } else if (ev is ChatReasoningDelta) {
+          _reasonBuf.write(ev.text);
           yield ev;
         }
+      }
+      if (_reasonBuf.isNotEmpty) {
+        _fullTrace.add({
+          'role': 'thinking',
+          'content': _reasonBuf.toString().trim(),
+        });
+        _reasonBuf.clear();
       }
       final wrapStr = wrapBuf.toString();
       if (wrapStr.isNotEmpty) {
         _history.add({'role': 'assistant', 'content': wrapStr});
+        _fullTrace.add({'role': 'assistant', 'content': wrapStr});
       }
       if (executedTool) onTrace?.call(_traceMessages(wrapSys));
       yield ChatStreamFinish(
@@ -893,6 +943,8 @@ class ProjectCoordinatorSession {
 
   void clearHistory() {
     _history.clear();
+    _fullTrace.clear();
+    _reasonBuf.clear();
     _loopGuard.reset();
   }
 
