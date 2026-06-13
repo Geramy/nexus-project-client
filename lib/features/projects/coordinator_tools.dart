@@ -1913,10 +1913,17 @@ class CoordinatorToolExecutor {
     // are counted once so the draft appends after them.
     final existing = await db.getUserStoriesForProject(projectId);
     final created = <String, int>{}; // lowercased title → new story id
+    // Dedup key set (parent::title) seeded with what's already on the tree, so a
+    // re-draft of the same material doesn't pile up duplicate nodes.
+    final seen = <String>{
+      for (final s in existing)
+        '${s.parent_story_fk}::${s.title.trim().toLowerCase()}',
+    };
     final orderByParent = <int?, int>{
       parentId: existing.where((s) => s.parent_story_fk == parentId).length,
     };
     var made = 0;
+    var skipped = 0;
     for (final it in items) {
       final title = (it['title'] ?? '').toString().trim();
       if (title.isEmpty) continue;
@@ -1928,6 +1935,12 @@ class CoordinatorToolExecutor {
       final effectiveParent = parentTitle.isNotEmpty
           ? (created[parentTitle] ?? parentId)
           : parentId;
+      final dupeKey = '$effectiveParent::${title.toLowerCase()}';
+      if (!seen.add(dupeKey)) {
+        // Already on the tree (or earlier in this batch) — skip the duplicate.
+        skipped++;
+        continue;
+      }
       final order = orderByParent[effectiveParent] ?? 0;
       orderByParent[effectiveParent] = order + 1;
       final id = await db.createUserStory(
@@ -1948,7 +1961,9 @@ class CoordinatorToolExecutor {
         '${usedAi ? '(rephrased + nested into a tree)' : '(split straight from '
               'your text — titles are literal, so tidy/rephrase + nest them with '
               'update_user_story and move_user_story)'}'
-        '${parentId != null ? ' under #$parentId' : ''}. '
+        '${parentId != null ? ' under #$parentId' : ''}'
+        '${skipped > 0 ? ' (skipped $skipped duplicate'
+              '${skipped == 1 ? '' : 's'} already on the tree)' : ''}. '
         'Check the shape with list_user_stories; fix any nesting with '
         'move_user_story if needed.';
 
@@ -2038,8 +2053,20 @@ class CoordinatorToolExecutor {
       return 'add_user_story failed: parent story #$parentId not found.';
     }
     final kind = (args['kind'] as String? ?? 'story').trim();
-    // Append after existing siblings so creation order is the display order.
     final existing = await db.getUserStoriesForProject(projectId);
+    // Dedup: the discovery agent often re-issues a story it already added. If a
+    // sibling with the same (case-insensitive) title already exists under this
+    // parent, keep the existing one instead of creating a duplicate node.
+    final lower = title.toLowerCase();
+    for (final s in existing) {
+      if (s.parent_story_fk == parentId &&
+          s.title.trim().toLowerCase() == lower) {
+        return 'Story "${s.title}" (id: ${s.story_pk}) already exists here — '
+            'kept it, no duplicate created. Use update_user_story to refine it, '
+            'or add a DIFFERENT story.';
+      }
+    }
+    // Append after existing siblings so creation order is the display order.
     final siblingCount = existing
         .where((s) => s.parent_story_fk == parentId)
         .length;

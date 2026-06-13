@@ -25,6 +25,7 @@ const List<String> kAiRatingReasons = [
   'Not related to the topic',
   'Unreadable text',
   'Server unavailable',
+  'Ignored instruction',
 ];
 
 /// A compact 1–5 star rating row that sits beneath an AI message. Tapping a star

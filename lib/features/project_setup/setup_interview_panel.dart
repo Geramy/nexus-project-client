@@ -328,7 +328,11 @@ class _MessageView extends StatelessWidget {
       case SetupMsgKind.system:
         return _NoteRow(icon: Icons.check_circle_outline, text: msg.text);
       case SetupMsgKind.question:
-        return _QuestionCard(msg: msg, onAnswer: onAnswer);
+        return _QuestionCard(
+          msg: msg,
+          onAnswer: onAnswer,
+          projectId: projectId,
+        );
       case SetupMsgKind.image:
         return _ImageBubble(b64: msg.imageB64, caption: msg.text);
     }
@@ -586,10 +590,17 @@ class _NoteRow extends StatelessWidget {
 /// the user can expand to click instead. Once answered (typed OR picked) it
 /// locks and shows what happened, so it's never lost by clicking away.
 class _QuestionCard extends ConsumerStatefulWidget {
-  const _QuestionCard({required this.msg, required this.onAnswer});
+  const _QuestionCard({
+    required this.msg,
+    required this.onAnswer,
+    this.projectId,
+  });
 
   final SetupMsg msg;
   final void Function(SetupMsg msg, List<String> picks) onAnswer;
+
+  /// For the star-rating row under the question (Setup AI).
+  final int? projectId;
 
   @override
   ConsumerState<_QuestionCard> createState() => _QuestionCardState();
@@ -696,6 +707,14 @@ class _QuestionCardState extends ConsumerState<_QuestionCard> {
               if (optionsOpen) _buildOptions(theme, msg),
             ],
           ],
+          // Rate the QUESTION the host asked (Setup AI training feedback).
+          if (widget.projectId != null && msg.text.trim().isNotEmpty)
+            RatedMessageBar(
+              projectId: widget.projectId!,
+              aiKind: 'setup',
+              conversationId: 'setup:${widget.projectId!}',
+              messageRef: aiMessageRef(msg.text),
+            ),
         ],
       ),
     );

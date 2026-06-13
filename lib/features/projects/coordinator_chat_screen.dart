@@ -112,13 +112,14 @@ class _ProjectCoordinatorChatScreenState
   /// "generate diagram" button). Empty model id → router 502.
   String? _imageModel;
 
-  /// Rating-feedback context: which AI this chat belongs to and the conversation
-  /// id its traces/ratings key on — MUST match the `onTrace` ids above so a
-  /// rating lines up with the exported trace.
-  String get _ratingAiKind => widget.discoveryMode ? 'stories' : 'coordinator';
-  String get _ratingConversationId => widget.discoveryMode
-      ? 'discovery:${widget.projectId}'
-      : 'coordinator:${widget.projectId}:${_sessionId ?? 0}';
+  /// Rating-feedback context for the coordinator/stories chat. STABLE across the
+  /// discovery → normal-coordinator transition (it's the same chat with the same
+  /// persisted messages) so a rating still loads after reopening — the old id
+  /// switched from `discovery:<pid>` to `coordinator:<pid>:<sessionId>` once tasks
+  /// were generated, orphaning the rating. The exporter matches ratings to
+  /// messages by content hash, so this id only needs to be consistent.
+  String get _ratingAiKind => 'stories';
+  String get _ratingConversationId => 'stories:${widget.projectId}';
   CoordinatorDuplexVoiceSession?
   _duplexVoiceSession; // The one and only voice path for the Coordinator call (duplex VAD-driven, lemonade_mobile style)
   AudioRecorderService?

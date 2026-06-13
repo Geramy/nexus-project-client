@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.14.26+61
+version: 1.14.27+62
 
 environment:
   sdk: ^3.11.5
@@ -60,7 +60,11 @@ dependencies:
   sqlite3_flutter_libs: ^0.5.0  # for mobile/desktop native SQLite
   sqlite3: ^2.4.0               # direct: per-project SQLite-backed virtual disk (.nxtprj)
   git2dart: ^0.4.0              # libgit2 (FFI) — git engine
-  git2dart_binaries: ^1.10.3    # raw libgit2 FFI symbols (custom ODB/refdb backend)
+  git2dart_binaries: 1.10.3     # PINNED: 1.10.4 resolves its native libs via
+                                # Isolate.resolvePackageUri, which returns null
+                                # inside a compiled Flutter app → runtime "Unable
+                                # to resolve git2dart_binaries package location".
+                                # raw libgit2 FFI symbols (custom ODB/refdb backend)
   ffi: ^2.1.0                   # calloc/free for the custom backend structs
   docker2: ^6.1.0               # container-based build/CI execution
   path_provider: ^2.1.4

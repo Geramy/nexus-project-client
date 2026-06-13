@@ -1978,6 +1978,16 @@ class NexusDatabase extends _$NexusDatabase {
       'updated_at TEXT NOT NULL, '
       'UNIQUE(conversation_id, message_ref))',
     );
+    // Migrate older coordinator/discovery ratings to the STABLE stories id so
+    // they survive the discovery → coordinator phase switch (the id used to flip
+    // from `discovery:<pid>` to `coordinator:<pid>:<sessionId>`, orphaning them).
+    // Idempotent — already-stable rows are excluded by the WHERE.
+    await customStatement(
+      "UPDATE ai_ratings SET ai_kind = 'stories', "
+      "conversation_id = 'stories:' || project_fk "
+      "WHERE (ai_kind = 'stories' OR ai_kind = 'coordinator') "
+      "AND conversation_id <> 'stories:' || project_fk",
+    );
   }
 
   /// Upsert one conversation trace, keeping the LONGEST version — re-posting a

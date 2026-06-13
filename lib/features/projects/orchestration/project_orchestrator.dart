@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
+import 'package:nexus_projects_client/core/providers/worker_capture_provider.dart';
 import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart';
 import 'package:nexus_projects_client/infrastructure/inference/inference_backend_factory.dart'
     show backendForServer;
@@ -585,6 +586,21 @@ class ProjectOrchestrator {
             // enough to finish in one turn, so give the worker more room before
             // the turn's forced no-tools wrap-up (which can't submit).
             maxToolRounds: 8,
+            // Persist the worker's full trace (tool calls + args + results) per
+            // task so it can be exported from Account → Export Tracking — but
+            // ONLY when the user has toggled worker capture on (it's a lot of
+            // data). Gated before the expensive jsonEncode so OFF costs nothing.
+            onTrace: (messages) {
+              if (!ref.read(workerCaptureProvider)) return;
+              unawaited(
+                _db.upsertTrainingTrace(
+                  projectPk: projectId,
+                  aiKind: 'worker',
+                  conversationId: 'worker:$projectId:${task.task_pk}',
+                  messagesJson: jsonEncode(messages),
+                ),
+              );
+            },
             onToolResult: (r) {
               sawToolActivity = true;
               // The session emits this exact note when the backend rejected
