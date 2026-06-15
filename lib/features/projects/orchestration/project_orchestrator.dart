@@ -142,6 +142,14 @@ class ProjectOrchestrator {
   static const Duration _buildPollInterval = Duration(seconds: 3);
   static const Duration _buildTimeout = Duration(minutes: 30);
 
+  /// Lines from a CI log worth handing the worker on a red gate: analyzer/
+  /// compiler diagnostics (`error -`, `warning -`, `info -`), `file.dart:line`
+  /// references, the analyze summary, and test/exception failures.
+  static final RegExp _diagLineRe = RegExp(
+    r'(\b(error|warning|info)\b\s*[-:]|\.dart:\d+|\bissues? found\b|\bError:|\bFAILED\b|\bException\b)',
+    caseSensitive: false,
+  );
+
   ProjectOrchestrator(this.ref, this.projectId);
 
   NexusDatabase get _db => ref.read(nexusDatabaseProvider);
@@ -899,7 +907,7 @@ class ProjectOrchestrator {
       debugPrint(
         '[Orchestrator p$projectId] task ${task.task_pk}: build failed to start: $e',
       );
-      await _db.recordTaskBuildOutcome(task.task_pk, passed: false);
+      await _failBuildGate(task, reason: 'The build run failed to start: $e');
       return;
     }
 
@@ -914,14 +922,81 @@ class ProjectOrchestrator {
         debugPrint(
           '[Orchestrator p$projectId] task ${task.task_pk}: build run $runPk → ${status.wire}.',
         );
-        await _db.recordTaskBuildOutcome(task.task_pk, passed: passed);
+        if (passed) {
+          await _db.recordTaskBuildOutcome(task.task_pk, passed: true);
+        } else {
+          await _failBuildGate(
+            task,
+            runPk: runPk,
+            reason:
+                'The build gate (${status.wire}) failed on branch "$branch". '
+                'Fix EVERY error/warning listed below, then resubmit.',
+          );
+        }
         return;
       }
     }
     debugPrint(
       '[Orchestrator p$projectId] task ${task.task_pk}: build run $runPk did not finish in time; failing the gate.',
     );
+    await _failBuildGate(
+      task,
+      runPk: runPk,
+      reason:
+          'The build run did not finish within ${_buildTimeout.inMinutes} '
+          'minutes and was treated as failed.',
+    );
+  }
+
+  /// Send a task back to the board for a red build gate, FIRST attaching the
+  /// failing run's full diagnostics (every analyze/compile error, not just the
+  /// first) to the task description — so the worker fixes them ALL in one pass
+  /// instead of one-error-per-resubmit.
+  Future<void> _failBuildGate(Task task, {int? runPk, String? reason}) async {
+    try {
+      final errors = runPk != null ? await _collectBuildErrors(runPk) : '';
+      final detail = [
+        if (reason != null && reason.trim().isNotEmpty) reason.trim(),
+        if (errors.isNotEmpty) errors,
+      ].join('\n\n').trim();
+      if (detail.isNotEmpty) {
+        await _db.attachTaskBuildFailure(task.task_pk, detail);
+      }
+    } catch (e) {
+      debugPrint(
+        '[Orchestrator p$projectId] task ${task.task_pk}: could not attach build errors: $e',
+      );
+    }
     await _db.recordTaskBuildOutcome(task.task_pk, passed: false);
+  }
+
+  /// Pull every step log of [runPk] and return the diagnostic lines worth handing
+  /// the worker — analyzer/compiler errors & warnings, test failures, file:line
+  /// references — or the log tail when nothing matches the known shapes. Capped
+  /// so a noisy log can't bloat the task description and the next prompt.
+  Future<String> _collectBuildErrors(int runPk) async {
+    final buf = StringBuffer();
+    final jobs = await _db.getCiJobsForRun(runPk);
+    for (final job in jobs) {
+      final steps = await _db.getCiStepsForJob(job.ci_job_pk);
+      for (final step in steps) {
+        final log = step.logText.trim();
+        if (log.isNotEmpty) buf.writeln(log);
+      }
+    }
+    final lines = buf.toString().split('\n');
+    final hits = lines
+        .where((l) => _diagLineRe.hasMatch(l))
+        .map((l) => l.trimRight())
+        .where((l) => l.isNotEmpty)
+        .toList();
+    final picked = hits.isNotEmpty
+        ? hits
+        : lines.reversed.take(40).toList().reversed.toList();
+    var out = picked.join('\n').trim();
+    const cap = 4000;
+    if (out.length > cap) out = '…\n${out.substring(out.length - cap)}';
+    return out;
   }
 
   // ── Merge stage ───────────────────────────────────────────────────────

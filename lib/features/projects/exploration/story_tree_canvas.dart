@@ -155,6 +155,9 @@ class _TaskProgressBar extends ConsumerWidget {
                 height: 12,
                 color: track,
                 child: Row(
+                  // Stretch segments to the full 12px height — a childless
+                  // ColoredBox is otherwise 0-tall and the bar reads as empty.
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (done > 0)
                       Expanded(flex: done, child: ColoredBox(color: nx.success)),

@@ -35,12 +35,16 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
   @override
   Widget build(BuildContext context) {
     final projectId = ref.watch(currentProjectIdProvider);
-    final fsAsync = ref.watch(workspaceFsProvider(projectId));
+    final viewBranch = ref.watch(viewBranchProvider(projectId));
+    final fsAsync = ref.watch(viewWorkspaceFsProvider(projectId));
     ref.watch(workspaceRevisionProvider(projectId)); // re-walk on mutations
     final git =
         ref.watch(gitStatusProvider(projectId)).valueOrNull ??
         GitStatusSnapshot.noRepo;
     final selectedPath = ref.watch(selectedWorkspaceFileProvider(projectId));
+    // When viewing a task branch read-only, the live git status (which tracks
+    // the working tree) doesn't apply — don't paint stale change badges.
+    final treeGit = viewBranch == null ? git : GitStatusSnapshot.noRepo;
 
     return fsAsync.when(
       loading: () =>
@@ -49,12 +53,15 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
       data: (fs) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _toolbar(context, projectId),
+          _toolbar(context, projectId, viewBranch),
           const Divider(height: 1),
-          _gitHeader(context, git),
-          _gitActions(context, projectId, git),
+          _branchViewBar(context, projectId, viewBranch),
+          if (viewBranch == null) ...[
+            _gitHeader(context, git),
+            _gitActions(context, projectId, git),
+          ],
           const Divider(height: 1),
-          Expanded(child: _tree(context, fs, projectId, git, selectedPath)),
+          Expanded(child: _tree(context, fs, projectId, treeGit, selectedPath)),
           const Divider(height: 1),
           _footer(fs),
         ],
@@ -64,7 +71,8 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
 
   // ── Toolbar ──────────────────────────────────────────────────────
 
-  Widget _toolbar(BuildContext context, int projectId) {
+  Widget _toolbar(BuildContext context, int projectId, String? viewBranch) {
+    final readOnly = viewBranch != null;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 4, 4),
       child: Row(
@@ -79,15 +87,17 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
           ),
           IconButton(
             icon: const Icon(Icons.note_add_outlined, size: 18),
-            tooltip: 'New file',
-            onPressed: () =>
-                _create(context, projectId, parent: '/', isFolder: false),
+            tooltip: readOnly ? 'Read-only branch view' : 'New file',
+            onPressed: readOnly
+                ? null
+                : () => _create(context, projectId, parent: '/', isFolder: false),
           ),
           IconButton(
             icon: const Icon(Icons.create_new_folder_outlined, size: 18),
-            tooltip: 'New folder',
-            onPressed: () =>
-                _create(context, projectId, parent: '/', isFolder: true),
+            tooltip: readOnly ? 'Read-only branch view' : 'New folder',
+            onPressed: readOnly
+                ? null
+                : () => _create(context, projectId, parent: '/', isFolder: true),
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, size: 18),
@@ -167,6 +177,86 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
       messenger.hideCurrentSnackBar();
       messenger.showSnackBar(SnackBar(content: Text('Export failed: $e')));
     }
+  }
+
+  // ── Branch view selector (read-only "see the agent's work") ──────
+
+  /// A picker that switches the browser between the LIVE workspace and a
+  /// read-only snapshot of any branch (e.g. a running task's `task/<id>`), plus
+  /// a banner + refresh while a branch is being viewed. This is how in-progress
+  /// agent work becomes visible before it's merged to main.
+  Widget _branchViewBar(
+    BuildContext context,
+    int projectId,
+    String? viewBranch,
+  ) {
+    final branches = ref.watch(branchListProvider(projectId)).valueOrNull ?? [];
+    final scheme = Theme.of(context).colorScheme;
+    final viewing = viewBranch != null;
+
+    return Container(
+      color: viewing ? scheme.tertiaryContainer.withValues(alpha: 0.4) : null,
+      padding: const EdgeInsets.fromLTRB(12, 4, 8, 4),
+      child: Row(
+        children: [
+          Icon(
+            viewing ? Icons.visibility_outlined : Icons.account_tree_outlined,
+            size: 15,
+            color: viewing ? scheme.onTertiaryContainer : null,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            'View:',
+            style: TextStyle(
+              fontSize: 12,
+              color: viewing ? scheme.onTertiaryContainer : null,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: DropdownButton<String?>(
+              value: viewBranch,
+              isDense: true,
+              isExpanded: true,
+              underline: const SizedBox.shrink(),
+              style: TextStyle(fontSize: 12, color: scheme.onSurface),
+              items: [
+                const DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('Live workspace (editable)'),
+                ),
+                for (final b in branches)
+                  DropdownMenuItem<String?>(
+                    value: b,
+                    child: Text(
+                      'Branch: $b  (read-only)',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: (b) {
+                // Drop any open file so the editor reloads from the new source.
+                ref
+                        .read(selectedWorkspaceFileProvider(projectId).notifier)
+                        .state =
+                    null;
+                ref.read(viewBranchProvider(projectId).notifier).state = b;
+              },
+            ),
+          ),
+          if (viewing)
+            IconButton(
+              icon: const Icon(Icons.refresh, size: 16),
+              tooltip: 'Refresh — pick up new commits',
+              visualDensity: VisualDensity.compact,
+              onPressed: () =>
+                  ref
+                      .read(workspaceRevisionProvider(projectId).notifier)
+                      .state++,
+            ),
+        ],
+      ),
+    );
   }
 
   // ── Git header (branch + change count) ───────────────────────────
@@ -951,7 +1041,8 @@ class _FileEditorPanelState extends ConsumerState<FileEditorPanel> {
   Widget build(BuildContext context) {
     final projectId = ref.watch(currentProjectIdProvider);
     final selectedPath = ref.watch(selectedWorkspaceFileProvider(projectId));
-    final fsAsync = ref.watch(workspaceFsProvider(projectId));
+    final readOnly = ref.watch(viewBranchProvider(projectId)) != null;
+    final fsAsync = ref.watch(viewWorkspaceFsProvider(projectId));
     final rev = ref.watch(workspaceRevisionProvider(projectId));
 
     // Auto-load on selection change, or when the workspace mutated underneath
@@ -984,7 +1075,7 @@ class _FileEditorPanelState extends ConsumerState<FileEditorPanel> {
       loading: () =>
           const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       error: (e, _) => Center(child: Text('Workspace error: $e')),
-      data: (fs) => _editorUi(context, fs, projectId, selectedPath),
+      data: (fs) => _editorUi(context, fs, projectId, selectedPath, readOnly),
     );
   }
 
@@ -993,6 +1084,7 @@ class _FileEditorPanelState extends ConsumerState<FileEditorPanel> {
     Workspace fs,
     int projectId,
     String path,
+    bool readOnly,
   ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1020,7 +1112,16 @@ class _FileEditorPanelState extends ConsumerState<FileEditorPanel> {
                   padding: EdgeInsets.only(right: 8),
                   child: Text('●', style: TextStyle(color: Colors.orange)),
                 ),
-              if (!_binaryView)
+              if (readOnly)
+                Text(
+                  'read-only',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Theme.of(context).colorScheme.tertiary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                )
+              else if (!_binaryView)
                 FilledButton.icon(
                   onPressed: _dirty ? () => _save(fs, projectId) : null,
                   icon: const Icon(Icons.save, size: 16),
@@ -1039,13 +1140,13 @@ class _FileEditorPanelState extends ConsumerState<FileEditorPanel> {
                     style: TextStyle(color: Colors.grey),
                   ),
                 )
-              : _codeEditor(context),
+              : _codeEditor(context, readOnly),
         ),
       ],
     );
   }
 
-  Widget _codeEditor(BuildContext context) {
+  Widget _codeEditor(BuildContext context, bool readOnly) {
     final brightness = Theme.of(context).brightness;
     return Container(
       color: highlightBackground(brightness),
@@ -1053,6 +1154,7 @@ class _FileEditorPanelState extends ConsumerState<FileEditorPanel> {
         data: CodeThemeData(styles: highlightThemeFor(brightness)),
         child: CodeField(
           controller: _editor,
+          readOnly: readOnly,
           expands: true,
           wrap: false,
           background: highlightBackground(brightness),

@@ -1234,6 +1234,20 @@ class NxtprjGitEngine {
     return decodeUtf8Lossy(_readBlobBytes(oidHex));
   }
 
+  /// path→blobOid map of [branch]'s tip commit (paths are workspace-relative
+  /// without a leading slash). Empty if the branch/ref doesn't exist. Read-only:
+  /// reads the object DB without touching any working tree — safe to call while
+  /// the orchestrator is committing on the same repo. Backs the Code browser's
+  /// read-only "view a task branch" snapshot.
+  Future<Map<String, String>> treeAt(String branch) async {
+    final tip = _resolveOid('refs/heads/$branch');
+    if (tip == null) return const {};
+    return _flattenHeadTree(tip);
+  }
+
+  /// Raw bytes of a blob by oid hex (for the branch snapshot file viewer).
+  Uint8List blobBytesByOid(String oidHex) => _readBlobBytes(oidHex);
+
   /// File-level diff for a commit (vs its first parent; vs empty tree for the
   /// root commit). Returns per-path entries used by the History panel.
   Future<List<CommitFileChange>> commitDiff(String commitOidHex) async {

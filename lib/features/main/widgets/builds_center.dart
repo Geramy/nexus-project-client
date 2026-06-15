@@ -9,7 +9,7 @@ import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/features/builds/ci_run_tree.dart';
 import 'package:nexus_projects_client/infrastructure/build/build_service_provider.dart';
 import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart'
-    show CiRun;
+    show CiRun, NexusDatabase, Project;
 import 'package:nexus_projects_client/infrastructure/workspace/workspace_provider.dart';
 
 /// Builds & CI center: a client-scoped, live view of every CI run (Docker
@@ -22,6 +22,15 @@ class BuildsCenter extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final db = ref.watch(nexusDatabaseProvider);
     final currentClientId = ref.watch(currentClientIdProvider);
+    final currentProjectId = ref.watch(currentProjectIdProvider);
+    // Project names so runs can be grouped under their project (the stream only
+    // carries project_fk); falls back to "Project #id" until names load.
+    final projectNames = {
+      for (final p
+          in ref.watch(projectsForClientProvider(currentClientId)).valueOrNull ??
+              const <Project>[])
+        p.project_pk: p.name,
+    };
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -103,9 +112,27 @@ class BuildsCenter extends ConsumerWidget {
                         'No builds or CI runs yet. Use "New run" to start one.',
                   );
                 }
+                // Group by project, preserving the stream's newest-first order
+                // so projects sort by most-recent activity.
+                final byProject = <int, List<CiRun>>{};
+                for (final r in runs) {
+                  (byProject[r.project_fk ?? -1] ??= <CiRun>[]).add(r);
+                }
+                final projectIds = byProject.keys.toList();
                 return ListView.builder(
-                  itemCount: runs.length,
-                  itemBuilder: (context, i) => CiRunCard(db: db, run: runs[i]),
+                  itemCount: projectIds.length,
+                  itemBuilder: (context, i) {
+                    final pid = projectIds[i];
+                    return _ProjectBuildsGroup(
+                      db: db,
+                      projectName: pid < 0
+                          ? 'Unassigned'
+                          : (projectNames[pid] ?? 'Project #$pid'),
+                      runs: byProject[pid]!,
+                      // Open the project you're working in; collapse the rest.
+                      initiallyExpanded: pid == currentProjectId,
+                    );
+                  },
                 );
               },
             ),
@@ -175,6 +202,60 @@ class BuildsCenter extends ConsumerWidget {
         SnackBar(content: Text('Failed to start run: $e')),
       );
     }
+  }
+}
+
+/// One collapsible group per project. Docker builds are shown directly; the
+/// noisier CI workflow runs are tucked behind a "Reveal build tests" toggle so
+/// the list isn't clogged with CI runs.
+class _ProjectBuildsGroup extends StatelessWidget {
+  final NexusDatabase db;
+  final String projectName;
+  final List<CiRun> runs;
+  final bool initiallyExpanded;
+
+  const _ProjectBuildsGroup({
+    required this.db,
+    required this.projectName,
+    required this.runs,
+    required this.initiallyExpanded,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final builds =
+        runs.where((r) => r.kind == 'dockerBuild').toList(growable: false);
+    final tests =
+        runs.where((r) => r.kind == 'workflow').toList(growable: false);
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      child: ExpansionTile(
+        initiallyExpanded: initiallyExpanded,
+        leading: const Icon(Icons.folder_outlined),
+        title: Text(
+          projectName,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Text(
+          '${builds.length} build${builds.length == 1 ? '' : 's'}'
+          ' · ${tests.length} CI run${tests.length == 1 ? '' : 's'}',
+        ),
+        childrenPadding: const EdgeInsets.only(bottom: 8),
+        children: [
+          for (final r in builds) CiRunCard(db: db, run: r),
+          if (tests.isNotEmpty)
+            ExpansionTile(
+              leading: const Icon(Icons.science_outlined, size: 20),
+              title: Text('Reveal build tests (${tests.length})'),
+              childrenPadding: const EdgeInsets.only(bottom: 4),
+              children: [
+                for (final r in tests) CiRunCard(db: db, run: r),
+              ],
+            ),
+        ],
+      ),
+    );
   }
 }
 

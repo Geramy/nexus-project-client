@@ -511,16 +511,22 @@ class _AddTagDialogState extends State<_AddTagDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (vocab.isNotEmpty)
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final v in vocab)
-                    ActionChip(
-                      label: Text(v),
-                      onPressed: () => Navigator.of(context).pop(v),
-                    ),
-                ],
+              // Scroll the choices when there are more than fit the dialog,
+              // instead of overflowing. The text field below stays visible.
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final v in vocab)
+                        ActionChip(
+                          label: Text(v),
+                          onPressed: () => Navigator.of(context).pop(v),
+                        ),
+                    ],
+                  ),
+                ),
               ),
             if (allowsFreeText) ...[
               if (vocab.isNotEmpty) const SizedBox(height: 12),

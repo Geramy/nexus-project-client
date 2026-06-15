@@ -1046,13 +1046,13 @@ class CoordinatorTools {
           'parameters': {
             'type': 'object',
             'properties': {
-              'dir_path': {
+              'path': {
                 'type': 'string',
                 'description':
                     'Workspace directory path, e.g. "/" or "/src/utils".',
               },
             },
-            'required': ['dir_path'],
+            'required': ['path'],
           },
         },
       },
@@ -1065,17 +1065,17 @@ class CoordinatorTools {
           'parameters': {
             'type': 'object',
             'properties': {
-              'pattern': {
+              'query': {
                 'type': 'string',
                 'description': 'The exact text to search for.',
               },
-              'dir_path': {
+              'path': {
                 'type': 'string',
                 'description':
                     'Subfolder to search within (defaults to the workspace root "/").',
               },
             },
-            'required': ['pattern'],
+            'required': ['query'],
           },
         },
       },
@@ -1088,13 +1088,13 @@ class CoordinatorTools {
           'parameters': {
             'type': 'object',
             'properties': {
-              'file_path': {
+              'path': {
                 'type': 'string',
                 'description': 'Workspace file path.',
               },
-              'pattern': {'type': 'string', 'description': 'The text to find.'},
+              'query': {'type': 'string', 'description': 'The text to find.'},
             },
-            'required': ['file_path', 'pattern'],
+            'required': ['path', 'query'],
           },
         },
       },
@@ -1107,7 +1107,7 @@ class CoordinatorTools {
           'parameters': {
             'type': 'object',
             'properties': {
-              'file_path': {
+              'path': {
                 'type': 'string',
                 'description': 'Workspace file path.',
               },
@@ -1121,7 +1121,7 @@ class CoordinatorTools {
                     'Last line to read (capped to start_line + 200).',
               },
             },
-            'required': ['file_path', 'start_line', 'end_line'],
+            'required': ['path', 'start_line', 'end_line'],
           },
         },
       },
@@ -1134,7 +1134,7 @@ class CoordinatorTools {
           'parameters': {
             'type': 'object',
             'properties': {
-              'file_path': {
+              'path': {
                 'type': 'string',
                 'description': 'Workspace path and file name to create.',
               },
@@ -1143,7 +1143,7 @@ class CoordinatorTools {
                 'description': 'The full text to populate the new file with.',
               },
             },
-            'required': ['file_path', 'content'],
+            'required': ['path', 'content'],
           },
         },
       },
@@ -1156,7 +1156,7 @@ class CoordinatorTools {
           'parameters': {
             'type': 'object',
             'properties': {
-              'file_path': {
+              'path': {
                 'type': 'string',
                 'description': 'Target workspace file path.',
               },
@@ -1169,7 +1169,7 @@ class CoordinatorTools {
                 'description': 'The replacement text block.',
               },
             },
-            'required': ['file_path', 'old_text', 'new_text'],
+            'required': ['path', 'old_text', 'new_text'],
           },
         },
       },
@@ -1282,8 +1282,8 @@ class CoordinatorTools {
             'narrative': {
               'type': 'string',
               'description':
-                  'The story in "As a <role>, I want <goal>, so that '
-                  '<benefit>" form.',
+                  'The story in "I want <goal>, so that <benefit>" form — do '
+                  'NOT add an "As a <role>" prefix.',
             },
             'acceptance_criteria': {
               'type': 'string',
@@ -1669,6 +1669,34 @@ class CoordinatorToolExecutor {
   /// Tool args arrive as JSON; ids may be numbers or numeric strings.
   int? _asInt(dynamic v) =>
       v is int ? v : (v is num ? v.toInt() : int.tryParse('${v ?? ''}'));
+
+  // Models drift on parameter names (Claude's native tools use file_path/pattern;
+  // our schemas use path/query). Accept either so a stray alias never fails a
+  // tool call — keeps the loop-guard from burning turns on retries.
+  String _argPath(Map<String, dynamic> args) =>
+      (args['path'] ?? args['file_path'] ?? args['dir_path'] ?? '')
+          .toString()
+          .trim();
+
+  String _argQuery(Map<String, dynamic> args) =>
+      (args['query'] ?? args['pattern'] ?? '').toString().trim();
+
+  // Story narratives drop the "As a <role>," prefix — keep just
+  // "I want …, so that …". The model still emits the role out of habit, so
+  // strip it here as a guarantee the user never sees "As an analyst…" on
+  // every story.
+  static final RegExp _rolePrefixRe = RegExp(
+    r'^\s*as an?\b[^,]{0,40},\s*',
+    caseSensitive: false,
+  );
+  String _stripRolePrefix(String narrative) {
+    final s = narrative.trim();
+    final m = _rolePrefixRe.firstMatch(s);
+    if (m == null) return s;
+    final rest = s.substring(m.end);
+    if (rest.isEmpty) return s;
+    return rest[0].toUpperCase() + rest.substring(1);
+  }
 
   Future<String> execute({
     required String name,
@@ -2075,7 +2103,7 @@ class CoordinatorToolExecutor {
         project_fk: projectId,
         parent_story_fk: Value(parentId),
         title: title,
-        narrative: Value((args['narrative'] as String? ?? '').trim()),
+        narrative: Value(_stripRolePrefix(args['narrative'] as String? ?? '')),
         acceptanceCriteria: Value(
           (args['acceptance_criteria'] as String?)?.trim().isEmpty ?? true
               ? null
@@ -2157,7 +2185,7 @@ class CoordinatorToolExecutor {
       UserStoriesCompanion(
         title: s('title') != null ? Value(s('title')!) : const Value.absent(),
         narrative: s('narrative') != null
-            ? Value(s('narrative')!)
+            ? Value(_stripRolePrefix(s('narrative')!))
             : const Value.absent(),
         acceptanceCriteria: s('acceptance_criteria') != null
             ? Value(s('acceptance_criteria'))
@@ -2836,8 +2864,8 @@ class CoordinatorToolExecutor {
 
   Future<String> _listFiles(Map<String, dynamic> args) async {
     if (workspace == null) return 'File access is unavailable in this context.';
-    final path = (args['path'] as String?)?.trim();
-    final dir = (path == null || path.isEmpty) ? '/' : path;
+    final path = _argPath(args);
+    final dir = path.isEmpty ? '/' : path;
     try {
       final entries = await workspace!.list(dir);
       if (entries.isEmpty) return 'Directory "$dir" is empty.';
@@ -2855,7 +2883,7 @@ class CoordinatorToolExecutor {
 
   Future<String> _readFile(Map<String, dynamic> args) async {
     if (workspace == null) return 'File access is unavailable in this context.';
-    final path = (args['path'] as String? ?? '').trim();
+    final path = _argPath(args);
     if (path.isEmpty) return 'read_file failed: path is required.';
     try {
       if (await workspace!.isProbablyBinary(path)) {
@@ -2870,7 +2898,7 @@ class CoordinatorToolExecutor {
 
   Future<String> _writeFile(Map<String, dynamic> args) async {
     if (workspace == null) return 'File access is unavailable in this context.';
-    final path = (args['path'] as String? ?? '').trim();
+    final path = _argPath(args);
     final content = args['content'] as String?;
     if (path.isEmpty || content == null)
       return 'write_file failed: path and content are required.';
@@ -2887,7 +2915,7 @@ class CoordinatorToolExecutor {
 
   Future<String> _createDirectory(Map<String, dynamic> args) async {
     if (workspace == null) return 'File access is unavailable in this context.';
-    final path = (args['path'] as String? ?? '').trim();
+    final path = _argPath(args);
     if (path.isEmpty) return 'create_directory failed: path is required.';
     try {
       await workspace!.createDirectory(path);
@@ -2917,7 +2945,7 @@ class CoordinatorToolExecutor {
 
   Future<String> _deletePath(Map<String, dynamic> args) async {
     if (workspace == null) return 'File access is unavailable in this context.';
-    final path = (args['path'] as String? ?? '').trim();
+    final path = _argPath(args);
     if (path.isEmpty) return 'delete_path failed: path is required.';
     final busy = _fileBusy(path);
     if (busy != null) return busy;
@@ -2933,7 +2961,7 @@ class CoordinatorToolExecutor {
 
   Future<String> _deleteFile(Map<String, dynamic> args) async {
     if (workspace == null) return 'File access is unavailable in this context.';
-    final path = (args['path'] as String? ?? '').trim();
+    final path = _argPath(args);
     if (path.isEmpty) return 'delete_file failed: path is required.';
     final busy = _fileBusy(path);
     if (busy != null) return busy;
@@ -2953,7 +2981,7 @@ class CoordinatorToolExecutor {
 
   Future<String> _deleteFolder(Map<String, dynamic> args) async {
     if (workspace == null) return 'File access is unavailable in this context.';
-    final path = (args['path'] as String? ?? '').trim();
+    final path = _argPath(args);
     if (path.isEmpty) return 'delete_folder failed: path is required.';
     try {
       if (!await workspace!.exists(path))
@@ -2971,8 +2999,8 @@ class CoordinatorToolExecutor {
 
   Future<String> _listDirectory(Map<String, dynamic> args) async {
     if (workspace == null) return 'File access is unavailable in this context.';
-    final path = (args['path'] as String?)?.trim();
-    final dir = (path == null || path.isEmpty) ? '/' : path;
+    final path = _argPath(args);
+    final dir = path.isEmpty ? '/' : path;
     try {
       final entries = await workspace!.list(dir);
       if (entries.isEmpty) return 'Directory "$dir" is empty.';
@@ -2988,10 +3016,10 @@ class CoordinatorToolExecutor {
 
   Future<String> _searchDirectory(Map<String, dynamic> args) async {
     if (workspace == null) return 'File access is unavailable in this context.';
-    final query = (args['query'] as String? ?? '').trim();
+    final query = _argQuery(args);
     if (query.isEmpty) return 'search_directory failed: query is required.';
-    final path = (args['path'] as String?)?.trim();
-    final root = (path == null || path.isEmpty) ? '/' : path;
+    final path = _argPath(args);
+    final root = path.isEmpty ? '/' : path;
     final maxResults = _asInt(args['max_results']) ?? 100;
     try {
       final entries = await workspace!.walk(from: root);
@@ -3023,8 +3051,8 @@ class CoordinatorToolExecutor {
 
   Future<String> _searchFileContent(Map<String, dynamic> args) async {
     if (workspace == null) return 'File access is unavailable in this context.';
-    final path = (args['path'] as String? ?? '').trim();
-    final query = (args['query'] as String? ?? '').trim();
+    final path = _argPath(args);
+    final query = _argQuery(args);
     if (path.isEmpty || query.isEmpty) {
       return 'search_file_content failed: path and query are required.';
     }
@@ -3049,7 +3077,7 @@ class CoordinatorToolExecutor {
 
   Future<String> _readFileChunk(Map<String, dynamic> args) async {
     if (workspace == null) return 'File access is unavailable in this context.';
-    final path = (args['path'] as String? ?? '').trim();
+    final path = _argPath(args);
     if (path.isEmpty) return 'read_file_chunk failed: path is required.';
     final startLine = _asInt(args['start_line']) ?? 1;
     final endLineArg = _asInt(args['end_line']);
@@ -3080,7 +3108,7 @@ class CoordinatorToolExecutor {
 
   Future<String> _createFile(Map<String, dynamic> args) async {
     if (workspace == null) return 'File access is unavailable in this context.';
-    final path = (args['path'] as String? ?? '').trim();
+    final path = _argPath(args);
     final content = args['content'] as String? ?? '';
     if (path.isEmpty) return 'create_file failed: path is required.';
     final busy = _fileBusy(path);
@@ -3098,7 +3126,7 @@ class CoordinatorToolExecutor {
 
   Future<String> _editFile(Map<String, dynamic> args) async {
     if (workspace == null) return 'File access is unavailable in this context.';
-    final path = (args['path'] as String? ?? '').trim();
+    final path = _argPath(args);
     final oldText = args['old_text'] as String?;
     final newText = args['new_text'] as String?;
     if (path.isEmpty || oldText == null || newText == null) {
@@ -3367,12 +3395,27 @@ class CoordinatorToolExecutor {
       return 'submit_verdict failed: verdict must be "pass" or "fail".';
     }
     final passed = verdict == 'pass';
-    await db.recordTaskVerdict(id, passed: passed);
     final evidence = (args['evidence'] as String? ?? '').trim();
+    // A FAIL is only useful if the worker can act on it. Require the concrete
+    // failure (the analyze/CI error lines, the failing test names) and write it
+    // back onto the task so the re-engaging worker sees exactly what to fix —
+    // otherwise it resubmits the same broken work and the failures just stack.
+    if (!passed && evidence.isEmpty) {
+      return 'submit_verdict failed: a FAIL needs evidence. Paste the concrete '
+          'failure — the exact build/analyze error lines or failing test names — '
+          'so the worker can fix it. Re-call submit_verdict with that evidence.';
+    }
+    await db.recordTaskVerdict(id, passed: passed);
     if (passed) {
       return 'Verdict PASS recorded for "${t.title}" (id: $id). It awaits Coordinator integration (merge → approve).${evidence.isNotEmpty ? ' Evidence: $evidence' : ''}';
     }
-    return 'Verdict FAIL recorded for "${t.title}" (id: $id). It has been sent back to the board for the same agent to re-engage.${evidence.isNotEmpty ? ' Evidence: $evidence' : ''}';
+    // Append the failure to the task description so the worker's next framing
+    // (which renders {description}) carries it — same channel reject_task uses.
+    final note =
+        '${t.description ?? ''}\n\n[Verification FAILED ${DateTime.now().toIso8601String().substring(0, 16)} by $agentName — fix these before resubmitting]:\n$evidence'
+            .trim();
+    await db.patchTask(id, TasksCompanion(description: Value(note)));
+    return 'Verdict FAIL recorded for "${t.title}" (id: $id). The failure was written back onto the task, so the worker sees it on re-engage. Evidence: $evidence';
   }
 
   Future<String> _reviewSubmission(Map<String, dynamic> args) async {

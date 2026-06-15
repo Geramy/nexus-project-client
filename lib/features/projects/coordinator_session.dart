@@ -519,6 +519,10 @@ class ProjectCoordinatorSession {
         final buf = StringBuffer();
         var toolCalls = const <ToolCall>[];
         var toolsDropped = false;
+        // Once a reply reveals itself as a raw inline tool-call block, stop
+        // streaming it to the UI — it's recovered and executed after the round
+        // instead of being dumped at the user as XML.
+        var inlineToolText = false;
         await for (final ev in _streamRound(
           messages,
           tools,
@@ -526,6 +530,12 @@ class ProjectCoordinatorSession {
         )) {
           if (ev is ChatContentDelta) {
             buf.write(ev.text);
+            if (inlineToolText) continue;
+            final lead = buf.toString().trimLeft();
+            if (lead.startsWith('<tool_call') || lead.startsWith('<function=')) {
+              inlineToolText = true;
+              continue;
+            }
             yield ev; // forward live (do NOT also re-yield the full content below)
           } else if (ev is ChatReasoningDelta) {
             _reasonBuf.write(ev.text); // capture thoughts for the training trace
@@ -534,7 +544,19 @@ class ProjectCoordinatorSession {
             toolCalls = ev.toolCalls;
           }
         }
-        final contentStr = buf.toString();
+        var contentStr = buf.toString();
+        // Recover tool calls the model emitted as inline text (see above) so the
+        // action isn't lost. If the block didn't parse into a call after all,
+        // surface the text so the user isn't left with a blank reply.
+        if (toolCalls.isEmpty && executor != null) {
+          final recovered = _recoverInlineToolCalls(contentStr);
+          if (recovered.isNotEmpty) {
+            toolCalls = recovered;
+            contentStr = _stripInlineToolCalls(contentStr);
+          } else if (inlineToolText) {
+            yield ChatContentDelta(contentStr);
+          }
+        }
         // Record this round's reasoning into the export trace (before the
         // assistant message it produced), then reset for the next round.
         if (_reasonBuf.isNotEmpty) {
@@ -623,7 +645,10 @@ class ProjectCoordinatorSession {
             continue;
           }
 
-          final action = _loopGuard.observe(call.function.name, args);
+          final action = _loopGuard.observe(
+            call.function.name,
+            _guardArgs(call.function.name, args),
+          );
           if (action == LoopAction.block) {
             final note = _loopGuard.feedback(call.function.name, action);
             onToolResult?.call(note);
@@ -700,6 +725,9 @@ class ProjectCoordinatorSession {
         ..._history,
       ]);
       final wrapBuf = StringBuffer();
+      // This forced-speak round is given NO tools, so a model still wanting to
+      // act "calls" by writing inline XML. Suppress that from the live stream.
+      var wrapInlineText = false;
       await for (final ev in _streamRound(
         wrapMessages,
         const [],
@@ -707,6 +735,12 @@ class ProjectCoordinatorSession {
       )) {
         if (ev is ChatContentDelta) {
           wrapBuf.write(ev.text);
+          if (wrapInlineText) continue;
+          final lead = wrapBuf.toString().trimLeft();
+          if (lead.startsWith('<tool_call') || lead.startsWith('<function=')) {
+            wrapInlineText = true;
+            continue;
+          }
           yield ev;
         } else if (ev is ChatReasoningDelta) {
           _reasonBuf.write(ev.text);
@@ -720,7 +754,19 @@ class ProjectCoordinatorSession {
         });
         _reasonBuf.clear();
       }
-      final wrapStr = wrapBuf.toString();
+      var wrapStr = wrapBuf.toString();
+      // Recover & run any inline tool call so the action isn't lost, and never
+      // show the raw XML. The deltas were suppressed above, so re-yield the
+      // cleaned text (or a brief close if nothing readable remains).
+      final wrapRecovered = _recoverInlineToolCalls(wrapStr);
+      if (wrapRecovered.isNotEmpty) {
+        await _runRecoveredCalls(wrapRecovered, executor, onToolResult);
+        wrapStr = _stripInlineToolCalls(wrapStr);
+        if (wrapStr.isEmpty) wrapStr = 'Updated the story tree.';
+        yield ChatContentDelta(wrapStr);
+      } else if (wrapInlineText) {
+        yield ChatContentDelta(wrapStr); // looked like a tool block but wasn't
+      }
       if (wrapStr.isNotEmpty) {
         _history.add({'role': 'assistant', 'content': wrapStr});
         _fullTrace.add({'role': 'assistant', 'content': wrapStr});
@@ -788,6 +834,133 @@ class ProjectCoordinatorSession {
       out.add(Map<String, dynamic>.from(m));
     }
     return out;
+  }
+
+  // ── Inline tool-call recovery ─────────────────────────────────────────────
+  // Some models emit tool calls as inline TEXT instead of the structured
+  // tool_calls field, e.g.
+  //   <tool_call><function=add_user_story><parameter=title>…</parameter></function></tool_call>
+  // When that happens the action is otherwise lost and the user just sees raw
+  // XML. We parse those blocks back into real ToolCalls and run them.
+  static final RegExp _inlineFnRe = RegExp(
+    r'<function\s*=\s*([A-Za-z0-9_]+)\s*>(.*?)</function\s*>',
+    dotAll: true,
+  );
+  static final RegExp _inlineParamRe = RegExp(
+    r'<parameter\s*=\s*([A-Za-z0-9_]+)\s*>(.*?)</parameter\s*>',
+    dotAll: true,
+  );
+  static final RegExp _inlineJsonRe = RegExp(
+    r'<tool_call\s*>\s*(\{.*?\})\s*</tool_call\s*>',
+    dotAll: true,
+  );
+  static final RegExp _inlineWrapRe = RegExp(r'</?tool_call\s*>');
+
+  /// Parse inline-text tool calls out of [content]. Returns empty if none.
+  List<ToolCall> _recoverInlineToolCalls(String content) {
+    if (!content.contains('<function=') && !content.contains('<tool_call')) {
+      return const [];
+    }
+    final calls = <ToolCall>[];
+    var i = 0;
+    // <function=NAME><parameter=K>V</parameter>…</function>
+    for (final m in _inlineFnRe.allMatches(content)) {
+      final args = <String, dynamic>{};
+      for (final p in _inlineParamRe.allMatches(m.group(2) ?? '')) {
+        args[p.group(1)!.trim()] = (p.group(2) ?? '').trim();
+      }
+      calls.add(
+        ToolCall(
+          id: 'inline_${i++}',
+          type: 'function',
+          function: FunctionCall(
+            name: m.group(1)!.trim(),
+            arguments: jsonEncode(args),
+          ),
+        ),
+      );
+    }
+    if (calls.isNotEmpty) return calls;
+    // Hermes JSON variant: <tool_call>{"name":…,"arguments":{…}}</tool_call>
+    for (final m in _inlineJsonRe.allMatches(content)) {
+      try {
+        final obj = jsonDecode(m.group(1)!) as Map<String, dynamic>;
+        final name = (obj['name'] ?? '').toString().trim();
+        if (name.isEmpty) continue;
+        final raw = obj['arguments'] ?? obj['parameters'] ?? const {};
+        calls.add(
+          ToolCall(
+            id: 'inline_${i++}',
+            type: 'function',
+            function: FunctionCall(
+              name: name,
+              arguments: raw is String ? raw : jsonEncode(raw),
+            ),
+          ),
+        );
+      } catch (_) {}
+    }
+    return calls;
+  }
+
+  /// Remove recovered tool-call XML, leaving only any real prose.
+  String _stripInlineToolCalls(String s) => s
+      .replaceAll(_inlineFnRe, '')
+      .replaceAll(_inlineJsonRe, '')
+      .replaceAll(_inlineWrapRe, '')
+      .trim();
+
+  /// The argument view the loop guard fingerprints. For `add_user_story` a
+  /// node's IDENTITY is its (title, parent) — the discovery model often
+  /// re-issues the SAME story with a reworded narrative, which would dodge a
+  /// full-args fingerprint and let it spam the dedup guard. Key on identity so
+  /// those repeats still escalate proceed → warn → block.
+  Map<String, dynamic> _guardArgs(String tool, Map<String, dynamic> args) {
+    if (tool == 'add_user_story') {
+      return {
+        'title': (args['title'] ?? '').toString().trim().toLowerCase(),
+        'parent_story_id': args['parent_story_id'],
+      };
+    }
+    return args;
+  }
+
+  /// Execute tool calls recovered from inline TEXT in the forced-speak wrap-up
+  /// round (which is given no structured tools, so a model still wanting to act
+  /// "calls" by writing XML). Runs each for its side effect — loop-guarded and
+  /// surfaced via onToolResult — without touching history (the wrap-up's own
+  /// assistant message stands), so the action isn't silently lost.
+  Future<void> _runRecoveredCalls(
+    List<ToolCall> calls,
+    CoordinatorToolExecutor? executor,
+    void Function(String toolResult)? onToolResult,
+  ) async {
+    final ex = executor;
+    if (ex == null) return;
+    for (final call in calls) {
+      Map<String, dynamic> args = {};
+      try {
+        final raw = call.function.arguments.trim();
+        if (raw.startsWith('{')) {
+          args = (jsonDecode(raw) as Map).cast<String, dynamic>();
+        }
+      } catch (_) {}
+      final action = _loopGuard.observe(
+        call.function.name,
+        _guardArgs(call.function.name, args),
+      );
+      if (action == LoopAction.block) {
+        onToolResult?.call(_loopGuard.feedback(call.function.name, action));
+        continue;
+      }
+      String result;
+      try {
+        result = await ex.execute(name: call.function.name, args: args);
+      } catch (e) {
+        result = 'ERROR: ${call.function.name} failed: $e';
+      }
+      onToolResult?.call(_summarizeToolResult(result));
+    }
   }
 
   /// Runs ONE model round, STREAMING as the PRIMARY path so the reply renders

@@ -105,7 +105,11 @@ Acceptance criteria (definition of done): {acceptanceCriteria}
 Verification (how completion is proven): {verification}
 Work branch: "{branch}" — every commit you make must land on this branch.
 
-Build this task with the project's stack from the PROJECT BASELINE above — use its languages, frameworks, databases, libraries, and services (and only those). Implement the task end-to-end: read the relevant code first, make the changes, then commit them to your branch with git_commit. When the work is complete and you have evidence (build output, test results, diffs), call submit_for_completion with task_id={taskId}, a concise summary, and that evidence. Leave push and merge to the Coordinator, which integrates after verification.''',
+Build this task with the project's stack from the PROJECT BASELINE above — use its languages, frameworks, databases, libraries, and services (and only those). Implement the task end-to-end: read the relevant code first, make the changes, then commit them to your branch with git_commit.
+
+Before you submit, the build/analyze on your branch MUST be clean — run it and fix the errors. A red analyze blocks the merge and the verifier will bounce the task straight back, so "those errors were already there / aren't mine" does NOT make it done; only call submit_for_completion once the build is green. If this task was previously sent back, the reason is in its Description above — under a "[Build gate FAILED …]" block or a verifier note you'll find the FULL list of failing errors. Fix EVERY listed error in one pass (don't stop after the first); the analyzer reports them all at once, so address them all before resubmitting.
+
+When it's green and you have evidence (build output, test results, diffs), call submit_for_completion with task_id={taskId}, a concise summary, and that evidence. Leave push and merge to the Coordinator, which integrates after verification.''',
   OrchestratorPromptField.workerKickoff:
       'Begin implementing your assigned task (#{taskId}) now. Work autonomously and commit to branch "{branch}".',
   OrchestratorPromptField.workerContinue:
@@ -115,11 +119,14 @@ Build this task with the project's stack from the PROJECT BASELINE above — use
 Task #{taskId}: {title}
 Verification (what to run/check to prove completion): {verification}
 Acceptance criteria: {acceptanceCriteria}
-Work is on branch "{branch}" (already checked out).''',
+Work is on branch "{branch}" (already checked out).
+
+HARD GATE — a clean build is mandatory. Run the project's build yourself (build/compile it, or run its analyze + tests) — do NOT trust the worker's summary. ANY compile or analyze error, or a red CI run, is an automatic FAIL, even if some errors look pre-existing or unrelated to this task: a red build blocks the merge and poisons every later branch. If the stated verification is "(none provided)", still confirm the build is green and judge against the acceptance criteria.
+On a FAIL, submit_verdict's `evidence` MUST contain EVERY concrete failure — paste the COMPLETE list of error/warning lines (file:line) and failing test names, not just the first one — so the worker can fix them ALL in one pass. A bare "it failed", or a single error line when the analyzer reported many, is useless and wastes a whole resubmit cycle.''',
   OrchestratorPromptField.verifyKickoff:
-      'Verify task #{taskId}. First call run_verification, then execute the stated verification, then call submit_verdict with task_id={taskId}, passed=true|false, and your evidence.',
+      'Verify task #{taskId}. Call run_verification, then run the project build/analyze (and the stated verification), then submit_verdict with task_id={taskId}, passed=true|false, and evidence. A red build/analyze means passed=false with the exact error lines pasted into evidence.',
   OrchestratorPromptField.verifyContinue:
-      'Finish verifying task #{taskId}: run the verification and call submit_verdict with the result.',
+      'Finish verifying task #{taskId}: run the build/analyze and the verification, then call submit_verdict — passed=false with the concrete error lines if anything is red.',
   OrchestratorPromptField.mergeFraming: '''
 === TASK TO INTEGRATE ===
 Task #{taskId}: {title}
@@ -146,9 +153,20 @@ EXPAND WHAT THEY MENTION IN PASSING
 - Surface and resolve gaps: unstated assumptions, alternatives worth weighing, edge/error cases, and anything vague or contradictory.
 
 CAPTURE AS YOU GO
-- Capture each distinct piece as a user story via `add_user_story` — a clear title and a narrative "As a <role>, I want <goal>, so that <benefit>", with acceptance_criteria when known.
+- Capture each distinct piece as a user story via `add_user_story` — a clear title and a narrative "I want <goal>, so that <benefit>" (NO "As a <role>" prefix — skip the role entirely), with acceptance_criteria when known.
 - When the user gives a BIG chunk describing several things at once, call `draft_stories_from_text` with their raw words — a focused helper splits and rephrases it into clean stories (with notes) for you; then nest/order them with `move_user_story`. Keep the stories faithful to what they actually said.
 - Capturing is part of the same turn: right after you record, reflect back in one short sentence, then ask your next question.
+
+WRITE REAL NARRATIVES (never placeholders):
+- Format is "I want <goal>, so that <benefit>" — do NOT prefix with "As a <role>"; skip the role entirely (the user is tired of seeing "As an analyst…" on every story).
+- Every narrative is the USER'S own intent for THIS project — a concrete goal and a real benefit they actually gave you. Ground it in their words.
+- NEVER write a templated or filler narrative. Do not use the words "discovery"/"setup" or the interview itself as the goal, and do not invent a generic benefit. If you don't have a real "so that…" from the user, leave it out or ask — never make one up.
+- Bad: "I want to use DISCOVERY, so that the team runs smoothly." Good: "I want to log an issue with a title and description, so that nothing slips through."
+- Before adding, confirm the story is genuinely NEW (use list_user_stories). Do not re-add or reword a story you already created — each add must be a DIFFERENT piece.
+
+MATCH THE SCOPE — don't over-build:
+- Build a tree the SIZE of what the user actually wants. A small, simple request gets a small tree: capture exactly the pieces they describe and stop.
+- Do NOT inflate the project with features, flows, or epics they never asked for. If they say "keep it simple — just X and Y", the tree is X and Y. Expand only things they NAMED but left vague, never things you imagine.
 
 BUILD A REAL TREE (this is your job — the user should never have to structure it):
 - The single root is the overall product/epic; everything else hangs under something meaningful.

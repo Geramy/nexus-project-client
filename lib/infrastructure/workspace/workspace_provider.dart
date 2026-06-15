@@ -9,6 +9,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'async_lock.dart';
+import 'git/git_engine_provider.dart';
+import 'git_branch_workspace.dart';
 import 'workspace.dart';
 import 'vhd_workspace.dart';
 
@@ -108,3 +110,41 @@ final workspaceRevisionProvider = StateProvider.family<int, int>(
 final selectedWorkspaceFileProvider = StateProvider.family<String?, int>(
   (ref, projectId) => null,
 );
+
+/// The branch the Code browser is VIEWING read-only — a running task's
+/// `task/<id>` so its in-progress (committed-but-unmerged) work is visible
+/// instead of only after merge. `null` = the live workspace (current branch).
+/// Purely a view concern: selecting a branch never checks it out or mutates the
+/// tree, so it's safe while the orchestrator is committing.
+final viewBranchProvider = StateProvider.family<String?, int>(
+  (ref, projectId) => null,
+);
+
+/// The workspace the Code browser/editor should render: the live disk workspace
+/// when [viewBranchProvider] is null, otherwise a read-only [GitBranchWorkspace]
+/// snapshot of the selected branch's tip. Re-reads when the workspace revision
+/// bumps so the "Refresh" action picks up new agent commits.
+final viewWorkspaceFsProvider = FutureProvider.family<Workspace, int>((
+  ref,
+  projectId,
+) async {
+  final branch = ref.watch(viewBranchProvider(projectId));
+  if (branch == null) {
+    return ref.watch(workspaceFsProvider(projectId).future);
+  }
+  ref.watch(workspaceRevisionProvider(projectId));
+  final engine = await ref.watch(gitEngineProvider(projectId).future);
+  final tree = await engine.treeAt(branch);
+  return GitBranchWorkspace(engine, branch, tree);
+});
+
+/// All branches in the project repo (for the Code browser's view-branch picker).
+/// Re-reads on workspace mutations so freshly-created task branches show up.
+final branchListProvider = FutureProvider.family<List<String>, int>((
+  ref,
+  projectId,
+) async {
+  ref.watch(workspaceRevisionProvider(projectId));
+  final engine = await ref.watch(gitEngineProvider(projectId).future);
+  return engine.branches();
+});

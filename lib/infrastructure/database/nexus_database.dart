@@ -1581,6 +1581,25 @@ class NexusDatabase extends _$NexusDatabase {
     );
   }
 
+  /// Marker that delimits the auto-generated build-gate failure block at the end
+  /// of a task description, so it can be replaced (not accumulated) across retries.
+  static const String buildFailureMarker =
+      '[Build gate FAILED — fix ALL of these before resubmitting]';
+
+  /// Attach the full set of CI/analyze diagnostics from a red build gate to the
+  /// task description so the worker sees EVERY error at once on its next attempt
+  /// (instead of one-per-cycle). Any previous build-failure block is stripped
+  /// first, so the note always reflects the latest run rather than piling up.
+  Future<void> attachTaskBuildFailure(int taskPk, String detail) async {
+    final t = await getTaskById(taskPk);
+    if (t == null) return;
+    var base = t.description ?? '';
+    final idx = base.indexOf(buildFailureMarker);
+    if (idx >= 0) base = base.substring(0, idx).trimRight();
+    final note = '$base\n\n$buildFailureMarker:\n${detail.trim()}'.trim();
+    await patchTask(taskPk, TasksCompanion(description: Value(note)));
+  }
+
   /// The Coordinator started merging this task's branch into main.
   Future<void> beginTaskMerge(int taskPk) {
     return _applyTaskEvent(taskPk, TaskEvent.beginMerge);
