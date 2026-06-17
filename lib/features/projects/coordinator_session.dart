@@ -128,6 +128,7 @@ class ProjectCoordinatorSession {
     this.gitLane,
     this.fileClaim,
     this.discoveryMode = false,
+    this.scaffoldMode = false,
   });
 
   /// Post-setup Exploration (discovery) mode: the model is offered ONLY the
@@ -135,6 +136,11 @@ class ProjectCoordinatorSession {
   /// can't generate work before the user presses "Generate tasks". The
   /// discovery framing is supplied via [systemPromptOverride].
   final bool discoveryMode;
+
+  /// Templater (base-scaffold) mode: the model is offered ONLY file/git/CI tools
+  /// — no image/story/task/plan/orchestration tools — so the scaffolder lays down
+  /// a compiling base + stubs and nothing else. Framing via [systemPromptOverride].
+  final bool scaffoldMode;
 
   /// When true (default), only the core task/plan tools are offered each turn;
   /// the file/git/CI groups are pulled in on demand via `request_tools`, cutting
@@ -465,6 +471,8 @@ class ProjectCoordinatorSession {
     // the general project chat (PLANS/ exists from the start of planning).
     final allTools = discoveryMode
         ? CoordinatorTools.buildToolSchemas(discoveryOnly: true)
+        : scaffoldMode
+        ? CoordinatorTools.buildToolSchemas(scaffoldOnly: true)
         : CoordinatorTools.buildToolSchemas(
             includePlanTools: planStore != null,
             includePlannerComplete: onPlanningComplete != null,
@@ -504,7 +512,11 @@ class ProjectCoordinatorSession {
         // Rebuilt each round so a request_tools unlock takes effect immediately.
         // Discovery mode uses the curated story-tool list verbatim (no lean
         // gating / request_tools — it must not reach task tools).
-        final tools = discoveryMode ? allTools : _effectiveTools(allTools);
+        // Discovery + scaffold modes use their curated tool list verbatim (no
+        // lean gating / request_tools) so they stay inside their narrow job.
+        final tools = (discoveryMode || scaffoldMode)
+            ? allTools
+            : _effectiveTools(allTools);
         final sys = await _buildSystemPrompt(
           currentPlanContext: currentPlanContext,
         );

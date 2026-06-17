@@ -150,22 +150,26 @@ Merge "{branch}" into "{targetBranch}" with git_merge, then call approve_task wi
       'Finish integrating task #{taskId}: complete the merge of "{branch}" into "{targetBranch}" and call approve_task (or reject_task on conflict).',
   OrchestratorPromptField.templaterFraming: '''
 === TEMPLATER — SCAFFOLD THE BASE PROJECT (runs ONCE, before any task) ===
-You are scaffolding the base project for this work so the engineering agents have a real, compiling skeleton to fill in — instead of every agent trying to invent the project from scratch at the same time. Build ONLY boilerplate and stubs here, NEVER feature logic.
+You set up the EMPTY starting environment so every engineering agent drops into a real, compiling skeleton — instead of each one inventing the project from scratch at the same time. You write ONLY boilerplate, stubs, config and (if needed) the DB schema — NEVER any feature logic.
 
-Use the project's stack from the PROJECT BASELINE above (its languages, frameworks, databases, libraries) — and only that. Do this on the current branch ("{branch}", which is main); every task branches off it, so it must compile.
+You are on branch "{branch}" (main); every task branches off it, so it MUST compile / analyze cleanly with NOTHING implemented yet. Use ONLY the stack from the PROJECT BASELINE above (its languages, frameworks, databases, libraries) — do not add or invent technologies.
 
-Steps:
-- Read what already exists first (`list_directory` / `read_file_chunk`) and be IDEMPOTENT — only create files that are MISSING; never overwrite real work.
-- Create the conventional base DIRECTORY STRUCTURE and the manifest/config files the toolchain needs to compile (package manifest, project file, `.gitignore`, entry point). Examples: a Flutter/Dart app → `lib/main.dart` + `pubspec.yaml`; a C#/.NET server → `.csproj` + `Program.cs`; a DB layer → a `schema/`/`migrations/` starter. Match the BASELINE stack.
-- Create a STUB / placeholder file for each planned area below — correct file/namespace/package declarations and EMPTY class/interface OUTLINES (signatures + `// TODO` bodies), so each upcoming task has a real place to land. Keep them minimal; no real logic.
-- The skeleton MUST compile / pass analyze cleanly — that is the bar.
+{baseSpec}
 
-THE TASKS THAT WILL BE BUILT ON TOP OF THIS SKELETON:
+YOUR JOB IS EXACTLY THESE THREE THINGS, then commit and stop:
+1. ENVIRONMENT — create the conventional project skeleton for the stack: the manifest that declares the requested packages/libraries (e.g. pubspec.yaml / package.json / a .csproj / CMakeLists.txt / requirements.txt — whatever the BASELINE language uses), the entry-point / main runner file, a `.gitignore`, and the standard source-folder layout. It must build/analyze with nothing implemented.
+2. TASK STUBS — create ONE placeholder source file for EACH task listed below: correct package/namespace declaration + an EMPTY class/function/interface OUTLINE (signatures + `// TODO`), so each task has a real place to start. No logic.
+3. SCHEMA — if the project uses a database (see the BASELINE / base spec), create the basic STARTER SCHEMA as a real migration/schema file for that DB, so every task shares one consistent data model.
+
+THE TASKS THAT EACH NEED A STARTING STUB:
 {taskList}
 
-When the skeleton is in place and compiles, COMMIT it with git_commit (message like "chore: scaffold base project structure"). Work efficiently, in as few steps as possible. Do NOT implement any feature — the task agents will fill the stubs in.''',
+RULES:
+- Read what already exists first (`list_directory` / `read_file_chunk`) and be IDEMPOTENT — only create MISSING files; never overwrite real work.
+- Do NOT implement features, write real logic, write tests, or generate images. Your only tools are file/git/CI — use them only for the three things above.
+- When the environment + stubs + schema are in place and it compiles, COMMIT with git_commit (message like "chore: scaffold base project"). Then STOP — a CI check runs automatically and the task agents take over from there.''',
   OrchestratorPromptField.templaterKickoff:
-      'Scaffold the base project skeleton now per your instructions on branch "{branch}", then commit it. Boilerplate + stubs only; it must compile.',
+      'Scaffold the base project on branch "{branch}" now — the THREE things: (1) the environment/manifest + main runner, (2) a stub file per task, (3) the DB schema if there is a database — then commit. Boilerplate + stubs only; it must compile.',
   OrchestratorPromptField.discoverySystem: '''
 You are the project Coordinator running the post-setup DISCOVERY interview for "{projectName}". Setup is done and NO tasks exist yet. Your job is to draw out the FULL idea and capture it as a well-structured USER-STORY TREE before any work begins.
 
@@ -246,6 +250,10 @@ class PromptVars {
   /// the per-task stages (worker/verify/merge) that don't use {taskList}.
   final String taskList;
 
+  /// The Templater's base spec: the condensed top-of-tree story (a whole-project
+  /// overview) plus any database-schema instruction. Empty for non-Templater stages.
+  final String baseSpec;
+
   const PromptVars({
     required this.taskId,
     required this.title,
@@ -255,6 +263,7 @@ class PromptVars {
     this.acceptanceCriteria = '',
     this.verification = '',
     this.taskList = '',
+    this.baseSpec = '',
   });
 
   String _orNone(String s) => s.trim().isEmpty ? '(none provided)' : s.trim();
@@ -267,7 +276,8 @@ class PromptVars {
       .replaceAll('{description}', _orNone(description))
       .replaceAll('{acceptanceCriteria}', _orNone(acceptanceCriteria))
       .replaceAll('{verification}', _orNone(verification))
-      .replaceAll('{taskList}', _orNone(taskList));
+      .replaceAll('{taskList}', _orNone(taskList))
+      .replaceAll('{baseSpec}', _orNone(baseSpec));
 }
 
 /// Resolved orchestrator prompt templates for a project: per-project overrides

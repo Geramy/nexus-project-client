@@ -34,17 +34,43 @@ class CoordinatorTools {
   /// [includePlannerComplete]/[includePlannerReview] add the two signal-only
   /// tools used by the deep planning run (planner says it's done; an engineer
   /// reviewer votes on the plan) — off for the normal coordinator chat.
+  /// Tool names the Templater (base-scaffold) stage may use: file + git + CI
+  /// only. Deliberately EXCLUDES image generation, story/task/plan/agent and
+  /// orchestration tools so the scaffolder can't wander off (e.g. into
+  /// generate_image) — its only job is to lay down a compiling base + stubs.
+  static const Set<String> _scaffoldToolNames = {
+    // Files
+    'list_files', 'read_file', 'read_file_chunk', 'list_directory',
+    'search_directory', 'search_file_content', 'create_file', 'edit_file',
+    'write_file', 'create_directory', 'move_path',
+    // Git
+    'git_status', 'git_log', 'git_branches', 'git_create_branch', 'git_commit',
+    'git_checkout_branch',
+    // Build / CI
+    'scaffold_ci_workflow', 'run_workflow', 'list_ci_runs', 'get_ci_run',
+    'build_docker_image',
+  };
+
   static List<Map<String, dynamic>> buildToolSchemas({
     bool includePlanTools = false,
     bool includePlannerComplete = false,
     bool includePlannerReview = false,
     bool includeStoryTools = false,
     bool discoveryOnly = false,
+    bool scaffoldOnly = false,
   }) {
     // The post-setup Exploration (discovery) session gets ONLY the user-story
     // tools — deliberately NO task/plan-write tools, so it can't be "eager" and
     // create work before the user presses "Generate tasks".
     if (discoveryOnly) return [..._storyToolSchemas];
+    // The Templater (base scaffold) stage gets ONLY file/git/CI tools.
+    if (scaffoldOnly) {
+      return buildToolSchemas().where((t) {
+        final fn = t['function'];
+        final name = fn is Map ? fn['name'] : null;
+        return name is String && _scaffoldToolNames.contains(name);
+      }).toList();
+    }
     return [
       if (includePlannerComplete)
         {

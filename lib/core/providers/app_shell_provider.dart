@@ -2,9 +2,15 @@
 // Author: Geramy Loveless <support@nexus-projects.ai>
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'database_provider.dart';
+import '../../infrastructure/inference/inference_backend_factory.dart'
+    show resetInferenceConnections;
 
 part 'app_shell_provider.g.dart';
 
@@ -58,7 +64,24 @@ class CurrentProjectId extends _$CurrentProjectId {
   int build() => 1; // Seeded sample project (project_pk 1)
 
   void selectProject(int projectId) {
+    final previous = state;
+    if (projectId == previous) return;
     state = projectId;
+    // Leaving a project: STOP its autonomous loop and free ALL inference
+    // connections so the NEW project gets the full concurrent-connection budget
+    // immediately. Without this the old project's worker agents AND the
+    // reserved Coordinator slot keep their sockets open, and the new project
+    // 429s (too_many_connections). The old project resumes when you Start it.
+    resetInferenceConnections();
+    final db = ref.read(nexusDatabaseProvider);
+    unawaited(() async {
+      try {
+        final proj = await db.getProjectById(previous);
+        if (proj?.orchestrationState == 'running') {
+          await db.setProjectOrchestrationState(previous, 'paused');
+        }
+      } catch (_) {}
+    }());
   }
 }
 

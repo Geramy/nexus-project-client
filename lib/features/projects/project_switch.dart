@@ -34,8 +34,8 @@ Future<bool> confirmLeaveProject(BuildContext context, WidgetRef ref) async {
       title: const Text('Swap projects?'),
       content: Text(
         'The agents currently working on "$name" will stop and free their '
-        'connections so the next project gets them right away. They resume when '
-        'you focus this project again.',
+        'connections so the next project gets them right away. Press Start on '
+        '"$name" later to resume it.',
       ),
       actions: [
         TextButton(
@@ -49,6 +49,14 @@ Future<bool> confirmLeaveProject(BuildContext context, WidgetRef ref) async {
       ],
     ),
   );
+  if (ok == true) {
+    // STOP the old project immediately (set non-running so its orchestrator
+    // stops pumping) and free its connections — covers the New-Project flow,
+    // where the old project stays focused through the whole setup dialog and
+    // would otherwise keep re-opening sockets and 429 the new one.
+    await db.setProjectOrchestrationState(currentId, 'paused');
+    resetInferenceConnections();
+  }
   return ok == true;
 }
 

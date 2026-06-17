@@ -32,7 +32,7 @@ import 'package:nexus_projects_client/features/projects/task_workflow.dart';
 /// (null = auto: first working). Auto-falls back if that worker leaves the feed.
 final focusedWorkerProvider = StateProvider.family<int?, int>((ref, _) => null);
 
-enum _AgentState { working, complete, stopped }
+enum _AgentState { working, complete, stopped, templating }
 
 class _AgentActivity {
   const _AgentActivity(this.taskPk, this.agent, this.task, this.state);
@@ -63,6 +63,7 @@ class AgentFeedIndicator extends ConsumerWidget {
 
   static const int _autoFocus = -1;
   static const int _openTasks = -2;
+  static const int _templatingTaskPk = -99;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -123,14 +124,34 @@ class AgentFeedIndicator extends ConsumerWidget {
     }
 
     final focused = ref.watch(focusedWorkerProvider(projectId));
-    final rep =
-        (focused == null
-            ? null
-            : entries.firstWhereOrNull((e) => e.taskPk == focused)) ??
-        entries.firstWhereOrNull((e) => e.state == _AgentState.working) ??
-        entries.firstOrNull;
 
-    final tooltip = entries.isEmpty
+    // While the Templater scaffolds the base project (BEFORE any worker runs),
+    // there are no active workers yet but work IS happening — surface it as a
+    // yellow "templating" chip so the top bar isn't misleadingly idle.
+    final projects =
+        ref.watch(projectsForClientProvider(clientId)).value ?? const [];
+    final templateStatus = projects
+        .firstWhereOrNull((p) => p.project_pk == projectId)
+        ?.templateStatus;
+    final isTemplating =
+        templateStatus == 'pending' || templateStatus == 'scaffolding';
+
+    final rep = isTemplating
+        ? const _AgentActivity(
+            _templatingTaskPk,
+            'Templater',
+            'Scaffolding base project…',
+            _AgentState.templating,
+          )
+        : ((focused == null
+                  ? null
+                  : entries.firstWhereOrNull((e) => e.taskPk == focused)) ??
+              entries.firstWhereOrNull((e) => e.state == _AgentState.working) ??
+              entries.firstOrNull);
+
+    final tooltip = isTemplating
+        ? 'Templater — scaffolding the base project before tasks start'
+        : entries.isEmpty
         ? 'No agents have tasks yet'
         : entries
               .map(
@@ -341,6 +362,7 @@ class AgentFeedIndicator extends ConsumerWidget {
     _AgentState.working => 'working',
     _AgentState.complete => 'complete',
     _AgentState.stopped => 'stopped',
+    _AgentState.templating => 'templating',
   };
 
   /// Saturated dot colour for the dropdown rows (legible on any menu surface).
@@ -348,6 +370,7 @@ class AgentFeedIndicator extends ConsumerWidget {
     _AgentState.working => const Color(0xFFEF6C00),
     _AgentState.complete => const Color(0xFF2E7D32),
     _AgentState.stopped => const Color(0xFFC62828),
+    _AgentState.templating => const Color(0xFFF9A825), // yellow
   };
 
   /// State → (background, foreground), per theme brightness.
@@ -376,6 +399,11 @@ class AgentFeedIndicator extends ConsumerWidget {
         return dark
             ? (bg: const Color(0xFFC62828), fg: white)
             : (bg: const Color(0xFFFFCDD2), fg: black);
+      case _AgentState.templating:
+        // Yellow — the Templater is scaffolding the base project before workers.
+        return dark
+            ? (bg: const Color(0xFFF9A825), fg: black)
+            : (bg: const Color(0xFFFFF59D), fg: black);
     }
   }
 }

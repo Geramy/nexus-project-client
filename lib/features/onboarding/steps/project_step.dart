@@ -15,10 +15,10 @@ import '../../projects/types/project_type.dart';
 import '../../projects/types/project_type_selector.dart';
 import '../../../shared/ui/nexus_ui.dart';
 
-/// Max length of a project name — must match the Projects.name DB column
-/// (`text().withLength(min: 1, max: 150)`) so the UI can't submit an over-long
-/// name that the insert would reject.
-const int _kNameMaxLength = 150;
+/// Max length of a project name. A practical 75-char cap (well under the
+/// Projects.name DB column's 150) — long enough for a real name, short enough to
+/// display cleanly.
+const int _kNameMaxLength = 75;
 
 /// Step 4 — name the first project and pick the agent pack(s) to provision into
 /// the current client. Creating the project selects it and advances the wizard.

@@ -1168,6 +1168,9 @@ class ProjectOrchestrator {
   /// proceed (templating done, or not applicable to this project), false when it
   /// kicked off / is still running templating — the pump re-runs when it lands.
   Future<bool> _ensureTemplated(Project project) async {
+    // ignore: avoid_print
+    print('[Templater] gate: templateStatus="${project.templateStatus}" '
+        '_templating=$_templating');
     switch (project.templateStatus) {
       case 'ready':
       case 'none': // legacy / planning-path projects scaffold elsewhere
@@ -1177,6 +1180,8 @@ class ProjectOrchestrator {
       default: // 'pending' | 'scaffolding'
         if (_templating) return false;
         _templating = true;
+        // ignore: avoid_print
+        print('[Templater] kicking off templating phase for project $projectId');
         unawaited(
           _runTemplatingPhase(project).whenComplete(() {
             _templating = false;
@@ -1195,7 +1200,11 @@ class ProjectOrchestrator {
     try {
       await _assignMilestones();
       await _db.setProjectTemplateStatus(projectId, 'scaffolding');
+      // ignore: avoid_print
+      print('[Templater] phase started (scaffolding) for project $projectId');
       final scaffolded = await _runTemplaterAgent(project);
+      // ignore: avoid_print
+      print('[Templater] scaffolder returned: $scaffolded');
       if (!scaffolded) {
         await _db.setProjectTemplateStatus(projectId, 'failed');
         debugPrint('[Orchestrator p$projectId] templater could not scaffold; gated.');
@@ -1263,17 +1272,31 @@ class ProjectOrchestrator {
   /// Drive the Coordinator persona once to scaffold the base project onto main.
   /// Returns true when main has a commit (the scaffold landed).
   Future<bool> _runTemplaterAgent(Project project) async {
-    final persona = await _findPersonaForRole(AgentRole.coordinator);
+    // Scaffolding is a CODING job — prefer a generalist worker (its model is
+    // code-tuned), not the Coordinator (whose model is the interview/discovery
+    // collection, which just chats instead of creating files). Fall back to the
+    // Coordinator only if no worker persona exists.
+    final persona = await _findPersonaForRole(AgentRole.sdeGeneralist) ??
+        await _findPersonaForRole(AgentRole.coordinator);
     if (persona == null) {
-      debugPrint('[Orchestrator p$projectId] no Coordinator persona for templater.');
+      // ignore: avoid_print
+      print('[Templater] NO generalist/Coordinator persona — cannot scaffold (failed/gated).');
       return false;
     }
     final resolved = await _resolveBackend(persona);
-    if (resolved == null) return false;
+    if (resolved == null) {
+      // ignore: avoid_print
+      print('[Templater] no inference backend for ${persona.name} — cannot scaffold.');
+      return false;
+    }
     final handles = await _resolveWorkspaceHandles();
     final ws = handles.ws;
     final git = handles.git;
-    if (ws == null || git == null) return false;
+    if (ws == null || git == null) {
+      // ignore: avoid_print
+      print('[Templater] workspace/git unavailable — cannot scaffold.');
+      return false;
+    }
 
     // Scaffold onto main so every task branch (created off it) inherits the base.
     try {
@@ -1281,15 +1304,23 @@ class ProjectOrchestrator {
     } catch (_) {
       // No main yet — the scaffolder's first commit creates it.
     }
+    // A pre-existing main commit must NOT let the templater "succeed" without
+    // doing work, so we only count it scaffolded once a NEW commit lands.
+    final beforeHead = await git.headOid();
+    // ignore: avoid_print
+    print('[Templater] running scaffolder agent "${persona.name}" on main '
+        '(beforeHead=${beforeHead ?? "unborn"}).');
 
     final tasks = await _db.getTasksForProject(projectId);
     final taskList = tasks.map((t) => '- ${t.title}').join('\n');
+    final baseSpec = await _buildTemplaterBaseSpec();
     final prompts = await _loadPrompts();
     final vars = PromptVars(
       taskId: 0,
       title: project.name,
       branch: 'main',
       taskList: taskList,
+      baseSpec: baseSpec,
     );
 
     final sessionPk = await _db.getOrCreateAgentChatSession(
@@ -1311,6 +1342,9 @@ class ProjectOrchestrator {
       git: git,
       buildService: handles.build,
       leanTools: false,
+      // Scaffold-only toolset: file/git/CI only — no image/story/task tools, so
+      // the scaffolder can't wander off (e.g. into image generation).
+      scaffoldMode: true,
       systemPromptOverride: await _framedPrompt(
         AgentRole.coordinator,
         OrchestratorPromptField.templaterFraming,
@@ -1326,21 +1360,89 @@ class ProjectOrchestrator {
     var kickoff = prompts.render(OrchestratorPromptField.templaterKickoff, vars);
     for (var turn = 0; turn < _maxTurnsPerStage && !_disposed; turn++) {
       if (!await _stillRunning()) return false;
+      var toolCalls = 0;
       try {
-        await for (final _ in session.runTurn(kickoff)) {}
+        await for (final _ in session.runTurn(
+          kickoff,
+          onToolResult: (r) {
+            toolCalls++;
+            // ignore: avoid_print
+            print('[Templater] tool#$toolCalls: '
+                '${r.length > 140 ? "${r.substring(0, 140)}…" : r}');
+          },
+        )) {}
       } catch (e) {
         if (!_isNotTaskFault(e)) {
           debugPrint('[Orchestrator p$projectId] templater turn $turn failed: $e');
-          return (await git.headOid()) != null;
+          return (await git.headOid()) != beforeHead;
         }
         // transient/backpressure — retry the turn.
       }
-      if ((await git.headOid()) != null) return true; // scaffold committed
+      final head = await git.headOid();
+      final wsFiles =
+          (await ws.walk()).where((f) => !f.isDirectory).length;
+      // ignore: avoid_print
+      print('[Templater] turn $turn: $toolCalls tool call(s); '
+          'workspace has $wsFiles file(s); head=${head ?? "unborn"} '
+          '(beforeHead=${beforeHead ?? "unborn"}).');
+      if (head != beforeHead && wsFiles > 0) {
+        // ignore: avoid_print
+        print('[Templater] NEW commit + $wsFiles file(s) — scaffold accepted.');
+        // Make the scaffold visible in the Code & Git workspace view right away.
+        ref.read(workspaceRevisionProvider(projectId).notifier).state++;
+        return true;
+      }
       kickoff =
-          'Continue creating any remaining base/stub files, then commit with '
-          'git_commit. Stop once the skeleton compiles and every task has a stub.';
+          'You have NOT produced a real scaffold yet (workspace shows $wsFiles '
+          'file(s)). Use create_file to write the manifest + main runner + a stub '
+          'file per task (+ DB schema if there is a database), THEN git_commit. '
+          'An empty commit does not count.';
     }
-    return (await git.headOid()) != null;
+    // ignore: avoid_print
+    print('[Templater] hit turn cap without a real scaffold — FAILED.');
+    return false; // the loop returns true only on a real (file-bearing) commit
+  }
+
+  /// The Templater's base spec: the condensed top-of-tree story (a whole-project
+  /// overview the scaffold is built from) plus a database-schema instruction when
+  /// the project's stack includes a database. Empty when neither applies.
+  Future<String> _buildTemplaterBaseSpec() async {
+    final buf = StringBuffer();
+    try {
+      final stories = await _db.getUserStoriesForProject(projectId);
+      final roots = stories.where((s) => s.parent_story_fk == null).toList()
+        ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+      if (roots.isNotEmpty) {
+        final root = roots.first;
+        buf.writeln(
+          'PROJECT OVERVIEW (the top of the story tree — a condensed view of the '
+          'WHOLE project; scaffold the base so it fits this end to end):',
+        );
+        buf.writeln('- ${root.title}');
+        final narrative = root.narrative.trim();
+        if (narrative.isNotEmpty) buf.writeln('  $narrative');
+        final ac = (root.acceptanceCriteria ?? '').trim();
+        if (ac.isNotEmpty) buf.writeln('  Acceptance: $ac');
+      }
+      // Database in the stack → seed a consistent starter schema in the base so
+      // every later task shares one data model.
+      final tags = await _db.getTagsForProject(projectId);
+      final hasDb = tags.any(
+        (t) => t.category == 'databases' && t.status != 'rejected',
+      );
+      if (hasDb) {
+        if (buf.isNotEmpty) buf.writeln();
+        buf.writeln(
+          'DATABASE: this project uses a database (see the BASELINE). Create a '
+          'basic STARTER SCHEMA — the core tables/entities the overview implies — '
+          'as a real migration/schema file for the chosen DB, so every task '
+          'builds on one consistent data model. Keep it minimal but coherent.',
+        );
+      }
+    } catch (e) {
+      debugPrint('[Orchestrator p$projectId] templater base-spec build failed: $e');
+    }
+    return buf.toString().trim();
   }
 
   /// Run the project's configured CI once against main as the base gate. Honors

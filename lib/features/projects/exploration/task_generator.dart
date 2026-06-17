@@ -110,25 +110,32 @@ class TaskGenerator extends ChangeNotifier {
     var failedStories = 0;
     try {
       final stories = await db.getUserStoriesForProject(projectId);
-      final parents = <int>{
-        for (final s in stories)
-          if (s.parent_story_fk != null) s.parent_story_fk!,
-      };
-      // Leaves = concrete, buildable stories (epics are just groupings).
-      final leaves = stories
-          .where((s) => !parents.contains(s.story_pk))
-          .toList();
+      // The single TOP root (no parent) is a condensed view of the whole project
+      // — it's the Templater's base spec (the scaffold is built from it) and is
+      // NOT turned into a worker task. EVERY other node, at any depth (not just
+      // the leaves), becomes task(s) so mid-tree stories aren't skipped.
+      final roots =
+          stories.where((s) => s.parent_story_fk == null).toList()
+            ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+      final templaterRootPk = roots.isNotEmpty ? roots.first.story_pk : null;
+      // Parent-first order so a child story's tasks can link UNDER its parent
+      // story's task — the task tree then mirrors the story tree instead of
+      // being a flat, seemingly-random pile.
+      final buildable = _storiesParentFirst(stories, templaterRootPk);
 
       _emit(
         TaskGenProgress(
           running: true,
-          totalStories: leaves.length,
+          totalStories: buildable.length,
           byStory: {
-            for (final s in leaves)
+            for (final s in buildable)
               s.story_pk: const StoryGen(StoryGenStatus.pending),
           },
         ),
       );
+      // story_pk → its first generated task, used as the parent anchor for the
+      // tasks of its child stories.
+      final storyRepTask = <int, int>{};
 
       final resolved = await _resolveBackend(db, projectId);
       final worker = await resolveDefaultWorkerPersonaId(db, projectId);
@@ -140,8 +147,16 @@ class TaskGenerator extends ChangeNotifier {
       // story's tasks are generated within the project's locked tech choices.
       final profile = await buildProjectBaseline(db, projectId);
 
-      for (final s in leaves) {
+      for (final s in buildable) {
         _setStory(s.story_pk, const StoryGen(StoryGenStatus.generating));
+        // The parent anchor: a child story's tasks hang under its parent story's
+        // first task, so the task tree mirrors the story tree. A story whose
+        // parent is the Templater root (or which has no parent) is top-level.
+        final parentStoryPk = s.parent_story_fk;
+        final parentTaskPk =
+            (parentStoryPk != null && parentStoryPk != templaterRootPk)
+            ? storyRepTask[parentStoryPk]
+            : null;
         try {
           // _tasksForStory swallows AI/parse errors and returns [] so a flaky or
           // unconfigured backend degrades to the one-task-per-story fallback
@@ -161,7 +176,7 @@ class TaskGenerator extends ChangeNotifier {
               layer,
               fallback: worker,
             );
-            await db.createTaskInProject(
+            final taskPk = await db.createTaskInProject(
               projectPk: projectId,
               title: title,
               description: (t['description'] ?? '').toString().trim(),
@@ -172,18 +187,22 @@ class TaskGenerator extends ChangeNotifier {
                         'the project\'s build/tests where applicable.',
               agentPk: agentPk,
               storyPk: s.story_pk,
+              parentPk: parentTaskPk,
             );
+            storyRepTask.putIfAbsent(s.story_pk, () => taskPk);
             made++;
           }
           // Never leave a story with zero tasks — fall back to one task = story.
           if (made == 0) {
-            await db.createTaskInProject(
+            final taskPk = await db.createTaskInProject(
               projectPk: projectId,
               title: s.title,
               description: s.narrative,
               agentPk: worker,
               storyPk: s.story_pk,
+              parentPk: parentTaskPk,
             );
+            storyRepTask.putIfAbsent(s.story_pk, () => taskPk);
             made = 1;
           }
           totalTasks += made;
@@ -206,12 +225,20 @@ class TaskGenerator extends ChangeNotifier {
       // Leave the Exploration phase and start orchestration only once done.
       await db.setProjectExplorationStatus(projectId, 'complete');
       if (totalTasks > 0) {
+        // Free the interactive setup/discovery Coordinator's connection before
+        // the autonomous orchestrator/templater start — otherwise its lingering
+        // socket keeps eating the reserved Coordinator slot and the templater +
+        // workers 429 (too_many_connections).
+        resetInferenceConnections();
         // Gate the run on the Templater: it scaffolds a compiling base project
         // (committed to main) and splits the backlog into sequential milestones
         // BEFORE any worker starts — so the agents don't all race to create the
         // project from an empty main at once.
         await db.setProjectTemplateStatus(projectId, 'pending');
         await db.setProjectOrchestrationState(projectId, 'running');
+        // ignore: avoid_print
+        print('[TaskGen] done: $totalTasks task(s); set templateStatus=pending, '
+            'orchestrationState=running for project $projectId');
       }
       _emit(progress.copyWith(running: false, done: true));
     } catch (e, st) {
@@ -225,6 +252,31 @@ class TaskGenerator extends ChangeNotifier {
 
   void _setStory(int storyPk, StoryGen g) {
     _emit(progress.copyWith(byStory: {...progress.byStory, storyPk: g}));
+  }
+
+  /// Order stories so a PARENT always precedes its children (topological),
+  /// dropping [rootPk] (the Templater's base spec). A story whose parent is the
+  /// root or null is top-level. Cycle/orphan leftovers are appended as-is.
+  List<UserStory> _storiesParentFirst(List<UserStory> all, int? rootPk) {
+    final remaining =
+        all.where((s) => s.story_pk != rootPk).toList()
+          ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+    final out = <UserStory>[];
+    final added = <int>{};
+    bool parentReady(int? p) => p == null || p == rootPk || added.contains(p);
+    var progressed = true;
+    while (progressed && remaining.isNotEmpty) {
+      progressed = false;
+      remaining.removeWhere((s) {
+        if (!parentReady(s.parent_story_fk)) return false;
+        out.add(s);
+        added.add(s.story_pk);
+        progressed = true;
+        return true;
+      });
+    }
+    out.addAll(remaining); // cycle/orphan safety net
+    return out;
   }
 
   /// One scoped AI call → the task specs for a single story (or [] on no backend).
