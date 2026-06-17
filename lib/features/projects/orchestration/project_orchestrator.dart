@@ -42,6 +42,7 @@ import 'package:nexus_projects_client/features/agents/agent_role_policy.dart';
 import 'package:nexus_projects_client/features/agents/agent_tool_permissions.dart';
 import 'package:nexus_projects_client/features/projects/coordinator_session.dart';
 import 'package:nexus_projects_client/features/projects/orchestration/orchestrator_prompts.dart';
+import 'package:nexus_projects_client/features/projects/orchestration/milestone_planner.dart';
 import 'package:nexus_projects_client/features/projects/project_baseline.dart'
     show buildProjectBaseline;
 import 'package:nexus_projects_client/features/projects/project_working_hours.dart';
@@ -80,6 +81,10 @@ class ProjectOrchestrator {
   /// triggers (state change + ticker) don't spawn concurrent workers.
   bool _pumping = false;
   bool _disposed = false;
+
+  /// True while the one-shot Templater (base-project scaffold) is running this
+  /// session, so repeated pumps don't launch a second scaffolder concurrently.
+  bool _templating = false;
 
   /// Tasks currently being executed in this process, so a re-pump doesn't pick
   /// up a task that's mid-run (its executionStatus is `running`).
@@ -205,6 +210,11 @@ class ProjectOrchestrator {
         return;
       }
 
+      // Templater gate: before any worker runs, the base project must be
+      // scaffolded ONCE (committed to main). Until then no task work dispatches,
+      // so the agents don't all race to create the project from an empty main.
+      if (!await _ensureTemplated(project)) return;
+
       final cap = await _concurrencyCap(project);
       // Hold a connection back for the interactive Coordinator so worker agents
       // can't claim every slot and starve story editing. Never drop below 1, so
@@ -217,6 +227,7 @@ class ProjectOrchestrator {
         unawaited(_runStage(task, stage));
       }
       await _surfaceStalledTasks();
+      await _maybeAdvanceMilestone(project);
     } finally {
       _pumping = false;
     }
@@ -320,6 +331,10 @@ class ProjectOrchestrator {
   /// proportionally more turns.
   Future<(Task?, _Stage?)> _nextPipelineWork() async {
     final tasks = await _db.getTasksForProject(projectId);
+    // Only the currently-open milestone batch is assignable for fresh implement
+    // work; in-flight (Review) tasks always belong to it already.
+    final currentMilestone =
+        (await _db.getProjectById(projectId))?.currentMilestone ?? 0;
     final review = tasks
         .where(
           (t) => !_active.contains(t.task_pk) && t.status == TaskStatus.review,
@@ -335,7 +350,7 @@ class ProjectOrchestrator {
     // surfaced to Blocked by _surfaceStalledTasks instead of looping forever.
     bool live(Task t) => (_attempts[t.task_pk] ?? 0) < _maxAttemptsPerTask;
 
-    addPool(_Stage.implement, _assignableTasks(tasks));
+    addPool(_Stage.implement, _assignableTasks(tasks, currentMilestone));
     addPool(
       _Stage.verify,
       review
@@ -407,13 +422,17 @@ class ProjectOrchestrator {
   }
 
   /// Tasks ready for a worker: assigned to a worker-role persona, on the Todo
-  /// board, not already running here, and under the retry cap.
-  List<Task> _assignableTasks(List<Task> tasks) {
+  /// board, not already running here, under the retry cap, AND within the
+  /// currently-open milestone batch ([currentMilestone]). The milestone filter is
+  /// what makes work proceed one batch at a time: a later milestone's tasks stay
+  /// on the board until the project advances to them.
+  List<Task> _assignableTasks(List<Task> tasks, int currentMilestone) {
     final out = <Task>[];
     for (final t in tasks) {
       if (t.task_agent_fk == null) continue;
       if (_active.contains(t.task_pk)) continue;
       if ((_attempts[t.task_pk] ?? 0) >= _maxAttemptsPerTask) continue;
+      if ((t.milestoneOrder ?? 0) > currentMilestone) continue;
       final isStartable =
           t.status == TaskStatus.todo &&
           (t.executionStatus == TaskExecStatus.idle ||
@@ -1140,6 +1159,268 @@ class ProjectOrchestrator {
     }
     debugPrint(
       '[Orchestrator p$projectId] task ${task.task_pk}: merge hit turn cap without resolution.',
+    );
+  }
+
+  // ── Templater stage (one-shot base scaffold + milestone planning) ───────
+
+  /// Gate the pipeline on a scaffolded base project. Returns true when work may
+  /// proceed (templating done, or not applicable to this project), false when it
+  /// kicked off / is still running templating — the pump re-runs when it lands.
+  Future<bool> _ensureTemplated(Project project) async {
+    switch (project.templateStatus) {
+      case 'ready':
+      case 'none': // legacy / planning-path projects scaffold elsewhere
+        return true;
+      case 'failed':
+        return false; // surfaced; a human re-runs templating to retry
+      default: // 'pending' | 'scaffolding'
+        if (_templating) return false;
+        _templating = true;
+        unawaited(
+          _runTemplatingPhase(project).whenComplete(() {
+            _templating = false;
+            if (!_disposed) unawaited(_pump());
+          }),
+        );
+        return false;
+    }
+  }
+
+  /// One-shot pre-task phase: split the backlog into topic-grouped milestones,
+  /// then have the Coordinator scaffold a compiling base project + a stub for each
+  /// task and commit it to main. Success → templateStatus `ready` (workers start);
+  /// a hard failure → `failed` (gated, surfaced to the human).
+  Future<void> _runTemplatingPhase(Project project) async {
+    try {
+      await _assignMilestones();
+      await _db.setProjectTemplateStatus(projectId, 'scaffolding');
+      final scaffolded = await _runTemplaterAgent(project);
+      if (!scaffolded) {
+        await _db.setProjectTemplateStatus(projectId, 'failed');
+        debugPrint('[Orchestrator p$projectId] templater could not scaffold; gated.');
+        return;
+      }
+      // "Passes CI inspection": run the configured gate once against main (if any
+      // task configured a workflow/dockerfile). No config → the compiling
+      // scaffold is the bar and we proceed.
+      final ciOk = await _runBaseCiGate(project);
+      await _db.setProjectTemplateStatus(projectId, ciOk ? 'ready' : 'failed');
+      debugPrint(
+        '[Orchestrator p$projectId] templating done → ${ciOk ? 'ready' : 'failed'}.',
+      );
+    } catch (e, st) {
+      debugPrint('[Orchestrator p$projectId] templating errored: $e\n$st');
+      await _db.setProjectTemplateStatus(projectId, 'failed');
+    }
+  }
+
+  /// Compute and persist each task's milestone batch (epic-aware, ceil(n/5)
+  /// batches). Tasks under the same story epic stay together; the rest is split
+  /// into roughly-even contiguous batches so no milestone runs too deep.
+  Future<void> _assignMilestones() async {
+    final tasks = await _db.getTasksForProject(projectId);
+    if (tasks.isEmpty) {
+      await _db.setProjectMilestonePlan(projectId, count: 0);
+      return;
+    }
+    // Group key = each task's topmost story ancestor (its epic), so epic-mates
+    // cluster. Tasks with no story are "loose" (null) and pack freely.
+    final stories = await _db.getUserStoriesForProject(projectId);
+    final parentOf = <int, int?>{for (final s in stories) s.story_pk: s.parent_story_fk};
+    int? epicOf(int? storyPk) {
+      if (storyPk == null) return null;
+      var cur = storyPk;
+      final seen = <int>{};
+      while (parentOf[cur] != null && seen.add(cur)) {
+        cur = parentOf[cur]!;
+      }
+      return cur;
+    }
+
+    final items = [
+      for (final t in tasks)
+        MilestoneItem(
+          id: t.task_pk,
+          groupKey: epicOf(t.task_story_fk),
+          order: t.createdAt.millisecondsSinceEpoch,
+        ),
+    ];
+    final assignment = assignMilestones(items);
+    for (final entry in assignment.entries) {
+      await _db.setTaskMilestone(entry.key, entry.value);
+    }
+    await _db.setProjectMilestonePlan(
+      projectId,
+      count: milestoneBatchCount(tasks.length),
+    );
+    debugPrint(
+      '[Orchestrator p$projectId] milestones: ${tasks.length} tasks → '
+      '${milestoneBatchCount(tasks.length)} batch(es).',
+    );
+  }
+
+  /// Drive the Coordinator persona once to scaffold the base project onto main.
+  /// Returns true when main has a commit (the scaffold landed).
+  Future<bool> _runTemplaterAgent(Project project) async {
+    final persona = await _findPersonaForRole(AgentRole.coordinator);
+    if (persona == null) {
+      debugPrint('[Orchestrator p$projectId] no Coordinator persona for templater.');
+      return false;
+    }
+    final resolved = await _resolveBackend(persona);
+    if (resolved == null) return false;
+    final handles = await _resolveWorkspaceHandles();
+    final ws = handles.ws;
+    final git = handles.git;
+    if (ws == null || git == null) return false;
+
+    // Scaffold onto main so every task branch (created off it) inherits the base.
+    try {
+      await git.checkoutBranch('main');
+    } catch (_) {
+      // No main yet — the scaffolder's first commit creates it.
+    }
+
+    final tasks = await _db.getTasksForProject(projectId);
+    final taskList = tasks.map((t) => '- ${t.title}').join('\n');
+    final prompts = await _loadPrompts();
+    final vars = PromptVars(
+      taskId: 0,
+      title: project.name,
+      branch: 'main',
+      taskList: taskList,
+    );
+
+    final sessionPk = await _db.getOrCreateAgentChatSession(
+      projectId,
+      persona.agent_pk,
+      persona.name,
+    );
+    final session = ProjectCoordinatorSession(
+      client: resolved.client,
+      projectId: projectId,
+      projectName: persona.name,
+      db: _db,
+      model: resolved.model,
+      chatSessionPk: sessionPk,
+      permissions: AgentToolPermissions.fromConfigJson(persona.configJson),
+      confirmAsk: (_, _) async => true,
+      agentName: persona.name,
+      workspace: ws,
+      git: git,
+      buildService: handles.build,
+      leanTools: false,
+      systemPromptOverride: await _framedPrompt(
+        AgentRole.coordinator,
+        OrchestratorPromptField.templaterFraming,
+        prompts,
+        vars,
+      ),
+      enableThinking: resolveEnableThinking(
+        agent: personaThinkingMode(persona.configJson, personaName: persona.name),
+        task: ThinkingMode.off,
+      ),
+    );
+
+    var kickoff = prompts.render(OrchestratorPromptField.templaterKickoff, vars);
+    for (var turn = 0; turn < _maxTurnsPerStage && !_disposed; turn++) {
+      if (!await _stillRunning()) return false;
+      try {
+        await for (final _ in session.runTurn(kickoff)) {}
+      } catch (e) {
+        if (!_isNotTaskFault(e)) {
+          debugPrint('[Orchestrator p$projectId] templater turn $turn failed: $e');
+          return (await git.headOid()) != null;
+        }
+        // transient/backpressure — retry the turn.
+      }
+      if ((await git.headOid()) != null) return true; // scaffold committed
+      kickoff =
+          'Continue creating any remaining base/stub files, then commit with '
+          'git_commit. Stop once the skeleton compiles and every task has a stub.';
+    }
+    return (await git.headOid()) != null;
+  }
+
+  /// Run the project's configured CI once against main as the base gate. Honors
+  /// the per-task build config: if no task configured a workflow/dockerfile,
+  /// there's nothing to run and the gate passes (the compiling scaffold is the
+  /// bar). Returns true on green / nothing-to-run, false on a red run.
+  Future<bool> _runBaseCiGate(Project project) async {
+    final tasks = await _db.getTasksForProject(projectId);
+    Task? cfg;
+    for (final t in tasks) {
+      final wf = t.workflowPath?.trim() ?? '';
+      final df = t.dockerfilePath?.trim() ?? '';
+      if (wf.isNotEmpty || df.isNotEmpty) {
+        cfg = t;
+        break;
+      }
+    }
+    if (cfg == null) return true;
+    final handles = await _resolveWorkspaceHandles();
+    final ws = handles.ws;
+    final build = handles.build;
+    if (ws == null || build == null) return true; // can't run → don't block
+    final workflowPath = cfg.workflowPath?.trim() ?? '';
+    final dockerfilePath = cfg.dockerfilePath?.trim() ?? '';
+    int runPk;
+    try {
+      if (workflowPath.isNotEmpty) {
+        runPk = (await build.startWorkflowRun(
+          clientPk: project.client_fk,
+          projectPk: projectId,
+          ws: ws,
+          workflowPath: workflowPath,
+          branch: 'main',
+          triggeredBy: 'templater',
+        )).runPk;
+      } else {
+        runPk = (await build.startDockerBuild(
+          clientPk: project.client_fk,
+          projectPk: projectId,
+          ws: ws,
+          dockerfilePath: dockerfilePath,
+          imageTag: 'base:latest',
+          branch: 'main',
+          triggeredBy: 'templater',
+        )).runPk;
+      }
+    } catch (e) {
+      debugPrint('[Orchestrator p$projectId] base CI failed to start: $e');
+      return false;
+    }
+    final deadline = DateTime.now().add(_buildTimeout);
+    while (!_disposed && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(_buildPollInterval);
+      final run = await _db.getCiRun(runPk);
+      if (run == null) break;
+      final status = CiStatusX.fromWire(run.status);
+      if (status.isTerminal) return status == CiStatus.success;
+    }
+    return false;
+  }
+
+  /// Advance to the next milestone batch once every task in the current-or-earlier
+  /// batches is finished. A Blocked task is surfaced to the human and does NOT
+  /// freeze the project. No-op for single-batch (short) projects or the last batch.
+  Future<void> _maybeAdvanceMilestone(Project project) async {
+    final count = project.milestoneCount;
+    if (count <= 1) return;
+    final current = project.currentMilestone;
+    if (current >= count - 1) return;
+    final tasks = await _db.getTasksForProject(projectId);
+    final inScope = tasks.where((t) => (t.milestoneOrder ?? 0) <= current);
+    if (inScope.isEmpty) return;
+    final pending = inScope.where(
+      (t) => t.status != TaskStatus.done && t.status != TaskStatus.blocked,
+    );
+    if (pending.isNotEmpty) return;
+    final next = await _db.advanceProjectMilestone(projectId);
+    debugPrint(
+      '[Orchestrator p$projectId] milestone $current complete → opening '
+      '$next/${count - 1}.',
     );
   }
 

@@ -15,6 +15,11 @@ import '../../projects/types/project_type.dart';
 import '../../projects/types/project_type_selector.dart';
 import '../../../shared/ui/nexus_ui.dart';
 
+/// Max length of a project name — must match the Projects.name DB column
+/// (`text().withLength(min: 1, max: 150)`) so the UI can't submit an over-long
+/// name that the insert would reject.
+const int _kNameMaxLength = 150;
+
 /// Step 4 — name the first project and pick the agent pack(s) to provision into
 /// the current client. Creating the project selects it and advances the wizard.
 class ProjectStep extends ConsumerStatefulWidget {
@@ -109,6 +114,28 @@ class _ProjectStepState extends ConsumerState<ProjectStep> {
           Gap.lg,
           TextField(
             controller: _name,
+            // The Projects.name column caps at 150 chars; enforce it here so the
+            // insert can't blow up, and surface a "N left" countdown once the
+            // user is within 10 of the limit (hidden otherwise to stay clean).
+            maxLength: _kNameMaxLength,
+            buildCounter:
+                (
+                  context, {
+                  required int currentLength,
+                  required int? maxLength,
+                  required bool isFocused,
+                }) {
+                  final remaining = _kNameMaxLength - currentLength;
+                  if (remaining > 10) return null;
+                  return Text(
+                    '$remaining left',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: remaining <= 0
+                          ? context.nx.danger
+                          : context.nx.textMuted,
+                    ),
+                  );
+                },
             decoration: const InputDecoration(
               labelText: 'Project name',
               border: OutlineInputBorder(),

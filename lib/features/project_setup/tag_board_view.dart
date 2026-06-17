@@ -29,7 +29,7 @@ class TagBoardView extends ConsumerWidget {
     // scoped suggestions). Falls back to empty until it loads, so the board
     // renders immediately and fills in the moment an industry is chosen.
     final scoped =
-        ref.watch(scopedBoardProvider(projectPk)).valueOrNull ??
+        ref.watch(scopedBoardProvider(projectPk)).value ??
         ScopedBoard.empty;
 
     return flowAsync.when(
@@ -153,7 +153,7 @@ class _ResolveBarState extends ConsumerState<_ResolveBar> {
     setState(() => _busy = true);
     try {
       final tags =
-          ref.read(projectTagsProvider(widget.projectPk)).valueOrNull ?? [];
+          ref.read(projectTagsProvider(widget.projectPk)).value ?? [];
       final resolved = const StackResolver().resolve(tags);
       final controller = ref.read(tagControllerProvider(widget.projectPk));
       for (final tag in resolved.stackTags) {

@@ -26,7 +26,7 @@ class AuthGate extends ConsumerWidget {
     if (auth.busy && auth.token == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    if (!auth.isSignedIn && !ref.watch(authSkippedNotifierProvider)) {
+    if (!auth.isSignedIn && !ref.watch(authSkippedProvider)) {
       return const _LoginScreen();
     }
     return const MainShell();
@@ -72,7 +72,7 @@ class _LoginScreen extends ConsumerWidget {
                 ),
                 AccountAuthForms(
                   onSkip: () =>
-                      ref.read(authSkippedNotifierProvider.notifier).skip(),
+                      ref.read(authSkippedProvider.notifier).skip(),
                 ),
               ],
             ),

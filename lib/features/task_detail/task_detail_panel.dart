@@ -33,7 +33,7 @@ class TaskDetailPanel extends ConsumerWidget {
 
     final projectId = ref.watch(currentProjectIdProvider);
     final tasksAsync = ref.watch(allTasksForProjectProvider(projectId));
-    final connectionMode = ref.watch(connectionModeNotifierProvider);
+    final connectionMode = ref.watch(connectionModeProvider);
 
     return tasksAsync.when(
       data: (tasks) {

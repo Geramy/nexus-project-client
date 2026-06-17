@@ -2,7 +2,7 @@
 // Author: Geramy Loveless <support@nexus-projects.ai>
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 /// Multi-select state for the Agents › Personas list. Lifted out of the tab so
 /// the MainShell right outer panel can host the bulk editor while select mode

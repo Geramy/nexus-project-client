@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.14.28+63
+version: 1.15.0+64
 
 environment:
   sdk: ^3.11.5
@@ -36,15 +36,15 @@ dependencies:
   cupertino_icons: ^1.0.8
 
   # State Management (following Card-wars patterns)
-  flutter_riverpod: ^2.6.1
-  riverpod_annotation: ^2.6.1
+  flutter_riverpod: ^3.3.2
+  riverpod_annotation: ^4.0.3
 
   # Immutable models + code generation
   freezed_annotation: ^3.0.0
   json_annotation: ^4.9.0
 
   # Navigation
-  go_router: ^14.8.1
+  go_router: ^17.3.0
 
   # Networking (future use)
   dio: ^5.8.0+1
@@ -56,11 +56,11 @@ dependencies:
   # Reactive cross-platform SQLite (Drift) - chosen for real-time DB subscriptions
   # so UI can be directly driven by database changes (local + future remote sync)
   drift: ^2.26.0
-  drift_flutter: ^0.2.1
-  sqlite3_flutter_libs: ^0.5.0  # for mobile/desktop native SQLite
-  sqlite3: ^2.4.0               # direct: per-project SQLite-backed virtual disk (.nxtprj)
-  git2dart: ^0.4.0              # libgit2 (FFI) — git engine
-  git2dart_binaries: 1.10.3     # PINNED: 1.10.4 resolves its native libs via
+  drift_flutter: ^0.3.0
+  sqlite3_flutter_libs: ^0.6.0+eol  # for mobile/desktop native SQLite
+  sqlite3: ^3.3.3               # direct: per-project SQLite-backed virtual disk (.nxtprj)
+  git2dart: ^0.5.0              # libgit2 (FFI) — git engine
+  git2dart_binaries: ^1.11.2     # PINNED: 1.10.4 resolves its native libs via
                                 # Isolate.resolvePackageUri, which returns null
                                 # inside a compiled Flutter app → runtime "Unable
                                 # to resolve git2dart_binaries package location".
@@ -70,7 +70,7 @@ dependencies:
   path_provider: ^2.1.4
   path: ^1.9.0
   yaml: ^3.1.2                   # parse .github/workflows/*.yml for the local CI runner
-  archive: ^3.6.1                # tar the build context for the Docker Engine API (POST /build)
+  archive: ^4.0.9                # tar the build context for the Docker Engine API (POST /build)
 
   # PDF export (user-story tree, etc.) — `pdf` builds the document, `printing`
   # saves/shares/prints it cross-platform (desktop + mobile).
@@ -81,7 +81,7 @@ dependencies:
   # Using the exact same versions/commit of the recording + VAD stack that works
   # reliably on macOS desktop in ~/IdeaProjects/lemonade_mobile (record ^6 + vad 0.0.8).
   record: ^6.2.0
-  just_audio: ^0.9.36
+  just_audio: ^0.10.5
   # Per-platform just_audio (TTS playback) backends. iOS/Android/macOS are built
   # into just_audio itself; Windows + Linux need a federated/community backend or
   # the plugin channel is unimplemented (voice → MissingPluginException).
@@ -90,16 +90,16 @@ dependencies:
   # main.dart via JustAudioMediaKit.ensureInitialized.
   just_audio_media_kit: ^2.0.6
   media_kit_libs_linux: ^1.1.3
-  permission_handler: ^11.3.1
+  permission_handler: ^12.0.3
   http: ^1.2.0
   vad: ^0.0.8  # Same resolved version as lemonade_mobile (the one where audioStream: + v5 works on desktop)
-  audio_session: ^0.1.18  # Proper voice chat audio session config (AEC, etc.)
+  audio_session: ^0.2.3  # Proper voice chat audio session config (AEC, etc.)
 
   # Lemonade server management (exact port from ~/IdeaProjects/lemonade_mobile)
   # For local self-managed Lemonade servers that expose omni collections + full admin API.
   # Routed/routed servers (talking to nexus-projects-server) do NOT use this surface.
-  flutter_secure_storage: ^9.2.4
-  web_socket_channel: ^2.4.0
+  flutter_secure_storage: ^10.3.1
+  web_socket_channel: ^3.0.3
   shared_preferences: ^2.5.5
   flutter_code_editor: ^0.3.5
   flutter_highlight: ^0.7.0
@@ -128,10 +128,10 @@ dev_dependencies:
 
   # Code generation
   build_runner: ^2.4.15
-  riverpod_generator: ^2.6.5
+  riverpod_generator: ^4.0.4
   freezed: ^3.1.0
   json_serializable: ^6.9.5
-  riverpod_lint: ^2.6.5
+  riverpod_lint: ^3.1.4
 
   # Drift code generation
   drift_dev: ^2.26.0

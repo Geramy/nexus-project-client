@@ -30,6 +30,7 @@ class AppThemeNotifier extends _$AppThemeNotifier {
   Future<void> _hydrate() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = AppThemeChoice.fromName(prefs.getString(_prefsKey));
+    if (!ref.mounted) return; // provider disposed during the await (riverpod 3)
     if (saved != state) state = saved;
   }
 

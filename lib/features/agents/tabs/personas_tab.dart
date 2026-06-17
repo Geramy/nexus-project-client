@@ -30,7 +30,7 @@ class _PersonasTabState extends ConsumerState<PersonasTab> {
     final personasAsync = ref.watch(
       agentPersonasForClientProvider(currentClientId),
     );
-    final selectedId = ref.watch(selectedPersonaNotifierProvider)?.id;
+    final selectedId = ref.watch(selectedPersonaProvider)?.id;
     final selection = ref.watch(personaBulkSelectionProvider);
     final selectNotifier = ref.read(personaBulkSelectionProvider.notifier);
 
@@ -51,7 +51,7 @@ class _PersonasTabState extends ConsumerState<PersonasTab> {
                       // Drop the single-persona editor so the right outer panel
                       // can host the bulk editor instead.
                       ref
-                          .read(selectedPersonaNotifierProvider.notifier)
+                          .read(selectedPersonaProvider.notifier)
                           .clear();
                       selectNotifier.enter();
                     },
@@ -87,7 +87,7 @@ class _PersonasTabState extends ConsumerState<PersonasTab> {
                             onEdit: () {
                               ref
                                   .read(
-                                    selectedPersonaNotifierProvider.notifier,
+                                    selectedPersonaProvider.notifier,
                                   )
                                   .select(
                                     EditingPersona(
@@ -213,7 +213,7 @@ class _PersonaCard extends ConsumerWidget {
 
     // Live "currently doing": find this agent's active task in the open project.
     final projectId = ref.watch(currentProjectIdProvider);
-    final tasks = ref.watch(allTasksForProjectProvider(projectId)).valueOrNull;
+    final tasks = ref.watch(allTasksForProjectProvider(projectId)).value;
     dynamic activeTask;
     if (tasks != null) {
       for (final t in tasks) {

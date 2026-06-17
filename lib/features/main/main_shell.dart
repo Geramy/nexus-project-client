@@ -67,7 +67,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     _warmClient(ref.read(currentClientIdProvider));
     _warmProject(ref.read(currentProjectIdProvider));
     // Load saved panel widths + collapsed state on startup.
-    final layout = ref.read(panelLayoutNotifierProvider.notifier);
+    final layout = ref.read(panelLayoutProvider.notifier);
     layout.load();
     layout.loadCollapsed().then((saved) {
       if (!mounted) return;
@@ -95,7 +95,7 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   /// Save the current right-panel width for the active view.
   void _savePanelWidth(MainView view) {
-    ref.read(panelLayoutNotifierProvider.notifier).setWidth(view, _rightWidth);
+    ref.read(panelLayoutProvider.notifier).setWidth(view, _rightWidth);
   }
 
   /// Eagerly subscribe to the per-client page providers so their data is cached
@@ -116,7 +116,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   @override
   Widget build(BuildContext context) {
     final currentView = ref.watch(currentMainViewProvider);
-    final connectionMode = ref.watch(connectionModeNotifierProvider);
+    final connectionMode = ref.watch(connectionModeProvider);
 
     // Keep the built-in Nexus Router (subscription) server reconciled with the
     // signed-in account for the whole session (materialize on login, remove on
@@ -146,7 +146,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     // Surface a tappable notification whenever a task is approved (→ Done). The
     // DB broadcasts each completion; tapping "View" deep-links to that task.
     ref.listen(taskCompletedStreamProvider, (_, next) {
-      final ev = next.valueOrNull;
+      final ev = next.value;
       if (ev == null) return;
       final messenger = ScaffoldMessenger.of(context);
       messenger
@@ -170,7 +170,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                     .read(currentProjectIdProvider.notifier)
                     .selectProject(ev.projectPk);
                 ref
-                    .read(selectedTaskIdNotifierProvider.notifier)
+                    .read(selectedTaskIdProvider.notifier)
                     .selectTask(ev.taskPk);
                 ref
                     .read(currentMainViewProvider.notifier)
@@ -192,7 +192,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         ); // persist the width we were showing for the old view
       }
       final savedWidth = ref
-          .read(panelLayoutNotifierProvider.notifier)
+          .read(panelLayoutProvider.notifier)
           .getWidth(next);
       setState(() {
         _rightWidth = savedWidth;
@@ -363,7 +363,7 @@ class _MainShellState extends ConsumerState<MainShell> {
       case MainView.tasks:
         other = TasksView(
           onTaskSelected: (id) {
-            ref.read(selectedTaskIdNotifierProvider.notifier).selectTask(id);
+            ref.read(selectedTaskIdProvider.notifier).selectTask(id);
             ref.read(currentMainViewProvider.notifier).setView(MainView.tasks);
           },
         );
@@ -457,13 +457,13 @@ class _MainShellState extends ConsumerState<MainShell> {
             clientId: ref.watch(currentClientIdProvider),
           );
         }
-        final editing = ref.watch(selectedPersonaNotifierProvider);
+        final editing = ref.watch(selectedPersonaProvider);
         if (editing != null) {
           return _buildRightPanelHeader(
             title: 'Edit Persona',
             subtitle: editing.name,
             onClose: () =>
-                ref.read(selectedPersonaNotifierProvider.notifier).clear(),
+                ref.read(selectedPersonaProvider.notifier).clear(),
             // ValueKey forces a fresh editor State when the selected persona
             // changes, so fields/models never retain the previous persona's data.
             child: PersonaEditor(
@@ -480,7 +480,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         );
 
       case MainView.tasks:
-        final selectedTaskId = ref.watch(selectedTaskIdNotifierProvider);
+        final selectedTaskId = ref.watch(selectedTaskIdProvider);
         return TaskDetailPanel(taskId: selectedTaskId);
 
       case MainView.activity:
@@ -533,7 +533,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                 _collapsedByView[view] = _rightCollapsed;
               });
               ref
-                  .read(panelLayoutNotifierProvider.notifier)
+                  .read(panelLayoutProvider.notifier)
                   .setCollapsed(view, _rightCollapsed);
             },
           ),

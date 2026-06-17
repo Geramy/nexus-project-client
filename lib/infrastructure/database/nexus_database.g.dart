@@ -2668,6 +2668,42 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         requiredDuringInsert: false,
         defaultValue: const Constant('none'),
       );
+  static const VerificationMeta _templateStatusMeta = const VerificationMeta(
+    'templateStatus',
+  );
+  @override
+  late final GeneratedColumn<String> templateStatus = GeneratedColumn<String>(
+    'template_status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('none'),
+  );
+  static const VerificationMeta _currentMilestoneMeta = const VerificationMeta(
+    'currentMilestone',
+  );
+  @override
+  late final GeneratedColumn<int> currentMilestone = GeneratedColumn<int>(
+    'current_milestone',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _milestoneCountMeta = const VerificationMeta(
+    'milestoneCount',
+  );
+  @override
+  late final GeneratedColumn<int> milestoneCount = GeneratedColumn<int>(
+    'milestone_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _projectSummaryMdMeta = const VerificationMeta(
     'projectSummaryMd',
   );
@@ -2766,6 +2802,9 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
     setupStatus,
     setupTranscriptJson,
     explorationStatus,
+    templateStatus,
+    currentMilestone,
+    milestoneCount,
     projectSummaryMd,
     summaryUpdatedAt,
     projectType,
@@ -2907,6 +2946,33 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         ),
       );
     }
+    if (data.containsKey('template_status')) {
+      context.handle(
+        _templateStatusMeta,
+        templateStatus.isAcceptableOrUnknown(
+          data['template_status']!,
+          _templateStatusMeta,
+        ),
+      );
+    }
+    if (data.containsKey('current_milestone')) {
+      context.handle(
+        _currentMilestoneMeta,
+        currentMilestone.isAcceptableOrUnknown(
+          data['current_milestone']!,
+          _currentMilestoneMeta,
+        ),
+      );
+    }
+    if (data.containsKey('milestone_count')) {
+      context.handle(
+        _milestoneCountMeta,
+        milestoneCount.isAcceptableOrUnknown(
+          data['milestone_count']!,
+          _milestoneCountMeta,
+        ),
+      );
+    }
     if (data.containsKey('project_summary_md')) {
       context.handle(
         _projectSummaryMdMeta,
@@ -3029,6 +3095,18 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         DriftSqlType.string,
         data['${effectivePrefix}exploration_status'],
       )!,
+      templateStatus: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}template_status'],
+      )!,
+      currentMilestone: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}current_milestone'],
+      )!,
+      milestoneCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}milestone_count'],
+      )!,
       projectSummaryMd: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}project_summary_md'],
@@ -3113,6 +3191,24 @@ class Project extends DataClass implements Insertable<Project> {
   /// presses "Generate tasks from stories", which flips it to `complete`.
   final String explorationStatus;
 
+  /// The Templater (pre-task) phase state: `none` (not applicable / legacy),
+  /// `pending` (tasks generated, base not yet scaffolded), `scaffolding` (the
+  /// Coordinator is building the base project + task stubs), `ready` (base
+  /// committed & CI-green — workers may start), or `failed`. Workers are gated
+  /// until this is `ready`, which is what stops every agent from racing to
+  /// scaffold an empty `main` at once.
+  final String templateStatus;
+
+  /// The milestone batch currently open for work (0-based). Workers only pick up
+  /// tasks whose `milestoneOrder` equals this; when that batch finishes and its
+  /// CI is green, the orchestrator advances it until it reaches [milestoneCount].
+  final int currentMilestone;
+
+  /// Total number of milestone batches the Templater split the backlog into
+  /// (1 = no intermediate milestones: base → all tasks → final CI). 0 until the
+  /// Templater runs.
+  final int milestoneCount;
+
   /// AI-compiled, human-readable summary of the project (markdown), built from
   /// all /PLANS files. Regenerated on plan changes and by the coordinator's
   /// idle cycles. Null until first generated.
@@ -3148,6 +3244,9 @@ class Project extends DataClass implements Insertable<Project> {
     required this.setupStatus,
     this.setupTranscriptJson,
     required this.explorationStatus,
+    required this.templateStatus,
+    required this.currentMilestone,
+    required this.milestoneCount,
     this.projectSummaryMd,
     this.summaryUpdatedAt,
     required this.projectType,
@@ -3189,6 +3288,9 @@ class Project extends DataClass implements Insertable<Project> {
       map['setup_transcript_json'] = Variable<String>(setupTranscriptJson);
     }
     map['exploration_status'] = Variable<String>(explorationStatus);
+    map['template_status'] = Variable<String>(templateStatus);
+    map['current_milestone'] = Variable<int>(currentMilestone);
+    map['milestone_count'] = Variable<int>(milestoneCount);
     if (!nullToAbsent || projectSummaryMd != null) {
       map['project_summary_md'] = Variable<String>(projectSummaryMd);
     }
@@ -3235,6 +3337,9 @@ class Project extends DataClass implements Insertable<Project> {
           ? const Value.absent()
           : Value(setupTranscriptJson),
       explorationStatus: Value(explorationStatus),
+      templateStatus: Value(templateStatus),
+      currentMilestone: Value(currentMilestone),
+      milestoneCount: Value(milestoneCount),
       projectSummaryMd: projectSummaryMd == null && nullToAbsent
           ? const Value.absent()
           : Value(projectSummaryMd),
@@ -3277,6 +3382,9 @@ class Project extends DataClass implements Insertable<Project> {
         json['setupTranscriptJson'],
       ),
       explorationStatus: serializer.fromJson<String>(json['explorationStatus']),
+      templateStatus: serializer.fromJson<String>(json['templateStatus']),
+      currentMilestone: serializer.fromJson<int>(json['currentMilestone']),
+      milestoneCount: serializer.fromJson<int>(json['milestoneCount']),
       projectSummaryMd: serializer.fromJson<String?>(json['projectSummaryMd']),
       summaryUpdatedAt: serializer.fromJson<DateTime?>(
         json['summaryUpdatedAt'],
@@ -3308,6 +3416,9 @@ class Project extends DataClass implements Insertable<Project> {
       'setupStatus': serializer.toJson<String>(setupStatus),
       'setupTranscriptJson': serializer.toJson<String?>(setupTranscriptJson),
       'explorationStatus': serializer.toJson<String>(explorationStatus),
+      'templateStatus': serializer.toJson<String>(templateStatus),
+      'currentMilestone': serializer.toJson<int>(currentMilestone),
+      'milestoneCount': serializer.toJson<int>(milestoneCount),
       'projectSummaryMd': serializer.toJson<String?>(projectSummaryMd),
       'summaryUpdatedAt': serializer.toJson<DateTime?>(summaryUpdatedAt),
       'projectType': serializer.toJson<String>(projectType),
@@ -3333,6 +3444,9 @@ class Project extends DataClass implements Insertable<Project> {
     String? setupStatus,
     Value<String?> setupTranscriptJson = const Value.absent(),
     String? explorationStatus,
+    String? templateStatus,
+    int? currentMilestone,
+    int? milestoneCount,
     Value<String?> projectSummaryMd = const Value.absent(),
     Value<DateTime?> summaryUpdatedAt = const Value.absent(),
     String? projectType,
@@ -3363,6 +3477,9 @@ class Project extends DataClass implements Insertable<Project> {
         ? setupTranscriptJson.value
         : this.setupTranscriptJson,
     explorationStatus: explorationStatus ?? this.explorationStatus,
+    templateStatus: templateStatus ?? this.templateStatus,
+    currentMilestone: currentMilestone ?? this.currentMilestone,
+    milestoneCount: milestoneCount ?? this.milestoneCount,
     projectSummaryMd: projectSummaryMd.present
         ? projectSummaryMd.value
         : this.projectSummaryMd,
@@ -3415,6 +3532,15 @@ class Project extends DataClass implements Insertable<Project> {
       explorationStatus: data.explorationStatus.present
           ? data.explorationStatus.value
           : this.explorationStatus,
+      templateStatus: data.templateStatus.present
+          ? data.templateStatus.value
+          : this.templateStatus,
+      currentMilestone: data.currentMilestone.present
+          ? data.currentMilestone.value
+          : this.currentMilestone,
+      milestoneCount: data.milestoneCount.present
+          ? data.milestoneCount.value
+          : this.milestoneCount,
       projectSummaryMd: data.projectSummaryMd.present
           ? data.projectSummaryMd.value
           : this.projectSummaryMd,
@@ -3452,6 +3578,9 @@ class Project extends DataClass implements Insertable<Project> {
           ..write('setupStatus: $setupStatus, ')
           ..write('setupTranscriptJson: $setupTranscriptJson, ')
           ..write('explorationStatus: $explorationStatus, ')
+          ..write('templateStatus: $templateStatus, ')
+          ..write('currentMilestone: $currentMilestone, ')
+          ..write('milestoneCount: $milestoneCount, ')
           ..write('projectSummaryMd: $projectSummaryMd, ')
           ..write('summaryUpdatedAt: $summaryUpdatedAt, ')
           ..write('projectType: $projectType, ')
@@ -3479,6 +3608,9 @@ class Project extends DataClass implements Insertable<Project> {
     setupStatus,
     setupTranscriptJson,
     explorationStatus,
+    templateStatus,
+    currentMilestone,
+    milestoneCount,
     projectSummaryMd,
     summaryUpdatedAt,
     projectType,
@@ -3505,6 +3637,9 @@ class Project extends DataClass implements Insertable<Project> {
           other.setupStatus == this.setupStatus &&
           other.setupTranscriptJson == this.setupTranscriptJson &&
           other.explorationStatus == this.explorationStatus &&
+          other.templateStatus == this.templateStatus &&
+          other.currentMilestone == this.currentMilestone &&
+          other.milestoneCount == this.milestoneCount &&
           other.projectSummaryMd == this.projectSummaryMd &&
           other.summaryUpdatedAt == this.summaryUpdatedAt &&
           other.projectType == this.projectType &&
@@ -3529,6 +3664,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
   final Value<String> setupStatus;
   final Value<String?> setupTranscriptJson;
   final Value<String> explorationStatus;
+  final Value<String> templateStatus;
+  final Value<int> currentMilestone;
+  final Value<int> milestoneCount;
   final Value<String?> projectSummaryMd;
   final Value<DateTime?> summaryUpdatedAt;
   final Value<String> projectType;
@@ -3551,6 +3689,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     this.setupStatus = const Value.absent(),
     this.setupTranscriptJson = const Value.absent(),
     this.explorationStatus = const Value.absent(),
+    this.templateStatus = const Value.absent(),
+    this.currentMilestone = const Value.absent(),
+    this.milestoneCount = const Value.absent(),
     this.projectSummaryMd = const Value.absent(),
     this.summaryUpdatedAt = const Value.absent(),
     this.projectType = const Value.absent(),
@@ -3574,6 +3715,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     this.setupStatus = const Value.absent(),
     this.setupTranscriptJson = const Value.absent(),
     this.explorationStatus = const Value.absent(),
+    this.templateStatus = const Value.absent(),
+    this.currentMilestone = const Value.absent(),
+    this.milestoneCount = const Value.absent(),
     this.projectSummaryMd = const Value.absent(),
     this.summaryUpdatedAt = const Value.absent(),
     this.projectType = const Value.absent(),
@@ -3598,6 +3742,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     Expression<String>? setupStatus,
     Expression<String>? setupTranscriptJson,
     Expression<String>? explorationStatus,
+    Expression<String>? templateStatus,
+    Expression<int>? currentMilestone,
+    Expression<int>? milestoneCount,
     Expression<String>? projectSummaryMd,
     Expression<DateTime>? summaryUpdatedAt,
     Expression<String>? projectType,
@@ -3623,6 +3770,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
       if (setupTranscriptJson != null)
         'setup_transcript_json': setupTranscriptJson,
       if (explorationStatus != null) 'exploration_status': explorationStatus,
+      if (templateStatus != null) 'template_status': templateStatus,
+      if (currentMilestone != null) 'current_milestone': currentMilestone,
+      if (milestoneCount != null) 'milestone_count': milestoneCount,
       if (projectSummaryMd != null) 'project_summary_md': projectSummaryMd,
       if (summaryUpdatedAt != null) 'summary_updated_at': summaryUpdatedAt,
       if (projectType != null) 'project_type': projectType,
@@ -3648,6 +3798,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     Value<String>? setupStatus,
     Value<String?>? setupTranscriptJson,
     Value<String>? explorationStatus,
+    Value<String>? templateStatus,
+    Value<int>? currentMilestone,
+    Value<int>? milestoneCount,
     Value<String?>? projectSummaryMd,
     Value<DateTime?>? summaryUpdatedAt,
     Value<String>? projectType,
@@ -3672,6 +3825,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
       setupStatus: setupStatus ?? this.setupStatus,
       setupTranscriptJson: setupTranscriptJson ?? this.setupTranscriptJson,
       explorationStatus: explorationStatus ?? this.explorationStatus,
+      templateStatus: templateStatus ?? this.templateStatus,
+      currentMilestone: currentMilestone ?? this.currentMilestone,
+      milestoneCount: milestoneCount ?? this.milestoneCount,
       projectSummaryMd: projectSummaryMd ?? this.projectSummaryMd,
       summaryUpdatedAt: summaryUpdatedAt ?? this.summaryUpdatedAt,
       projectType: projectType ?? this.projectType,
@@ -3731,6 +3887,15 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     if (explorationStatus.present) {
       map['exploration_status'] = Variable<String>(explorationStatus.value);
     }
+    if (templateStatus.present) {
+      map['template_status'] = Variable<String>(templateStatus.value);
+    }
+    if (currentMilestone.present) {
+      map['current_milestone'] = Variable<int>(currentMilestone.value);
+    }
+    if (milestoneCount.present) {
+      map['milestone_count'] = Variable<int>(milestoneCount.value);
+    }
     if (projectSummaryMd.present) {
       map['project_summary_md'] = Variable<String>(projectSummaryMd.value);
     }
@@ -3772,6 +3937,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
           ..write('setupStatus: $setupStatus, ')
           ..write('setupTranscriptJson: $setupTranscriptJson, ')
           ..write('explorationStatus: $explorationStatus, ')
+          ..write('templateStatus: $templateStatus, ')
+          ..write('currentMilestone: $currentMilestone, ')
+          ..write('milestoneCount: $milestoneCount, ')
           ..write('projectSummaryMd: $projectSummaryMd, ')
           ..write('summaryUpdatedAt: $summaryUpdatedAt, ')
           ..write('projectType: $projectType, ')
@@ -5231,6 +5399,17 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _milestoneOrderMeta = const VerificationMeta(
+    'milestoneOrder',
+  );
+  @override
+  late final GeneratedColumn<int> milestoneOrder = GeneratedColumn<int>(
+    'milestone_order',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _requiresBuildMeta = const VerificationMeta(
     'requiresBuild',
   );
@@ -5348,6 +5527,7 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
     submissionJson,
     worker_session_fk,
     workBranch,
+    milestoneOrder,
     requiresBuild,
     dockerfilePath,
     workflowPath,
@@ -5543,6 +5723,15 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
         workBranch.isAcceptableOrUnknown(data['work_branch']!, _workBranchMeta),
       );
     }
+    if (data.containsKey('milestone_order')) {
+      context.handle(
+        _milestoneOrderMeta,
+        milestoneOrder.isAcceptableOrUnknown(
+          data['milestone_order']!,
+          _milestoneOrderMeta,
+        ),
+      );
+    }
     if (data.containsKey('requires_build')) {
       context.handle(
         _requiresBuildMeta,
@@ -5693,6 +5882,10 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
         DriftSqlType.string,
         data['${effectivePrefix}work_branch'],
       ),
+      milestoneOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}milestone_order'],
+      ),
       requiresBuild: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}requires_build'],
@@ -5787,6 +5980,12 @@ class Task extends DataClass implements Insertable<Task> {
   /// The git branch this task is being worked on (e.g. `task/42`).
   final String? workBranch;
 
+  /// Which milestone batch this task belongs to (0-based), assigned by the
+  /// Templater stage when it splits the backlog into sequential, topic-grouped
+  /// milestones. Workers only pick up tasks whose milestone is the project's
+  /// current one. Null = unassigned (short projects / legacy tasks → batch 0).
+  final int? milestoneOrder;
+
   /// When true, the orchestration pipeline runs a Docker build / CI gate on this
   /// task after verification passes and before it is handed off for merge.
   final bool requiresBuild;
@@ -5830,6 +6029,7 @@ class Task extends DataClass implements Insertable<Task> {
     this.submissionJson,
     this.worker_session_fk,
     this.workBranch,
+    this.milestoneOrder,
     required this.requiresBuild,
     this.dockerfilePath,
     this.workflowPath,
@@ -5886,6 +6086,9 @@ class Task extends DataClass implements Insertable<Task> {
     }
     if (!nullToAbsent || workBranch != null) {
       map['work_branch'] = Variable<String>(workBranch);
+    }
+    if (!nullToAbsent || milestoneOrder != null) {
+      map['milestone_order'] = Variable<int>(milestoneOrder);
     }
     map['requires_build'] = Variable<bool>(requiresBuild);
     if (!nullToAbsent || dockerfilePath != null) {
@@ -5955,6 +6158,9 @@ class Task extends DataClass implements Insertable<Task> {
       workBranch: workBranch == null && nullToAbsent
           ? const Value.absent()
           : Value(workBranch),
+      milestoneOrder: milestoneOrder == null && nullToAbsent
+          ? const Value.absent()
+          : Value(milestoneOrder),
       requiresBuild: Value(requiresBuild),
       dockerfilePath: dockerfilePath == null && nullToAbsent
           ? const Value.absent()
@@ -6007,6 +6213,7 @@ class Task extends DataClass implements Insertable<Task> {
       submissionJson: serializer.fromJson<String?>(json['submissionJson']),
       worker_session_fk: serializer.fromJson<int?>(json['worker_session_fk']),
       workBranch: serializer.fromJson<String?>(json['workBranch']),
+      milestoneOrder: serializer.fromJson<int?>(json['milestoneOrder']),
       requiresBuild: serializer.fromJson<bool>(json['requiresBuild']),
       dockerfilePath: serializer.fromJson<String?>(json['dockerfilePath']),
       workflowPath: serializer.fromJson<String?>(json['workflowPath']),
@@ -6042,6 +6249,7 @@ class Task extends DataClass implements Insertable<Task> {
       'submissionJson': serializer.toJson<String?>(submissionJson),
       'worker_session_fk': serializer.toJson<int?>(worker_session_fk),
       'workBranch': serializer.toJson<String?>(workBranch),
+      'milestoneOrder': serializer.toJson<int?>(milestoneOrder),
       'requiresBuild': serializer.toJson<bool>(requiresBuild),
       'dockerfilePath': serializer.toJson<String?>(dockerfilePath),
       'workflowPath': serializer.toJson<String?>(workflowPath),
@@ -6075,6 +6283,7 @@ class Task extends DataClass implements Insertable<Task> {
     Value<String?> submissionJson = const Value.absent(),
     Value<int?> worker_session_fk = const Value.absent(),
     Value<String?> workBranch = const Value.absent(),
+    Value<int?> milestoneOrder = const Value.absent(),
     bool? requiresBuild,
     Value<String?> dockerfilePath = const Value.absent(),
     Value<String?> workflowPath = const Value.absent(),
@@ -6121,6 +6330,9 @@ class Task extends DataClass implements Insertable<Task> {
         ? worker_session_fk.value
         : this.worker_session_fk,
     workBranch: workBranch.present ? workBranch.value : this.workBranch,
+    milestoneOrder: milestoneOrder.present
+        ? milestoneOrder.value
+        : this.milestoneOrder,
     requiresBuild: requiresBuild ?? this.requiresBuild,
     dockerfilePath: dockerfilePath.present
         ? dockerfilePath.value
@@ -6185,6 +6397,9 @@ class Task extends DataClass implements Insertable<Task> {
       workBranch: data.workBranch.present
           ? data.workBranch.value
           : this.workBranch,
+      milestoneOrder: data.milestoneOrder.present
+          ? data.milestoneOrder.value
+          : this.milestoneOrder,
       requiresBuild: data.requiresBuild.present
           ? data.requiresBuild.value
           : this.requiresBuild,
@@ -6226,6 +6441,7 @@ class Task extends DataClass implements Insertable<Task> {
           ..write('submissionJson: $submissionJson, ')
           ..write('worker_session_fk: $worker_session_fk, ')
           ..write('workBranch: $workBranch, ')
+          ..write('milestoneOrder: $milestoneOrder, ')
           ..write('requiresBuild: $requiresBuild, ')
           ..write('dockerfilePath: $dockerfilePath, ')
           ..write('workflowPath: $workflowPath, ')
@@ -6261,6 +6477,7 @@ class Task extends DataClass implements Insertable<Task> {
     submissionJson,
     worker_session_fk,
     workBranch,
+    milestoneOrder,
     requiresBuild,
     dockerfilePath,
     workflowPath,
@@ -6295,6 +6512,7 @@ class Task extends DataClass implements Insertable<Task> {
           other.submissionJson == this.submissionJson &&
           other.worker_session_fk == this.worker_session_fk &&
           other.workBranch == this.workBranch &&
+          other.milestoneOrder == this.milestoneOrder &&
           other.requiresBuild == this.requiresBuild &&
           other.dockerfilePath == this.dockerfilePath &&
           other.workflowPath == this.workflowPath &&
@@ -6327,6 +6545,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
   final Value<String?> submissionJson;
   final Value<int?> worker_session_fk;
   final Value<String?> workBranch;
+  final Value<int?> milestoneOrder;
   final Value<bool> requiresBuild;
   final Value<String?> dockerfilePath;
   final Value<String?> workflowPath;
@@ -6357,6 +6576,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
     this.submissionJson = const Value.absent(),
     this.worker_session_fk = const Value.absent(),
     this.workBranch = const Value.absent(),
+    this.milestoneOrder = const Value.absent(),
     this.requiresBuild = const Value.absent(),
     this.dockerfilePath = const Value.absent(),
     this.workflowPath = const Value.absent(),
@@ -6388,6 +6608,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
     this.submissionJson = const Value.absent(),
     this.worker_session_fk = const Value.absent(),
     this.workBranch = const Value.absent(),
+    this.milestoneOrder = const Value.absent(),
     this.requiresBuild = const Value.absent(),
     this.dockerfilePath = const Value.absent(),
     this.workflowPath = const Value.absent(),
@@ -6421,6 +6642,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
     Expression<String>? submissionJson,
     Expression<int>? worker_session_fk,
     Expression<String>? workBranch,
+    Expression<int>? milestoneOrder,
     Expression<bool>? requiresBuild,
     Expression<String>? dockerfilePath,
     Expression<String>? workflowPath,
@@ -6453,6 +6675,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
       if (submissionJson != null) 'submission_json': submissionJson,
       if (worker_session_fk != null) 'worker_session_fk': worker_session_fk,
       if (workBranch != null) 'work_branch': workBranch,
+      if (milestoneOrder != null) 'milestone_order': milestoneOrder,
       if (requiresBuild != null) 'requires_build': requiresBuild,
       if (dockerfilePath != null) 'dockerfile_path': dockerfilePath,
       if (workflowPath != null) 'workflow_path': workflowPath,
@@ -6486,6 +6709,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
     Value<String?>? submissionJson,
     Value<int?>? worker_session_fk,
     Value<String?>? workBranch,
+    Value<int?>? milestoneOrder,
     Value<bool>? requiresBuild,
     Value<String?>? dockerfilePath,
     Value<String?>? workflowPath,
@@ -6517,6 +6741,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
       submissionJson: submissionJson ?? this.submissionJson,
       worker_session_fk: worker_session_fk ?? this.worker_session_fk,
       workBranch: workBranch ?? this.workBranch,
+      milestoneOrder: milestoneOrder ?? this.milestoneOrder,
       requiresBuild: requiresBuild ?? this.requiresBuild,
       dockerfilePath: dockerfilePath ?? this.dockerfilePath,
       workflowPath: workflowPath ?? this.workflowPath,
@@ -6594,6 +6819,9 @@ class TasksCompanion extends UpdateCompanion<Task> {
     if (workBranch.present) {
       map['work_branch'] = Variable<String>(workBranch.value);
     }
+    if (milestoneOrder.present) {
+      map['milestone_order'] = Variable<int>(milestoneOrder.value);
+    }
     if (requiresBuild.present) {
       map['requires_build'] = Variable<bool>(requiresBuild.value);
     }
@@ -6645,6 +6873,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
           ..write('submissionJson: $submissionJson, ')
           ..write('worker_session_fk: $worker_session_fk, ')
           ..write('workBranch: $workBranch, ')
+          ..write('milestoneOrder: $milestoneOrder, ')
           ..write('requiresBuild: $requiresBuild, ')
           ..write('dockerfilePath: $dockerfilePath, ')
           ..write('workflowPath: $workflowPath, ')
@@ -14976,10 +15205,7 @@ final class $$ClientsTableReferences
   _inferenceServersRefsTable(_$NexusDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.inferenceServers,
-        aliasName: $_aliasNameGenerator(
-          db.clients.client_pk,
-          db.inferenceServers.client_fk,
-        ),
+        aliasName: 'clients__client_pk__inference_servers__client_fk',
       );
 
   $$InferenceServersTableProcessedTableManager get inferenceServersRefs {
@@ -15000,10 +15226,7 @@ final class $$ClientsTableReferences
   static MultiTypedResultKey<$AgentPersonasTable, List<AgentPersona>>
   _agentPersonasRefsTable(_$NexusDatabase db) => MultiTypedResultKey.fromTable(
     db.agentPersonas,
-    aliasName: $_aliasNameGenerator(
-      db.clients.client_pk,
-      db.agentPersonas.client_fk,
-    ),
+    aliasName: 'clients__client_pk__agent_personas__client_fk',
   );
 
   $$AgentPersonasTableProcessedTableManager get agentPersonasRefs {
@@ -15023,10 +15246,7 @@ final class $$ClientsTableReferences
     _$NexusDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.projects,
-    aliasName: $_aliasNameGenerator(
-      db.clients.client_pk,
-      db.projects.client_fk,
-    ),
+    aliasName: 'clients__client_pk__projects__client_fk',
   );
 
   $$ProjectsTableProcessedTableManager get projectsRefs {
@@ -15044,10 +15264,7 @@ final class $$ClientsTableReferences
     _$NexusDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.tasks,
-    aliasName: $_aliasNameGenerator(
-      db.clients.client_pk,
-      db.tasks.task_client_fk,
-    ),
+    aliasName: 'clients__client_pk__tasks__task_client_fk',
   );
 
   $$TasksTableProcessedTableManager get tasksRefs {
@@ -15066,7 +15283,7 @@ final class $$ClientsTableReferences
     _$NexusDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.skills,
-    aliasName: $_aliasNameGenerator(db.clients.client_pk, db.skills.client_fk),
+    aliasName: 'clients__client_pk__skills__client_fk',
   );
 
   $$SkillsTableProcessedTableManager get skillsRefs {
@@ -15083,10 +15300,7 @@ final class $$ClientsTableReferences
   static MultiTypedResultKey<$DeploymentsTable, List<Deployment>>
   _deploymentsRefsTable(_$NexusDatabase db) => MultiTypedResultKey.fromTable(
     db.deployments,
-    aliasName: $_aliasNameGenerator(
-      db.clients.client_pk,
-      db.deployments.client_fk,
-    ),
+    aliasName: 'clients__client_pk__deployments__client_fk',
   );
 
   $$DeploymentsTableProcessedTableManager get deploymentsRefs {
@@ -15105,10 +15319,7 @@ final class $$ClientsTableReferences
   static MultiTypedResultKey<$ActivityLogsTable, List<ActivityLog>>
   _activityLogsRefsTable(_$NexusDatabase db) => MultiTypedResultKey.fromTable(
     db.activityLogs,
-    aliasName: $_aliasNameGenerator(
-      db.clients.client_pk,
-      db.activityLogs.client_fk,
-    ),
+    aliasName: 'clients__client_pk__activity_logs__client_fk',
   );
 
   $$ActivityLogsTableProcessedTableManager get activityLogsRefs {
@@ -15128,7 +15339,7 @@ final class $$ClientsTableReferences
     _$NexusDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.ciRuns,
-    aliasName: $_aliasNameGenerator(db.clients.client_pk, db.ciRuns.client_fk),
+    aliasName: 'clients__client_pk__ci_runs__client_fk',
   );
 
   $$CiRunsTableProcessedTableManager get ciRunsRefs {
@@ -15968,13 +16179,8 @@ final class $$InferenceServersTableReferences
     super.$_typedResult,
   );
 
-  static $ClientsTable _client_fkTable(_$NexusDatabase db) =>
-      db.clients.createAlias(
-        $_aliasNameGenerator(
-          db.inferenceServers.client_fk,
-          db.clients.client_pk,
-        ),
-      );
+  static $ClientsTable _client_fkTable(_$NexusDatabase db) => db.clients
+      .createAlias('inference_servers__client_fk__clients__client_pk');
 
   $$ClientsTableProcessedTableManager get client_fk {
     final $_column = $_itemColumn<int>('client_fk')!;
@@ -15993,10 +16199,7 @@ final class $$InferenceServersTableReferences
   static MultiTypedResultKey<$AgentPersonasTable, List<AgentPersona>>
   _agentPersonasRefsTable(_$NexusDatabase db) => MultiTypedResultKey.fromTable(
     db.agentPersonas,
-    aliasName: $_aliasNameGenerator(
-      db.inferenceServers.server_pk,
-      db.agentPersonas.provider_fk,
-    ),
+    aliasName: 'inference_servers__server_pk__agent_personas__provider_fk',
   );
 
   $$AgentPersonasTableProcessedTableManager get agentPersonasRefs {
@@ -16607,9 +16810,7 @@ final class $$AgentPersonasTableReferences
   );
 
   static $ClientsTable _client_fkTable(_$NexusDatabase db) =>
-      db.clients.createAlias(
-        $_aliasNameGenerator(db.agentPersonas.client_fk, db.clients.client_pk),
-      );
+      db.clients.createAlias('agent_personas__client_fk__clients__client_pk');
 
   $$ClientsTableProcessedTableManager get client_fk {
     final $_column = $_itemColumn<int>('client_fk')!;
@@ -16625,13 +16826,9 @@ final class $$AgentPersonasTableReferences
     );
   }
 
-  static $AgentPersonasTable _prefab_fkTable(_$NexusDatabase db) =>
-      db.agentPersonas.createAlias(
-        $_aliasNameGenerator(
-          db.agentPersonas.prefab_fk,
-          db.agentPersonas.agent_pk,
-        ),
-      );
+  static $AgentPersonasTable _prefab_fkTable(_$NexusDatabase db) => db
+      .agentPersonas
+      .createAlias('agent_personas__prefab_fk__agent_personas__agent_pk');
 
   $$AgentPersonasTableProcessedTableManager? get prefab_fk {
     final $_column = $_itemColumn<int>('prefab_fk');
@@ -16647,13 +16844,9 @@ final class $$AgentPersonasTableReferences
     );
   }
 
-  static $InferenceServersTable _provider_fkTable(_$NexusDatabase db) =>
-      db.inferenceServers.createAlias(
-        $_aliasNameGenerator(
-          db.agentPersonas.provider_fk,
-          db.inferenceServers.server_pk,
-        ),
-      );
+  static $InferenceServersTable _provider_fkTable(_$NexusDatabase db) => db
+      .inferenceServers
+      .createAlias('agent_personas__provider_fk__inference_servers__server_pk');
 
   $$InferenceServersTableProcessedTableManager? get provider_fk {
     final $_column = $_itemColumn<int>('provider_fk');
@@ -16673,10 +16866,7 @@ final class $$AgentPersonasTableReferences
     _$NexusDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.projects,
-    aliasName: $_aliasNameGenerator(
-      db.agentPersonas.agent_pk,
-      db.projects.agent_persona_fk,
-    ),
+    aliasName: 'agent_personas__agent_pk__projects__agent_persona_fk',
   );
 
   $$ProjectsTableProcessedTableManager get projectsRefs {
@@ -16695,10 +16885,7 @@ final class $$AgentPersonasTableReferences
     _$NexusDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.tasks,
-    aliasName: $_aliasNameGenerator(
-      db.agentPersonas.agent_pk,
-      db.tasks.task_agent_fk,
-    ),
+    aliasName: 'agent_personas__agent_pk__tasks__task_agent_fk',
   );
 
   $$TasksTableProcessedTableManager get tasksRefs {
@@ -17619,6 +17806,9 @@ typedef $$ProjectsTableCreateCompanionBuilder =
       Value<String> setupStatus,
       Value<String?> setupTranscriptJson,
       Value<String> explorationStatus,
+      Value<String> templateStatus,
+      Value<int> currentMilestone,
+      Value<int> milestoneCount,
       Value<String?> projectSummaryMd,
       Value<DateTime?> summaryUpdatedAt,
       Value<String> projectType,
@@ -17643,6 +17833,9 @@ typedef $$ProjectsTableUpdateCompanionBuilder =
       Value<String> setupStatus,
       Value<String?> setupTranscriptJson,
       Value<String> explorationStatus,
+      Value<String> templateStatus,
+      Value<int> currentMilestone,
+      Value<int> milestoneCount,
       Value<String?> projectSummaryMd,
       Value<DateTime?> summaryUpdatedAt,
       Value<String> projectType,
@@ -17657,9 +17850,7 @@ final class $$ProjectsTableReferences
   $$ProjectsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $ClientsTable _client_fkTable(_$NexusDatabase db) =>
-      db.clients.createAlias(
-        $_aliasNameGenerator(db.projects.client_fk, db.clients.client_pk),
-      );
+      db.clients.createAlias('projects__client_fk__clients__client_pk');
 
   $$ClientsTableProcessedTableManager get client_fk {
     final $_column = $_itemColumn<int>('client_fk')!;
@@ -17675,13 +17866,9 @@ final class $$ProjectsTableReferences
     );
   }
 
-  static $AgentPersonasTable _agent_persona_fkTable(_$NexusDatabase db) =>
-      db.agentPersonas.createAlias(
-        $_aliasNameGenerator(
-          db.projects.agent_persona_fk,
-          db.agentPersonas.agent_pk,
-        ),
-      );
+  static $AgentPersonasTable _agent_persona_fkTable(_$NexusDatabase db) => db
+      .agentPersonas
+      .createAlias('projects__agent_persona_fk__agent_personas__agent_pk');
 
   $$AgentPersonasTableProcessedTableManager? get agent_persona_fk {
     final $_column = $_itemColumn<int>('agent_persona_fk');
@@ -17700,10 +17887,7 @@ final class $$ProjectsTableReferences
   static MultiTypedResultKey<$ChatSessionsTable, List<ChatSession>>
   _chatSessionsRefsTable(_$NexusDatabase db) => MultiTypedResultKey.fromTable(
     db.chatSessions,
-    aliasName: $_aliasNameGenerator(
-      db.projects.project_pk,
-      db.chatSessions.project_fk,
-    ),
+    aliasName: 'projects__project_pk__chat_sessions__project_fk',
   );
 
   $$ChatSessionsTableProcessedTableManager get chatSessionsRefs {
@@ -17723,10 +17907,7 @@ final class $$ProjectsTableReferences
   static MultiTypedResultKey<$UserStoriesTable, List<UserStory>>
   _userStoriesRefsTable(_$NexusDatabase db) => MultiTypedResultKey.fromTable(
     db.userStories,
-    aliasName: $_aliasNameGenerator(
-      db.projects.project_pk,
-      db.userStories.project_fk,
-    ),
+    aliasName: 'projects__project_pk__user_stories__project_fk',
   );
 
   $$UserStoriesTableProcessedTableManager get userStoriesRefs {
@@ -17747,10 +17928,7 @@ final class $$ProjectsTableReferences
     _$NexusDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.tasks,
-    aliasName: $_aliasNameGenerator(
-      db.projects.project_pk,
-      db.tasks.task_project_fk,
-    ),
+    aliasName: 'projects__project_pk__tasks__task_project_fk',
   );
 
   $$TasksTableProcessedTableManager get tasksRefs {
@@ -17769,10 +17947,7 @@ final class $$ProjectsTableReferences
   static MultiTypedResultKey<$DeploymentsTable, List<Deployment>>
   _deploymentsRefsTable(_$NexusDatabase db) => MultiTypedResultKey.fromTable(
     db.deployments,
-    aliasName: $_aliasNameGenerator(
-      db.projects.project_pk,
-      db.deployments.project_fk,
-    ),
+    aliasName: 'projects__project_pk__deployments__project_fk',
   );
 
   $$DeploymentsTableProcessedTableManager get deploymentsRefs {
@@ -17792,10 +17967,7 @@ final class $$ProjectsTableReferences
   static MultiTypedResultKey<$ActivityLogsTable, List<ActivityLog>>
   _activityLogsRefsTable(_$NexusDatabase db) => MultiTypedResultKey.fromTable(
     db.activityLogs,
-    aliasName: $_aliasNameGenerator(
-      db.projects.project_pk,
-      db.activityLogs.project_fk,
-    ),
+    aliasName: 'projects__project_pk__activity_logs__project_fk',
   );
 
   $$ActivityLogsTableProcessedTableManager get activityLogsRefs {
@@ -17816,10 +17988,7 @@ final class $$ProjectsTableReferences
     _$NexusDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.ciRuns,
-    aliasName: $_aliasNameGenerator(
-      db.projects.project_pk,
-      db.ciRuns.project_fk,
-    ),
+    aliasName: 'projects__project_pk__ci_runs__project_fk',
   );
 
   $$CiRunsTableProcessedTableManager get ciRunsRefs {
@@ -17837,10 +18006,7 @@ final class $$ProjectsTableReferences
   static MultiTypedResultKey<$ProjectTagsTable, List<ProjectTag>>
   _projectTagsRefsTable(_$NexusDatabase db) => MultiTypedResultKey.fromTable(
     db.projectTags,
-    aliasName: $_aliasNameGenerator(
-      db.projects.project_pk,
-      db.projectTags.project_fk,
-    ),
+    aliasName: 'projects__project_pk__project_tags__project_fk',
   );
 
   $$ProjectTagsTableProcessedTableManager get projectTagsRefs {
@@ -17860,10 +18026,7 @@ final class $$ProjectsTableReferences
   static MultiTypedResultKey<$CallSystemsTable, List<CallSystem>>
   _callSystemsRefsTable(_$NexusDatabase db) => MultiTypedResultKey.fromTable(
     db.callSystems,
-    aliasName: $_aliasNameGenerator(
-      db.projects.project_pk,
-      db.callSystems.project_fk,
-    ),
+    aliasName: 'projects__project_pk__call_systems__project_fk',
   );
 
   $$CallSystemsTableProcessedTableManager get callSystemsRefs {
@@ -17947,6 +18110,21 @@ class $$ProjectsTableFilterComposer
 
   ColumnFilters<String> get explorationStatus => $composableBuilder(
     column: $table.explorationStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get templateStatus => $composableBuilder(
+    column: $table.templateStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get currentMilestone => $composableBuilder(
+    column: $table.currentMilestone,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get milestoneCount => $composableBuilder(
+    column: $table.milestoneCount,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -18301,6 +18479,21 @@ class $$ProjectsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get templateStatus => $composableBuilder(
+    column: $table.templateStatus,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get currentMilestone => $composableBuilder(
+    column: $table.currentMilestone,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get milestoneCount => $composableBuilder(
+    column: $table.milestoneCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get projectSummaryMd => $composableBuilder(
     column: $table.projectSummaryMd,
     builder: (column) => ColumnOrderings(column),
@@ -18447,6 +18640,21 @@ class $$ProjectsTableAnnotationComposer
 
   GeneratedColumn<String> get explorationStatus => $composableBuilder(
     column: $table.explorationStatus,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get templateStatus => $composableBuilder(
+    column: $table.templateStatus,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get currentMilestone => $composableBuilder(
+    column: $table.currentMilestone,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get milestoneCount => $composableBuilder(
+    column: $table.milestoneCount,
     builder: (column) => column,
   );
 
@@ -18781,6 +18989,9 @@ class $$ProjectsTableTableManager
                 Value<String> setupStatus = const Value.absent(),
                 Value<String?> setupTranscriptJson = const Value.absent(),
                 Value<String> explorationStatus = const Value.absent(),
+                Value<String> templateStatus = const Value.absent(),
+                Value<int> currentMilestone = const Value.absent(),
+                Value<int> milestoneCount = const Value.absent(),
                 Value<String?> projectSummaryMd = const Value.absent(),
                 Value<DateTime?> summaryUpdatedAt = const Value.absent(),
                 Value<String> projectType = const Value.absent(),
@@ -18803,6 +19014,9 @@ class $$ProjectsTableTableManager
                 setupStatus: setupStatus,
                 setupTranscriptJson: setupTranscriptJson,
                 explorationStatus: explorationStatus,
+                templateStatus: templateStatus,
+                currentMilestone: currentMilestone,
+                milestoneCount: milestoneCount,
                 projectSummaryMd: projectSummaryMd,
                 summaryUpdatedAt: summaryUpdatedAt,
                 projectType: projectType,
@@ -18827,6 +19041,9 @@ class $$ProjectsTableTableManager
                 Value<String> setupStatus = const Value.absent(),
                 Value<String?> setupTranscriptJson = const Value.absent(),
                 Value<String> explorationStatus = const Value.absent(),
+                Value<String> templateStatus = const Value.absent(),
+                Value<int> currentMilestone = const Value.absent(),
+                Value<int> milestoneCount = const Value.absent(),
                 Value<String?> projectSummaryMd = const Value.absent(),
                 Value<DateTime?> summaryUpdatedAt = const Value.absent(),
                 Value<String> projectType = const Value.absent(),
@@ -18849,6 +19066,9 @@ class $$ProjectsTableTableManager
                 setupStatus: setupStatus,
                 setupTranscriptJson: setupTranscriptJson,
                 explorationStatus: explorationStatus,
+                templateStatus: templateStatus,
+                currentMilestone: currentMilestone,
+                milestoneCount: milestoneCount,
                 projectSummaryMd: projectSummaryMd,
                 summaryUpdatedAt: summaryUpdatedAt,
                 projectType: projectType,
@@ -19161,13 +19381,8 @@ final class $$ChatSessionsTableReferences
     extends BaseReferences<_$NexusDatabase, $ChatSessionsTable, ChatSession> {
   $$ChatSessionsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $ProjectsTable _project_fkTable(_$NexusDatabase db) =>
-      db.projects.createAlias(
-        $_aliasNameGenerator(
-          db.chatSessions.project_fk,
-          db.projects.project_pk,
-        ),
-      );
+  static $ProjectsTable _project_fkTable(_$NexusDatabase db) => db.projects
+      .createAlias('chat_sessions__project_fk__projects__project_pk');
 
   $$ProjectsTableProcessedTableManager get project_fk {
     final $_column = $_itemColumn<int>('project_fk')!;
@@ -19187,10 +19402,7 @@ final class $$ChatSessionsTableReferences
     _$NexusDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.tasks,
-    aliasName: $_aliasNameGenerator(
-      db.chatSessions.session_pk,
-      db.tasks.task_chat_session_fk,
-    ),
+    aliasName: 'chat_sessions__session_pk__tasks__task_chat_session_fk',
   );
 
   $$TasksTableProcessedTableManager get creatorTasks {
@@ -19210,10 +19422,7 @@ final class $$ChatSessionsTableReferences
     _$NexusDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.tasks,
-    aliasName: $_aliasNameGenerator(
-      db.chatSessions.session_pk,
-      db.tasks.worker_session_fk,
-    ),
+    aliasName: 'chat_sessions__session_pk__tasks__worker_session_fk',
   );
 
   $$TasksTableProcessedTableManager get workerTasks {
@@ -19232,10 +19441,7 @@ final class $$ChatSessionsTableReferences
   static MultiTypedResultKey<$ChatMessagesTable, List<ChatMessage>>
   _chatMessagesRefsTable(_$NexusDatabase db) => MultiTypedResultKey.fromTable(
     db.chatMessages,
-    aliasName: $_aliasNameGenerator(
-      db.chatSessions.session_pk,
-      db.chatMessages.session_fk,
-    ),
+    aliasName: 'chat_sessions__session_pk__chat_messages__session_fk',
   );
 
   $$ChatMessagesTableProcessedTableManager get chatMessagesRefs {
@@ -19819,9 +20025,7 @@ final class $$UserStoriesTableReferences
   $$UserStoriesTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $ProjectsTable _project_fkTable(_$NexusDatabase db) =>
-      db.projects.createAlias(
-        $_aliasNameGenerator(db.userStories.project_fk, db.projects.project_pk),
-      );
+      db.projects.createAlias('user_stories__project_fk__projects__project_pk');
 
   $$ProjectsTableProcessedTableManager get project_fk {
     final $_column = $_itemColumn<int>('project_fk')!;
@@ -19837,13 +20041,9 @@ final class $$UserStoriesTableReferences
     );
   }
 
-  static $UserStoriesTable _parent_story_fkTable(_$NexusDatabase db) =>
-      db.userStories.createAlias(
-        $_aliasNameGenerator(
-          db.userStories.parent_story_fk,
-          db.userStories.story_pk,
-        ),
-      );
+  static $UserStoriesTable _parent_story_fkTable(_$NexusDatabase db) => db
+      .userStories
+      .createAlias('user_stories__parent_story_fk__user_stories__story_pk');
 
   $$UserStoriesTableProcessedTableManager? get parent_story_fk {
     final $_column = $_itemColumn<int>('parent_story_fk');
@@ -19863,10 +20063,7 @@ final class $$UserStoriesTableReferences
     _$NexusDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.tasks,
-    aliasName: $_aliasNameGenerator(
-      db.userStories.story_pk,
-      db.tasks.task_story_fk,
-    ),
+    aliasName: 'user_stories__story_pk__tasks__task_story_fk',
   );
 
   $$TasksTableProcessedTableManager get tasksRefs {
@@ -19883,10 +20080,7 @@ final class $$UserStoriesTableReferences
   static MultiTypedResultKey<$StoryNotesTable, List<StoryNote>>
   _storyNotesRefsTable(_$NexusDatabase db) => MultiTypedResultKey.fromTable(
     db.storyNotes,
-    aliasName: $_aliasNameGenerator(
-      db.userStories.story_pk,
-      db.storyNotes.story_fk,
-    ),
+    aliasName: 'user_stories__story_pk__story_notes__story_fk',
   );
 
   $$StoryNotesTableProcessedTableManager get storyNotesRefs {
@@ -20571,6 +20765,7 @@ typedef $$TasksTableCreateCompanionBuilder =
       Value<String?> submissionJson,
       Value<int?> worker_session_fk,
       Value<String?> workBranch,
+      Value<int?> milestoneOrder,
       Value<bool> requiresBuild,
       Value<String?> dockerfilePath,
       Value<String?> workflowPath,
@@ -20603,6 +20798,7 @@ typedef $$TasksTableUpdateCompanionBuilder =
       Value<String?> submissionJson,
       Value<int?> worker_session_fk,
       Value<String?> workBranch,
+      Value<int?> milestoneOrder,
       Value<bool> requiresBuild,
       Value<String?> dockerfilePath,
       Value<String?> workflowPath,
@@ -20618,9 +20814,7 @@ final class $$TasksTableReferences
   $$TasksTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $ClientsTable _task_client_fkTable(_$NexusDatabase db) =>
-      db.clients.createAlias(
-        $_aliasNameGenerator(db.tasks.task_client_fk, db.clients.client_pk),
-      );
+      db.clients.createAlias('tasks__task_client_fk__clients__client_pk');
 
   $$ClientsTableProcessedTableManager get task_client_fk {
     final $_column = $_itemColumn<int>('task_client_fk')!;
@@ -20637,9 +20831,7 @@ final class $$TasksTableReferences
   }
 
   static $ProjectsTable _task_project_fkTable(_$NexusDatabase db) =>
-      db.projects.createAlias(
-        $_aliasNameGenerator(db.tasks.task_project_fk, db.projects.project_pk),
-      );
+      db.projects.createAlias('tasks__task_project_fk__projects__project_pk');
 
   $$ProjectsTableProcessedTableManager get task_project_fk {
     final $_column = $_itemColumn<int>('task_project_fk')!;
@@ -20656,9 +20848,7 @@ final class $$TasksTableReferences
   }
 
   static $TasksTable _task_parent_fkTable(_$NexusDatabase db) =>
-      db.tasks.createAlias(
-        $_aliasNameGenerator(db.tasks.task_parent_fk, db.tasks.task_pk),
-      );
+      db.tasks.createAlias('tasks__task_parent_fk__tasks__task_pk');
 
   $$TasksTableProcessedTableManager? get task_parent_fk {
     final $_column = $_itemColumn<int>('task_parent_fk');
@@ -20674,13 +20864,9 @@ final class $$TasksTableReferences
     );
   }
 
-  static $ChatSessionsTable _task_chat_session_fkTable(_$NexusDatabase db) =>
-      db.chatSessions.createAlias(
-        $_aliasNameGenerator(
-          db.tasks.task_chat_session_fk,
-          db.chatSessions.session_pk,
-        ),
-      );
+  static $ChatSessionsTable _task_chat_session_fkTable(_$NexusDatabase db) => db
+      .chatSessions
+      .createAlias('tasks__task_chat_session_fk__chat_sessions__session_pk');
 
   $$ChatSessionsTableProcessedTableManager? get task_chat_session_fk {
     final $_column = $_itemColumn<int>('task_chat_session_fk');
@@ -20698,10 +20884,9 @@ final class $$TasksTableReferences
     );
   }
 
-  static $AgentPersonasTable _task_agent_fkTable(_$NexusDatabase db) =>
-      db.agentPersonas.createAlias(
-        $_aliasNameGenerator(db.tasks.task_agent_fk, db.agentPersonas.agent_pk),
-      );
+  static $AgentPersonasTable _task_agent_fkTable(_$NexusDatabase db) => db
+      .agentPersonas
+      .createAlias('tasks__task_agent_fk__agent_personas__agent_pk');
 
   $$AgentPersonasTableProcessedTableManager? get task_agent_fk {
     final $_column = $_itemColumn<int>('task_agent_fk');
@@ -20717,10 +20902,9 @@ final class $$TasksTableReferences
     );
   }
 
-  static $UserStoriesTable _task_story_fkTable(_$NexusDatabase db) =>
-      db.userStories.createAlias(
-        $_aliasNameGenerator(db.tasks.task_story_fk, db.userStories.story_pk),
-      );
+  static $UserStoriesTable _task_story_fkTable(_$NexusDatabase db) => db
+      .userStories
+      .createAlias('tasks__task_story_fk__user_stories__story_pk');
 
   $$UserStoriesTableProcessedTableManager? get task_story_fk {
     final $_column = $_itemColumn<int>('task_story_fk');
@@ -20736,13 +20920,9 @@ final class $$TasksTableReferences
     );
   }
 
-  static $ChatSessionsTable _worker_session_fkTable(_$NexusDatabase db) =>
-      db.chatSessions.createAlias(
-        $_aliasNameGenerator(
-          db.tasks.worker_session_fk,
-          db.chatSessions.session_pk,
-        ),
-      );
+  static $ChatSessionsTable _worker_session_fkTable(_$NexusDatabase db) => db
+      .chatSessions
+      .createAlias('tasks__worker_session_fk__chat_sessions__session_pk');
 
   $$ChatSessionsTableProcessedTableManager? get worker_session_fk {
     final $_column = $_itemColumn<int>('worker_session_fk');
@@ -20762,7 +20942,7 @@ final class $$TasksTableReferences
     _$NexusDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.ciRuns,
-    aliasName: $_aliasNameGenerator(db.tasks.task_pk, db.ciRuns.task_fk),
+    aliasName: 'tasks__task_pk__ci_runs__task_fk',
   );
 
   $$CiRunsTableProcessedTableManager get ciRunsRefs {
@@ -20854,6 +21034,11 @@ class $$TasksTableFilterComposer
 
   ColumnFilters<String> get workBranch => $composableBuilder(
     column: $table.workBranch,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get milestoneOrder => $composableBuilder(
+    column: $table.milestoneOrder,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -21163,6 +21348,11 @@ class $$TasksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get milestoneOrder => $composableBuilder(
+    column: $table.milestoneOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get requiresBuild => $composableBuilder(
     column: $table.requiresBuild,
     builder: (column) => ColumnOrderings(column),
@@ -21429,6 +21619,11 @@ class $$TasksTableAnnotationComposer
 
   GeneratedColumn<String> get workBranch => $composableBuilder(
     column: $table.workBranch,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get milestoneOrder => $composableBuilder(
+    column: $table.milestoneOrder,
     builder: (column) => column,
   );
 
@@ -21707,6 +21902,7 @@ class $$TasksTableTableManager
                 Value<String?> submissionJson = const Value.absent(),
                 Value<int?> worker_session_fk = const Value.absent(),
                 Value<String?> workBranch = const Value.absent(),
+                Value<int?> milestoneOrder = const Value.absent(),
                 Value<bool> requiresBuild = const Value.absent(),
                 Value<String?> dockerfilePath = const Value.absent(),
                 Value<String?> workflowPath = const Value.absent(),
@@ -21737,6 +21933,7 @@ class $$TasksTableTableManager
                 submissionJson: submissionJson,
                 worker_session_fk: worker_session_fk,
                 workBranch: workBranch,
+                milestoneOrder: milestoneOrder,
                 requiresBuild: requiresBuild,
                 dockerfilePath: dockerfilePath,
                 workflowPath: workflowPath,
@@ -21769,6 +21966,7 @@ class $$TasksTableTableManager
                 Value<String?> submissionJson = const Value.absent(),
                 Value<int?> worker_session_fk = const Value.absent(),
                 Value<String?> workBranch = const Value.absent(),
+                Value<int?> milestoneOrder = const Value.absent(),
                 Value<bool> requiresBuild = const Value.absent(),
                 Value<String?> dockerfilePath = const Value.absent(),
                 Value<String?> workflowPath = const Value.absent(),
@@ -21799,6 +21997,7 @@ class $$TasksTableTableManager
                 submissionJson: submissionJson,
                 worker_session_fk: worker_session_fk,
                 workBranch: workBranch,
+                milestoneOrder: milestoneOrder,
                 requiresBuild: requiresBuild,
                 dockerfilePath: dockerfilePath,
                 workflowPath: workflowPath,
@@ -22022,9 +22221,7 @@ final class $$SkillsTableReferences
   $$SkillsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $ClientsTable _client_fkTable(_$NexusDatabase db) =>
-      db.clients.createAlias(
-        $_aliasNameGenerator(db.skills.client_fk, db.clients.client_pk),
-      );
+      db.clients.createAlias('skills__client_fk__clients__client_pk');
 
   $$ClientsTableProcessedTableManager get client_fk {
     final $_column = $_itemColumn<int>('client_fk')!;
@@ -22041,9 +22238,7 @@ final class $$SkillsTableReferences
   }
 
   static $SkillsTable _prefab_fkTable(_$NexusDatabase db) =>
-      db.skills.createAlias(
-        $_aliasNameGenerator(db.skills.prefab_fk, db.skills.skill_pk),
-      );
+      db.skills.createAlias('skills__prefab_fk__skills__skill_pk');
 
   $$SkillsTableProcessedTableManager? get prefab_fk {
     final $_column = $_itemColumn<int>('prefab_fk');
@@ -22575,9 +22770,7 @@ final class $$DeploymentsTableReferences
   $$DeploymentsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $ClientsTable _client_fkTable(_$NexusDatabase db) =>
-      db.clients.createAlias(
-        $_aliasNameGenerator(db.deployments.client_fk, db.clients.client_pk),
-      );
+      db.clients.createAlias('deployments__client_fk__clients__client_pk');
 
   $$ClientsTableProcessedTableManager get client_fk {
     final $_column = $_itemColumn<int>('client_fk')!;
@@ -22594,9 +22787,7 @@ final class $$DeploymentsTableReferences
   }
 
   static $ProjectsTable _project_fkTable(_$NexusDatabase db) =>
-      db.projects.createAlias(
-        $_aliasNameGenerator(db.deployments.project_fk, db.projects.project_pk),
-      );
+      db.projects.createAlias('deployments__project_fk__projects__project_pk');
 
   $$ProjectsTableProcessedTableManager? get project_fk {
     final $_column = $_itemColumn<int>('project_fk');
@@ -23083,9 +23274,7 @@ final class $$ActivityLogsTableReferences
   $$ActivityLogsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $ClientsTable _client_fkTable(_$NexusDatabase db) =>
-      db.clients.createAlias(
-        $_aliasNameGenerator(db.activityLogs.client_fk, db.clients.client_pk),
-      );
+      db.clients.createAlias('activity_logs__client_fk__clients__client_pk');
 
   $$ClientsTableProcessedTableManager get client_fk {
     final $_column = $_itemColumn<int>('client_fk')!;
@@ -23101,13 +23290,8 @@ final class $$ActivityLogsTableReferences
     );
   }
 
-  static $ProjectsTable _project_fkTable(_$NexusDatabase db) =>
-      db.projects.createAlias(
-        $_aliasNameGenerator(
-          db.activityLogs.project_fk,
-          db.projects.project_pk,
-        ),
-      );
+  static $ProjectsTable _project_fkTable(_$NexusDatabase db) => db.projects
+      .createAlias('activity_logs__project_fk__projects__project_pk');
 
   $$ProjectsTableProcessedTableManager? get project_fk {
     final $_column = $_itemColumn<int>('project_fk');
@@ -23623,9 +23807,7 @@ final class $$CiRunsTableReferences
   $$CiRunsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $ClientsTable _client_fkTable(_$NexusDatabase db) =>
-      db.clients.createAlias(
-        $_aliasNameGenerator(db.ciRuns.client_fk, db.clients.client_pk),
-      );
+      db.clients.createAlias('ci_runs__client_fk__clients__client_pk');
 
   $$ClientsTableProcessedTableManager get client_fk {
     final $_column = $_itemColumn<int>('client_fk')!;
@@ -23642,9 +23824,7 @@ final class $$CiRunsTableReferences
   }
 
   static $ProjectsTable _project_fkTable(_$NexusDatabase db) =>
-      db.projects.createAlias(
-        $_aliasNameGenerator(db.ciRuns.project_fk, db.projects.project_pk),
-      );
+      db.projects.createAlias('ci_runs__project_fk__projects__project_pk');
 
   $$ProjectsTableProcessedTableManager? get project_fk {
     final $_column = $_itemColumn<int>('project_fk');
@@ -23660,9 +23840,8 @@ final class $$CiRunsTableReferences
     );
   }
 
-  static $TasksTable _task_fkTable(_$NexusDatabase db) => db.tasks.createAlias(
-    $_aliasNameGenerator(db.ciRuns.task_fk, db.tasks.task_pk),
-  );
+  static $TasksTable _task_fkTable(_$NexusDatabase db) =>
+      db.tasks.createAlias('ci_runs__task_fk__tasks__task_pk');
 
   $$TasksTableProcessedTableManager? get task_fk {
     final $_column = $_itemColumn<int>('task_fk');
@@ -23682,7 +23861,7 @@ final class $$CiRunsTableReferences
     _$NexusDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.ciJobs,
-    aliasName: $_aliasNameGenerator(db.ciRuns.ci_run_pk, db.ciJobs.ci_run_fk),
+    aliasName: 'ci_runs__ci_run_pk__ci_jobs__ci_run_fk',
   );
 
   $$CiJobsTableProcessedTableManager get ciJobsRefs {
@@ -24461,9 +24640,7 @@ final class $$CiJobsTableReferences
   $$CiJobsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $CiRunsTable _ci_run_fkTable(_$NexusDatabase db) =>
-      db.ciRuns.createAlias(
-        $_aliasNameGenerator(db.ciJobs.ci_run_fk, db.ciRuns.ci_run_pk),
-      );
+      db.ciRuns.createAlias('ci_jobs__ci_run_fk__ci_runs__ci_run_pk');
 
   $$CiRunsTableProcessedTableManager get ci_run_fk {
     final $_column = $_itemColumn<int>('ci_run_fk')!;
@@ -24483,7 +24660,7 @@ final class $$CiJobsTableReferences
     _$NexusDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.ciSteps,
-    aliasName: $_aliasNameGenerator(db.ciJobs.ci_job_pk, db.ciSteps.ci_job_fk),
+    aliasName: 'ci_jobs__ci_job_pk__ci_steps__ci_job_fk',
   );
 
   $$CiStepsTableProcessedTableManager get ciStepsRefs {
@@ -24919,9 +25096,7 @@ final class $$CiStepsTableReferences
   $$CiStepsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $CiJobsTable _ci_job_fkTable(_$NexusDatabase db) =>
-      db.ciJobs.createAlias(
-        $_aliasNameGenerator(db.ciSteps.ci_job_fk, db.ciJobs.ci_job_pk),
-      );
+      db.ciJobs.createAlias('ci_steps__ci_job_fk__ci_jobs__ci_job_pk');
 
   $$CiJobsTableProcessedTableManager get ci_job_fk {
     final $_column = $_itemColumn<int>('ci_job_fk')!;
@@ -25326,13 +25501,9 @@ final class $$ChatMessagesTableReferences
     extends BaseReferences<_$NexusDatabase, $ChatMessagesTable, ChatMessage> {
   $$ChatMessagesTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $ChatSessionsTable _session_fkTable(_$NexusDatabase db) =>
-      db.chatSessions.createAlias(
-        $_aliasNameGenerator(
-          db.chatMessages.session_fk,
-          db.chatSessions.session_pk,
-        ),
-      );
+  static $ChatSessionsTable _session_fkTable(_$NexusDatabase db) => db
+      .chatSessions
+      .createAlias('chat_messages__session_fk__chat_sessions__session_pk');
 
   $$ChatSessionsTableProcessedTableManager get session_fk {
     final $_column = $_itemColumn<int>('session_fk')!;
@@ -25697,9 +25868,7 @@ final class $$ProjectTagsTableReferences
   $$ProjectTagsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $ProjectsTable _project_fkTable(_$NexusDatabase db) =>
-      db.projects.createAlias(
-        $_aliasNameGenerator(db.projectTags.project_fk, db.projects.project_pk),
-      );
+      db.projects.createAlias('project_tags__project_fk__projects__project_pk');
 
   $$ProjectsTableProcessedTableManager get project_fk {
     final $_column = $_itemColumn<int>('project_fk')!;
@@ -26497,9 +26666,7 @@ final class $$CallSystemsTableReferences
   $$CallSystemsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $ProjectsTable _project_fkTable(_$NexusDatabase db) =>
-      db.projects.createAlias(
-        $_aliasNameGenerator(db.callSystems.project_fk, db.projects.project_pk),
-      );
+      db.projects.createAlias('call_systems__project_fk__projects__project_pk');
 
   $$ProjectsTableProcessedTableManager get project_fk {
     final $_column = $_itemColumn<int>('project_fk')!;
@@ -26995,10 +27162,7 @@ final class $$SetupScopesTableReferences
 
   static $SetupScopesTable _parent_scope_fkTable(_$NexusDatabase db) =>
       db.setupScopes.createAlias(
-        $_aliasNameGenerator(
-          db.setupScopes.parent_scope_fk,
-          db.setupScopes.setup_scope_pk,
-        ),
+        'setup_scopes__parent_scope_fk__setup_scopes__setup_scope_pk',
       );
 
   $$SetupScopesTableProcessedTableManager? get parent_scope_fk {
@@ -27019,10 +27183,8 @@ final class $$SetupScopesTableReferences
   _setupScopeOptionsRefsTable(_$NexusDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.setupScopeOptions,
-        aliasName: $_aliasNameGenerator(
-          db.setupScopes.setup_scope_pk,
-          db.setupScopeOptions.setup_scope_fk,
-        ),
+        aliasName:
+            'setup_scopes__setup_scope_pk__setup_scope_options__setup_scope_fk',
       );
 
   $$SetupScopeOptionsTableProcessedTableManager get setupScopeOptionsRefs {
@@ -27457,10 +27619,7 @@ final class $$SetupScopeOptionsTableReferences
 
   static $SetupScopesTable _setup_scope_fkTable(_$NexusDatabase db) =>
       db.setupScopes.createAlias(
-        $_aliasNameGenerator(
-          db.setupScopeOptions.setup_scope_fk,
-          db.setupScopes.setup_scope_pk,
-        ),
+        'setup_scope_options__setup_scope_fk__setup_scopes__setup_scope_pk',
       );
 
   $$SetupScopesTableProcessedTableManager get setup_scope_fk {
@@ -27816,10 +27975,8 @@ final class $$StoryNotesTableReferences
     extends BaseReferences<_$NexusDatabase, $StoryNotesTable, StoryNote> {
   $$StoryNotesTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $UserStoriesTable _story_fkTable(_$NexusDatabase db) =>
-      db.userStories.createAlias(
-        $_aliasNameGenerator(db.storyNotes.story_fk, db.userStories.story_pk),
-      );
+  static $UserStoriesTable _story_fkTable(_$NexusDatabase db) => db.userStories
+      .createAlias('story_notes__story_fk__user_stories__story_pk');
 
   $$UserStoriesTableProcessedTableManager get story_fk {
     final $_column = $_itemColumn<int>('story_fk')!;

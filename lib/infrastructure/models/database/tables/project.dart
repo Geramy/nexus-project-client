@@ -62,6 +62,26 @@ class Projects extends Table {
   TextColumn get explorationStatus =>
       text().withDefault(const Constant('none'))();
 
+  // ==================== Templater / milestones ====================
+  /// The Templater (pre-task) phase state: `none` (not applicable / legacy),
+  /// `pending` (tasks generated, base not yet scaffolded), `scaffolding` (the
+  /// Coordinator is building the base project + task stubs), `ready` (base
+  /// committed & CI-green — workers may start), or `failed`. Workers are gated
+  /// until this is `ready`, which is what stops every agent from racing to
+  /// scaffold an empty `main` at once.
+  TextColumn get templateStatus =>
+      text().withDefault(const Constant('none'))();
+
+  /// The milestone batch currently open for work (0-based). Workers only pick up
+  /// tasks whose `milestoneOrder` equals this; when that batch finishes and its
+  /// CI is green, the orchestrator advances it until it reaches [milestoneCount].
+  IntColumn get currentMilestone => integer().withDefault(const Constant(0))();
+
+  /// Total number of milestone batches the Templater split the backlog into
+  /// (1 = no intermediate milestones: base → all tasks → final CI). 0 until the
+  /// Templater runs.
+  IntColumn get milestoneCount => integer().withDefault(const Constant(0))();
+
   /// AI-compiled, human-readable summary of the project (markdown), built from
   /// all /PLANS files. Regenerated on plan changes and by the coordinator's
   /// idle cycles. Null until first generated.

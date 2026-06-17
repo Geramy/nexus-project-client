@@ -42,7 +42,7 @@ class _SourceControlPanelState extends ConsumerState<SourceControlPanel> {
   Widget build(BuildContext context) {
     final projectId = ref.watch(currentProjectIdProvider);
     final gitAsync = ref.watch(gitStatusProvider(projectId));
-    final git = gitAsync.valueOrNull ?? GitStatusSnapshot.noRepo;
+    final git = gitAsync.value ?? GitStatusSnapshot.noRepo;
 
     final changes =
         git.byPath.entries.where((e) => gitStatusIsDirty(e.value)).toList()
@@ -184,7 +184,7 @@ class _SourceControlPanelState extends ConsumerState<SourceControlPanel> {
     final desc = _descCtrl.text.trim();
     if (title.isEmpty) return;
     // Build the set of selected paths.
-    final git = ref.read(gitStatusProvider(projectId)).valueOrNull;
+    final git = ref.read(gitStatusProvider(projectId)).value;
     if (git == null) return;
     final selected = git.byPath.entries
         .where((e) => gitStatusIsDirty(e.value) && !_excluded.contains(e.key))

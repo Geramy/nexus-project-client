@@ -5,6 +5,7 @@
 import 'dart:io' show Platform;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import 'docker_engine_client.dart';
 import 'docker_models.dart';

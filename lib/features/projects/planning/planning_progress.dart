@@ -2,7 +2,7 @@
 // Author: Geramy Loveless <support@nexus-projects.ai>
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 /// Live progress of a [ProjectPlanningRun], surfaced project-wide so the Tasks
 /// view (and anywhere else) can show what the planning agent is doing after the

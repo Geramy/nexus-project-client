@@ -11,7 +11,7 @@
 /// The token NEVER touches SharedPreferences or Drift — only the keychain.
 /// The token is never logged.
 ///
-/// Storage uses the LEGACY file-based keychain (useDataProtectionKeyChain:
+/// Storage uses the LEGACY file-based keychain (usesDataProtectionKeychain:
 /// false) — no `keychain-access-groups` / data-protection entitlement. That
 /// entitlement is fragile for Developer-ID apps distributed outside the App
 /// Store (it can make macOS reject the app at launch), and an ad-hoc/debug build
@@ -30,7 +30,7 @@ class NexusAccountStore {
   static const FlutterSecureStorage _store = FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
     iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
-    mOptions: MacOsOptions(useDataProtectionKeyChain: false),
+    mOptions: MacOsOptions(usesDataProtectionKeychain: false),
   );
 
   static const _tokenKey = 'nexus/account_token';

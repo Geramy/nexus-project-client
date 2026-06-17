@@ -82,7 +82,7 @@ class SubTasksTab extends ConsumerWidget {
                             icon: const Icon(Icons.open_in_new, size: 16),
                             tooltip: 'Open',
                             onPressed: () => ref
-                                .read(selectedTaskIdNotifierProvider.notifier)
+                                .read(selectedTaskIdProvider.notifier)
                                 .selectTask(c.task_pk),
                           ),
                         ],

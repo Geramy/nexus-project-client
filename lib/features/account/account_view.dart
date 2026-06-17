@@ -71,13 +71,13 @@ class AccountView extends ConsumerWidget {
 
 /// Toggle for "Lean context" mode — reconstruct AI state from the harness (DB)
 /// instead of replaying full conversations / sending all tools. Persists via
-/// [leanContextNotifierProvider].
+/// [leanContextProvider].
 class _LeanContextToggle extends ConsumerWidget {
   const _LeanContextToggle();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final on = ref.watch(leanContextNotifierProvider);
+    final on = ref.watch(leanContextProvider);
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.xl,
@@ -96,7 +96,7 @@ class _LeanContextToggle extends ConsumerWidget {
             contentPadding: EdgeInsets.zero,
             value: on,
             onChanged: (v) =>
-                ref.read(leanContextNotifierProvider.notifier).set(v),
+                ref.read(leanContextProvider.notifier).set(v),
             title: Text(
               'Lean context',
               style: Theme.of(context).textTheme.titleMedium,
@@ -115,13 +115,13 @@ class _LeanContextToggle extends ConsumerWidget {
   }
 }
 
-/// A compact theme picker (Appearance settings). Persists via [appThemeNotifierProvider].
+/// A compact theme picker (Appearance settings). Persists via [appThemeProvider].
 class _AppearancePicker extends ConsumerWidget {
   const _AppearancePicker();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final choice = ref.watch(appThemeNotifierProvider);
+    final choice = ref.watch(appThemeProvider);
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.xl,
@@ -163,7 +163,7 @@ class _AppearancePicker extends ConsumerWidget {
                 underline: const SizedBox.shrink(),
                 onChanged: (next) {
                   if (next != null) {
-                    ref.read(appThemeNotifierProvider.notifier).setChoice(next);
+                    ref.read(appThemeProvider.notifier).setChoice(next);
                   }
                 },
                 items: AppThemeChoice.values

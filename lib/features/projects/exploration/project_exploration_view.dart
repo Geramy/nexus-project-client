@@ -49,7 +49,7 @@ class ProjectExplorationView extends ConsumerWidget {
     // tree (that would strand the project with no tasks and no orchestration).
     // Send the user back to build at least one story first.
     final stories =
-        ref.read(projectStoriesProvider(projectId)).valueOrNull ?? const [];
+        ref.read(projectStoriesProvider(projectId)).value ?? const [];
     if (stories.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -100,7 +100,7 @@ class ProjectExplorationView extends ConsumerWidget {
     // project would loop after the first question). Show a wait-for-setup
     // placeholder until then.
     final setupComplete =
-        ref.watch(projectRowProvider(projectId)).valueOrNull?.setupStatus ==
+        ref.watch(projectRowProvider(projectId)).value?.setupStatus ==
         'complete';
     if (!setupComplete) {
       return Center(
@@ -132,7 +132,7 @@ class ProjectExplorationView extends ConsumerWidget {
       );
     }
 
-    final stories = ref.watch(projectStoriesProvider(projectId)).valueOrNull ?? const [];
+    final stories = ref.watch(projectStoriesProvider(projectId)).value ?? const [];
     final progress = ref.watch(taskGeneratorProvider(projectId)).progress;
 
     // This screen is PERSISTENT and resumable — it's the project's main "User
@@ -142,7 +142,7 @@ class ProjectExplorationView extends ConsumerWidget {
     // first). Once tasks have been generated it stays available for editing the
     // tree and regenerating, with the normal Coordinator chat.
     final explorationStatus =
-        ref.watch(projectRowProvider(projectId)).valueOrNull?.explorationStatus;
+        ref.watch(projectRowProvider(projectId)).value?.explorationStatus;
     final isDiscovery = explorationStatus != 'complete';
     final promptAsync = isDiscovery
         ? ref.watch(

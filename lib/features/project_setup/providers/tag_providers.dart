@@ -101,7 +101,7 @@ final tagsForCategoryProvider =
       args,
     ) {
       final all =
-          ref.watch(projectTagsProvider(args.projectPk)).valueOrNull ?? [];
+          ref.watch(projectTagsProvider(args.projectPk)).value ?? [];
       return all
           .where((t) => t.category == args.category && !t.isRejected)
           .toList();

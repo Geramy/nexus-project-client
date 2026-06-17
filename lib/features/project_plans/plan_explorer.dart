@@ -29,7 +29,7 @@ class _PlanExplorerState extends ConsumerState<PlanExplorer> {
   Widget build(BuildContext context) {
     final projectId = ref.watch(currentProjectIdProvider);
     final plansAsync = ref.watch(plansForProjectProvider(projectId));
-    final openPath = ref.watch(openPlanNotifierProvider);
+    final openPath = ref.watch(openPlanProvider);
 
     return Container(
       decoration: BoxDecoration(
@@ -239,8 +239,8 @@ class _PlanExplorerState extends ConsumerState<PlanExplorer> {
                 : _expanded.add(node.path),
           );
         } else {
-          ref.read(openPlanNotifierProvider.notifier).open(node.path);
-          ref.read(planModeNotifierProvider.notifier).set(PlanMode.edit);
+          ref.read(openPlanProvider.notifier).open(node.path);
+          ref.read(planModeProvider.notifier).set(PlanMode.edit);
         }
       },
       child: Container(
@@ -347,8 +347,8 @@ class _PlanExplorerState extends ConsumerState<PlanExplorer> {
     );
     _bump(projectId);
     if (!isFolder) {
-      ref.read(openPlanNotifierProvider.notifier).open(path);
-      ref.read(planModeNotifierProvider.notifier).set(PlanMode.edit);
+      ref.read(openPlanProvider.notifier).open(path);
+      ref.read(planModeProvider.notifier).set(PlanMode.edit);
     }
   }
 
@@ -356,10 +356,10 @@ class _PlanExplorerState extends ConsumerState<PlanExplorer> {
     final name = await _promptName('Rename', 'Name', initial: node.name);
     if (name == null || name.isEmpty) return;
     final store = await ref.read(planStoreProvider(projectId).future);
-    final wasOpen = ref.read(openPlanNotifierProvider) == node.path;
+    final wasOpen = ref.read(openPlanProvider) == node.path;
     final newPath = await store.rename(node.path, name);
     _bump(projectId);
-    if (wasOpen) ref.read(openPlanNotifierProvider.notifier).open(newPath);
+    if (wasOpen) ref.read(openPlanProvider.notifier).open(newPath);
   }
 
   Future<void> _delete(int projectId, PlanNode node) async {
@@ -388,8 +388,8 @@ class _PlanExplorerState extends ConsumerState<PlanExplorer> {
     final store = await ref.read(planStoreProvider(projectId).future);
     await store.delete(node.path);
     _bump(projectId);
-    if (ref.read(openPlanNotifierProvider) == node.path) {
-      ref.read(openPlanNotifierProvider.notifier).open(null);
+    if (ref.read(openPlanProvider) == node.path) {
+      ref.read(openPlanProvider.notifier).open(null);
     }
   }
 

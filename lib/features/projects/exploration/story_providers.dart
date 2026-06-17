@@ -7,6 +7,7 @@
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../core/providers/database_provider.dart';
 import '../../../infrastructure/database/nexus_database.dart';

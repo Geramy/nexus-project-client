@@ -6,8 +6,86 @@ part of 'nexus_account_providers.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$nexusAccountClientHash() =>
-    r'c8d3e7b713f7768cbb09d9961fca26205c9c326e';
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, type=warning
+/// The gateway base URL (overridable). Defaults to the production gateway, but
+/// hydrates from secure storage if the user has set an override.
+// keepAlive: this hydrates from storage asynchronously after build; if it could
+// auto-dispose mid-hydrate, riverpod 3 would strand it (the post-await state set
+// is skipped), leaving the gateway URL/auth unhydrated — and the routed server
+// never materializes.
+
+@ProviderFor(NexusGatewayBaseUrl)
+final nexusGatewayBaseUrlProvider = NexusGatewayBaseUrlProvider._();
+
+/// The gateway base URL (overridable). Defaults to the production gateway, but
+/// hydrates from secure storage if the user has set an override.
+// keepAlive: this hydrates from storage asynchronously after build; if it could
+// auto-dispose mid-hydrate, riverpod 3 would strand it (the post-await state set
+// is skipped), leaving the gateway URL/auth unhydrated — and the routed server
+// never materializes.
+final class NexusGatewayBaseUrlProvider
+    extends $NotifierProvider<NexusGatewayBaseUrl, String> {
+  /// The gateway base URL (overridable). Defaults to the production gateway, but
+  /// hydrates from secure storage if the user has set an override.
+  // keepAlive: this hydrates from storage asynchronously after build; if it could
+  // auto-dispose mid-hydrate, riverpod 3 would strand it (the post-await state set
+  // is skipped), leaving the gateway URL/auth unhydrated — and the routed server
+  // never materializes.
+  NexusGatewayBaseUrlProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'nexusGatewayBaseUrlProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$nexusGatewayBaseUrlHash();
+
+  @$internal
+  @override
+  NexusGatewayBaseUrl create() => NexusGatewayBaseUrl();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(String value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<String>(value),
+    );
+  }
+}
+
+String _$nexusGatewayBaseUrlHash() =>
+    r'a209d5425b219aa9298955f25248078d8e5218dd';
+
+/// The gateway base URL (overridable). Defaults to the production gateway, but
+/// hydrates from secure storage if the user has set an override.
+// keepAlive: this hydrates from storage asynchronously after build; if it could
+// auto-dispose mid-hydrate, riverpod 3 would strand it (the post-await state set
+// is skipped), leaving the gateway URL/auth unhydrated — and the routed server
+// never materializes.
+
+abstract class _$NexusGatewayBaseUrl extends $Notifier<String> {
+  String build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref = this.ref as $Ref<String, String>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<String, String>,
+              String,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}
 
 /// A base (unauthenticated) [NexusAccountClient] bound to the current gateway
 /// base URL. Rebuilds whenever the base URL changes.
@@ -21,273 +99,371 @@ String _$nexusAccountClientHash() =>
 /// under an in-flight request. [NexusAuth] reaches it via a one-shot `ref.read`
 /// (to avoid a dependency cycle), which would otherwise let an auto-dispose
 /// provider close the socket mid-call and surface "Connection attempt cancelled".
-///
-/// Copied from [nexusAccountClient].
-@ProviderFor(nexusAccountClient)
-final nexusAccountClientProvider = Provider<NexusAccountClient>.internal(
-  nexusAccountClient,
-  name: r'nexusAccountClientProvider',
-  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-      ? null
-      : _$nexusAccountClientHash,
-  dependencies: null,
-  allTransitiveDependencies: null,
-);
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef NexusAccountClientRef = ProviderRef<NexusAccountClient>;
-String _$nexusPlansHash() => r'5999e6c86f2366df305d7454a241bf1807adf417';
+@ProviderFor(nexusAccountClient)
+final nexusAccountClientProvider = NexusAccountClientProvider._();
+
+/// A base (unauthenticated) [NexusAccountClient] bound to the current gateway
+/// base URL. Rebuilds whenever the base URL changes.
+///
+/// This provider deliberately does NOT watch [nexusAuthProvider]: doing so would
+/// create a dependency cycle, because [NexusAuth] reads this client to make its
+/// login/register/usage calls. Authenticated callers obtain a token-bound client
+/// via [NexusAuth.authedClient] (which uses [NexusAccountClient.withToken]).
+///
+/// Kept alive so the shared http.Client socket pool is never disposed out from
+/// under an in-flight request. [NexusAuth] reaches it via a one-shot `ref.read`
+/// (to avoid a dependency cycle), which would otherwise let an auto-dispose
+/// provider close the socket mid-call and surface "Connection attempt cancelled".
+
+final class NexusAccountClientProvider
+    extends
+        $FunctionalProvider<
+          NexusAccountClient,
+          NexusAccountClient,
+          NexusAccountClient
+        >
+    with $Provider<NexusAccountClient> {
+  /// A base (unauthenticated) [NexusAccountClient] bound to the current gateway
+  /// base URL. Rebuilds whenever the base URL changes.
+  ///
+  /// This provider deliberately does NOT watch [nexusAuthProvider]: doing so would
+  /// create a dependency cycle, because [NexusAuth] reads this client to make its
+  /// login/register/usage calls. Authenticated callers obtain a token-bound client
+  /// via [NexusAuth.authedClient] (which uses [NexusAccountClient.withToken]).
+  ///
+  /// Kept alive so the shared http.Client socket pool is never disposed out from
+  /// under an in-flight request. [NexusAuth] reaches it via a one-shot `ref.read`
+  /// (to avoid a dependency cycle), which would otherwise let an auto-dispose
+  /// provider close the socket mid-call and surface "Connection attempt cancelled".
+  NexusAccountClientProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'nexusAccountClientProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$nexusAccountClientHash();
+
+  @$internal
+  @override
+  $ProviderElement<NexusAccountClient> $createElement(
+    $ProviderPointer pointer,
+  ) => $ProviderElement(pointer);
+
+  @override
+  NexusAccountClient create(Ref ref) {
+    return nexusAccountClient(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(NexusAccountClient value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<NexusAccountClient>(value),
+    );
+  }
+}
+
+String _$nexusAccountClientHash() =>
+    r'c8d3e7b713f7768cbb09d9961fca26205c9c326e';
+
+/// Signed-in account state. Hydrates the token + cached identity from secure
+/// storage on build, then exposes login / register / logout.
+// keepAlive: auth must persist for the whole app session AND must not auto-dispose
+// while `_hydrate()` awaits the keychain — otherwise the post-await state set is
+// skipped (riverpod 3), auth stays stuck `busy: true`, and routerServerSyncProvider
+// (which bails on `auth.busy`) never creates the routed inference server.
+
+@ProviderFor(NexusAuth)
+final nexusAuthProvider = NexusAuthProvider._();
+
+/// Signed-in account state. Hydrates the token + cached identity from secure
+/// storage on build, then exposes login / register / logout.
+// keepAlive: auth must persist for the whole app session AND must not auto-dispose
+// while `_hydrate()` awaits the keychain — otherwise the post-await state set is
+// skipped (riverpod 3), auth stays stuck `busy: true`, and routerServerSyncProvider
+// (which bails on `auth.busy`) never creates the routed inference server.
+final class NexusAuthProvider
+    extends $NotifierProvider<NexusAuth, NexusAuthState> {
+  /// Signed-in account state. Hydrates the token + cached identity from secure
+  /// storage on build, then exposes login / register / logout.
+  // keepAlive: auth must persist for the whole app session AND must not auto-dispose
+  // while `_hydrate()` awaits the keychain — otherwise the post-await state set is
+  // skipped (riverpod 3), auth stays stuck `busy: true`, and routerServerSyncProvider
+  // (which bails on `auth.busy`) never creates the routed inference server.
+  NexusAuthProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'nexusAuthProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$nexusAuthHash();
+
+  @$internal
+  @override
+  NexusAuth create() => NexusAuth();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(NexusAuthState value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<NexusAuthState>(value),
+    );
+  }
+}
+
+String _$nexusAuthHash() => r'4a39b99cc16c166cd965f7f00ceff70245e4e4b1';
+
+/// Signed-in account state. Hydrates the token + cached identity from secure
+/// storage on build, then exposes login / register / logout.
+// keepAlive: auth must persist for the whole app session AND must not auto-dispose
+// while `_hydrate()` awaits the keychain — otherwise the post-await state set is
+// skipped (riverpod 3), auth stays stuck `busy: true`, and routerServerSyncProvider
+// (which bails on `auth.busy`) never creates the routed inference server.
+
+abstract class _$NexusAuth extends $Notifier<NexusAuthState> {
+  NexusAuthState build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref = this.ref as $Ref<NexusAuthState, NexusAuthState>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<NexusAuthState, NexusAuthState>,
+              NexusAuthState,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}
 
 /// The public plans + add-ons catalog (no auth required).
-///
-/// Copied from [nexusPlans].
-@ProviderFor(nexusPlans)
-final nexusPlansProvider = FutureProvider<PlanCatalog>.internal(
-  nexusPlans,
-  name: r'nexusPlansProvider',
-  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-      ? null
-      : _$nexusPlansHash,
-  dependencies: null,
-  allTransitiveDependencies: null,
-);
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef NexusPlansRef = FutureProviderRef<PlanCatalog>;
-String _$nexusUsageHash() => r'0cb4f4a3c1d852f4448d68caccab1f64508ed9d7';
+@ProviderFor(nexusPlans)
+final nexusPlansProvider = NexusPlansProvider._();
+
+/// The public plans + add-ons catalog (no auth required).
+
+final class NexusPlansProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<PlanCatalog>,
+          PlanCatalog,
+          FutureOr<PlanCatalog>
+        >
+    with $FutureModifier<PlanCatalog>, $FutureProvider<PlanCatalog> {
+  /// The public plans + add-ons catalog (no auth required).
+  NexusPlansProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'nexusPlansProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$nexusPlansHash();
+
+  @$internal
+  @override
+  $FutureProviderElement<PlanCatalog> $createElement(
+    $ProviderPointer pointer,
+  ) => $FutureProviderElement(pointer);
+
+  @override
+  FutureOr<PlanCatalog> create(Ref ref) {
+    return nexusPlans(ref);
+  }
+}
+
+String _$nexusPlansHash() => r'5999e6c86f2366df305d7454a241bf1807adf417';
 
 /// Current-period usage vs. entitlements (requires sign-in).
-///
-/// Copied from [nexusUsage].
-@ProviderFor(nexusUsage)
-final nexusUsageProvider = AutoDisposeFutureProvider<UsageSnapshot>.internal(
-  nexusUsage,
-  name: r'nexusUsageProvider',
-  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-      ? null
-      : _$nexusUsageHash,
-  dependencies: null,
-  allTransitiveDependencies: null,
-);
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef NexusUsageRef = AutoDisposeFutureProviderRef<UsageSnapshot>;
+@ProviderFor(nexusUsage)
+final nexusUsageProvider = NexusUsageProvider._();
+
+/// Current-period usage vs. entitlements (requires sign-in).
+
+final class NexusUsageProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<UsageSnapshot>,
+          UsageSnapshot,
+          FutureOr<UsageSnapshot>
+        >
+    with $FutureModifier<UsageSnapshot>, $FutureProvider<UsageSnapshot> {
+  /// Current-period usage vs. entitlements (requires sign-in).
+  NexusUsageProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'nexusUsageProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$nexusUsageHash();
+
+  @$internal
+  @override
+  $FutureProviderElement<UsageSnapshot> $createElement(
+    $ProviderPointer pointer,
+  ) => $FutureProviderElement(pointer);
+
+  @override
+  FutureOr<UsageSnapshot> create(Ref ref) {
+    return nexusUsage(ref);
+  }
+}
+
+String _$nexusUsageHash() => r'0cb4f4a3c1d852f4448d68caccab1f64508ed9d7';
+
+/// The signed-in user's account + subscription summary.
+
+@ProviderFor(nexusAccountSummary)
+final nexusAccountSummaryProvider = NexusAccountSummaryProvider._();
+
+/// The signed-in user's account + subscription summary.
+
+final class NexusAccountSummaryProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<AccountSummary>,
+          AccountSummary,
+          FutureOr<AccountSummary>
+        >
+    with $FutureModifier<AccountSummary>, $FutureProvider<AccountSummary> {
+  /// The signed-in user's account + subscription summary.
+  NexusAccountSummaryProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'nexusAccountSummaryProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$nexusAccountSummaryHash();
+
+  @$internal
+  @override
+  $FutureProviderElement<AccountSummary> $createElement(
+    $ProviderPointer pointer,
+  ) => $FutureProviderElement(pointer);
+
+  @override
+  FutureOr<AccountSummary> create(Ref ref) {
+    return nexusAccountSummary(ref);
+  }
+}
+
 String _$nexusAccountSummaryHash() =>
     r'716ee3dd3a4756945f500e61ca5e6a589e31ac0b';
 
-/// The signed-in user's account + subscription summary.
-///
-/// Copied from [nexusAccountSummary].
-@ProviderFor(nexusAccountSummary)
-final nexusAccountSummaryProvider =
-    AutoDisposeFutureProvider<AccountSummary>.internal(
-      nexusAccountSummary,
-      name: r'nexusAccountSummaryProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$nexusAccountSummaryHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef NexusAccountSummaryRef = AutoDisposeFutureProviderRef<AccountSummary>;
-String _$nexusAgentUsageHash() => r'2bb1c4f99cf4b0102dd53b5fd7f76ddd54250ba8';
-
-/// Copied from Dart SDK
-class _SystemHash {
-  _SystemHash._();
-
-  static int combine(int hash, int value) {
-    // ignore: parameter_assignments
-    hash = 0x1fffffff & (hash + value);
-    // ignore: parameter_assignments
-    hash = 0x1fffffff & (hash + ((0x0007ffff & hash) << 10));
-    return hash ^ (hash >> 6);
-  }
-
-  static int finish(int hash) {
-    // ignore: parameter_assignments
-    hash = 0x1fffffff & (hash + ((0x03ffffff & hash) << 3));
-    // ignore: parameter_assignments
-    hash = hash ^ (hash >> 11);
-    return 0x1fffffff & (hash + ((0x00003fff & hash) << 15));
-  }
-}
-
 /// Per-agent cost breakdown over [days] (null = current billing period).
-///
-/// Copied from [nexusAgentUsage].
+
 @ProviderFor(nexusAgentUsage)
-const nexusAgentUsageProvider = NexusAgentUsageFamily();
+final nexusAgentUsageProvider = NexusAgentUsageFamily._();
 
 /// Per-agent cost breakdown over [days] (null = current billing period).
-///
-/// Copied from [nexusAgentUsage].
-class NexusAgentUsageFamily extends Family<AsyncValue<AgentUsageReport>> {
-  /// Per-agent cost breakdown over [days] (null = current billing period).
-  ///
-  /// Copied from [nexusAgentUsage].
-  const NexusAgentUsageFamily();
 
+final class NexusAgentUsageProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<AgentUsageReport>,
+          AgentUsageReport,
+          FutureOr<AgentUsageReport>
+        >
+    with $FutureModifier<AgentUsageReport>, $FutureProvider<AgentUsageReport> {
   /// Per-agent cost breakdown over [days] (null = current billing period).
-  ///
-  /// Copied from [nexusAgentUsage].
-  NexusAgentUsageProvider call({int? days}) {
-    return NexusAgentUsageProvider(days: days);
+  NexusAgentUsageProvider._({
+    required NexusAgentUsageFamily super.from,
+    required int? super.argument,
+  }) : super(
+         retry: null,
+         name: r'nexusAgentUsageProvider',
+         isAutoDispose: true,
+         dependencies: null,
+         $allTransitiveDependencies: null,
+       );
+
+  @override
+  String debugGetCreateSourceHash() => _$nexusAgentUsageHash();
+
+  @override
+  String toString() {
+    return r'nexusAgentUsageProvider'
+        ''
+        '($argument)';
   }
 
+  @$internal
   @override
-  NexusAgentUsageProvider getProviderOverride(
-    covariant NexusAgentUsageProvider provider,
-  ) {
-    return call(days: provider.days);
-  }
-
-  static const Iterable<ProviderOrFamily>? _dependencies = null;
+  $FutureProviderElement<AgentUsageReport> $createElement(
+    $ProviderPointer pointer,
+  ) => $FutureProviderElement(pointer);
 
   @override
-  Iterable<ProviderOrFamily>? get dependencies => _dependencies;
-
-  static const Iterable<ProviderOrFamily>? _allTransitiveDependencies = null;
-
-  @override
-  Iterable<ProviderOrFamily>? get allTransitiveDependencies =>
-      _allTransitiveDependencies;
-
-  @override
-  String? get name => r'nexusAgentUsageProvider';
-}
-
-/// Per-agent cost breakdown over [days] (null = current billing period).
-///
-/// Copied from [nexusAgentUsage].
-class NexusAgentUsageProvider
-    extends AutoDisposeFutureProvider<AgentUsageReport> {
-  /// Per-agent cost breakdown over [days] (null = current billing period).
-  ///
-  /// Copied from [nexusAgentUsage].
-  NexusAgentUsageProvider({int? days})
-    : this._internal(
-        (ref) => nexusAgentUsage(ref as NexusAgentUsageRef, days: days),
-        from: nexusAgentUsageProvider,
-        name: r'nexusAgentUsageProvider',
-        debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-            ? null
-            : _$nexusAgentUsageHash,
-        dependencies: NexusAgentUsageFamily._dependencies,
-        allTransitiveDependencies:
-            NexusAgentUsageFamily._allTransitiveDependencies,
-        days: days,
-      );
-
-  NexusAgentUsageProvider._internal(
-    super._createNotifier, {
-    required super.name,
-    required super.dependencies,
-    required super.allTransitiveDependencies,
-    required super.debugGetCreateSourceHash,
-    required super.from,
-    required this.days,
-  }) : super.internal();
-
-  final int? days;
-
-  @override
-  Override overrideWith(
-    FutureOr<AgentUsageReport> Function(NexusAgentUsageRef provider) create,
-  ) {
-    return ProviderOverride(
-      origin: this,
-      override: NexusAgentUsageProvider._internal(
-        (ref) => create(ref as NexusAgentUsageRef),
-        from: from,
-        name: null,
-        dependencies: null,
-        allTransitiveDependencies: null,
-        debugGetCreateSourceHash: null,
-        days: days,
-      ),
-    );
-  }
-
-  @override
-  AutoDisposeFutureProviderElement<AgentUsageReport> createElement() {
-    return _NexusAgentUsageProviderElement(this);
+  FutureOr<AgentUsageReport> create(Ref ref) {
+    final argument = this.argument as int?;
+    return nexusAgentUsage(ref, days: argument);
   }
 
   @override
   bool operator ==(Object other) {
-    return other is NexusAgentUsageProvider && other.days == days;
+    return other is NexusAgentUsageProvider && other.argument == argument;
   }
 
   @override
   int get hashCode {
-    var hash = _SystemHash.combine(0, runtimeType.hashCode);
-    hash = _SystemHash.combine(hash, days.hashCode);
-
-    return _SystemHash.finish(hash);
+    return argument.hashCode;
   }
 }
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-mixin NexusAgentUsageRef on AutoDisposeFutureProviderRef<AgentUsageReport> {
-  /// The parameter `days` of this provider.
-  int? get days;
-}
+String _$nexusAgentUsageHash() => r'2bb1c4f99cf4b0102dd53b5fd7f76ddd54250ba8';
 
-class _NexusAgentUsageProviderElement
-    extends AutoDisposeFutureProviderElement<AgentUsageReport>
-    with NexusAgentUsageRef {
-  _NexusAgentUsageProviderElement(super.provider);
+/// Per-agent cost breakdown over [days] (null = current billing period).
+
+final class NexusAgentUsageFamily extends $Family
+    with $FunctionalFamilyOverride<FutureOr<AgentUsageReport>, int?> {
+  NexusAgentUsageFamily._()
+    : super(
+        retry: null,
+        name: r'nexusAgentUsageProvider',
+        dependencies: null,
+        $allTransitiveDependencies: null,
+        isAutoDispose: true,
+      );
+
+  /// Per-agent cost breakdown over [days] (null = current billing period).
+
+  NexusAgentUsageProvider call({int? days}) =>
+      NexusAgentUsageProvider._(argument: days, from: this);
 
   @override
-  int? get days => (origin as NexusAgentUsageProvider).days;
+  String toString() => r'nexusAgentUsageProvider';
 }
-
-String _$nexusGatewayBaseUrlHash() =>
-    r'991bd162df89746d05cc654c666fb27ab906e302';
-
-/// The gateway base URL (overridable). Defaults to the production gateway, but
-/// hydrates from secure storage if the user has set an override.
-///
-/// Copied from [NexusGatewayBaseUrl].
-@ProviderFor(NexusGatewayBaseUrl)
-final nexusGatewayBaseUrlProvider =
-    AutoDisposeNotifierProvider<NexusGatewayBaseUrl, String>.internal(
-      NexusGatewayBaseUrl.new,
-      name: r'nexusGatewayBaseUrlProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$nexusGatewayBaseUrlHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-typedef _$NexusGatewayBaseUrl = AutoDisposeNotifier<String>;
-String _$nexusAuthHash() => r'3485c394f6780ff7ba3b7457e50f15e716d937fd';
-
-/// Signed-in account state. Hydrates the token + cached identity from secure
-/// storage on build, then exposes login / register / logout.
-///
-/// Copied from [NexusAuth].
-@ProviderFor(NexusAuth)
-final nexusAuthProvider =
-    AutoDisposeNotifierProvider<NexusAuth, NexusAuthState>.internal(
-      NexusAuth.new,
-      name: r'nexusAuthProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$nexusAuthHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-typedef _$NexusAuth = AutoDisposeNotifier<NexusAuthState>;
-// ignore_for_file: type=lint
-// ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

@@ -7,6 +7,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../core/providers/database_provider.dart';
 import '../../core/providers/lean_context_provider.dart';
@@ -205,7 +206,7 @@ class SetupChatController extends ChangeNotifier {
       executor: executor,
       flow: flow,
       enableThinking: resolved.enableThinking,
-      leanContext: _ref.read(leanContextNotifierProvider),
+      leanContext: _ref.read(leanContextProvider),
     );
     // If we resumed into refinement (or already finalized), start in refine.
     if (refining) _session!.enterRefinePhase();

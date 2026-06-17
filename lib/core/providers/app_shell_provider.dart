@@ -170,6 +170,9 @@ class PanelLayoutNotifier extends _$PanelLayoutNotifier {
         loaded[view] = w;
       }
     }
+    // Riverpod 3 throws if `state` is set after the provider was disposed/rebuilt
+    // during the await; bail out instead of crashing (the new build re-loads).
+    if (!ref.mounted) return;
     state = loaded;
   }
 

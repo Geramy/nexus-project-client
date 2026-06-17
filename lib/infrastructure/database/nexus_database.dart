@@ -112,7 +112,7 @@ class NexusDatabase extends _$NexusDatabase {
       _taskCompletedController.stream;
 
   @override
-  int get schemaVersion => 32;
+  int get schemaVersion => 33;
 
   @override
   MigrationStrategy get migration {
@@ -230,6 +230,15 @@ class NexusDatabase extends _$NexusDatabase {
         if (from < 32) {
           // Descriptive notes attached to user-story items.
           await m.createTable(storyNotes);
+        }
+        if (from < 33) {
+          // Templater stage + sequential, topic-grouped milestones: a per-task
+          // milestone batch index and the project-level templating/milestone
+          // bookkeeping that gates workers until a base project is scaffolded.
+          await m.addColumn(tasks, tasks.milestoneOrder);
+          await m.addColumn(projects, projects.templateStatus);
+          await m.addColumn(projects, projects.currentMilestone);
+          await m.addColumn(projects, projects.milestoneCount);
         }
       },
     );
@@ -994,6 +1003,64 @@ class NexusDatabase extends _$NexusDatabase {
     )..where((p) => p.project_pk.equals(projectPk))).write(
       ProjectsCompanion(
         explorationStatus: Value(status),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  // ==================== Templater / milestones ====================
+  /// Set the Templater phase state: none | pending | scaffolding | ready | failed.
+  Future<void> setProjectTemplateStatus(int projectPk, String status) async {
+    await (update(
+      projects,
+    )..where((p) => p.project_pk.equals(projectPk))).write(
+      ProjectsCompanion(
+        templateStatus: Value(status),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  /// Record the milestone plan computed by the Templater: the total batch count
+  /// and the starting (current) batch — defaulting to batch 0.
+  Future<void> setProjectMilestonePlan(
+    int projectPk, {
+    required int count,
+    int current = 0,
+  }) async {
+    await (update(
+      projects,
+    )..where((p) => p.project_pk.equals(projectPk))).write(
+      ProjectsCompanion(
+        milestoneCount: Value(count),
+        currentMilestone: Value(current),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  /// Open the next milestone batch (current += 1). Returns the new current index.
+  Future<int> advanceProjectMilestone(int projectPk) async {
+    final project = await getProjectById(projectPk);
+    final next = (project?.currentMilestone ?? 0) + 1;
+    await (update(
+      projects,
+    )..where((p) => p.project_pk.equals(projectPk))).write(
+      ProjectsCompanion(
+        currentMilestone: Value(next),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+    return next;
+  }
+
+  /// Assign a task to its milestone batch (0-based).
+  Future<void> setTaskMilestone(int taskPk, int order) async {
+    await (update(
+      tasks,
+    )..where((t) => t.task_pk.equals(taskPk))).write(
+      TasksCompanion(
+        milestoneOrder: Value(order),
         updatedAt: Value(DateTime.now()),
       ),
     );

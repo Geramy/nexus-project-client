@@ -92,7 +92,7 @@ class _TaskProgressBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tasks =
-        ref.watch(allTasksForProjectProvider(projectId)).valueOrNull ??
+        ref.watch(allTasksForProjectProvider(projectId)).value ??
         const <Task>[];
     if (tasks.isEmpty) return const SizedBox.shrink();
 
@@ -650,7 +650,7 @@ class _StoryInspectorState extends ConsumerState<_StoryInspector> {
   @override
   Widget build(BuildContext context) {
     final async = ref.watch(projectStoriesProvider(widget.projectId));
-    final story = async.valueOrNull
+    final story = async.value
         ?.where((s) => s.story_pk == widget.storyPk)
         .firstOrNull;
     if (story == null) return const SizedBox.shrink();
@@ -741,7 +741,7 @@ class _StoryInspectorState extends ConsumerState<_StoryInspector> {
                 child: Text('— None (root) —'),
               ),
               for (final s in _parentCandidates(
-                async.valueOrNull ?? const [],
+                async.value ?? const [],
                 story,
               ))
                 DropdownMenuItem<int?>(
@@ -835,7 +835,7 @@ class _NotesSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final db = ref.watch(nexusDatabaseProvider);
-    final notes = ref.watch(storyNotesProvider(storyPk)).valueOrNull ?? const [];
+    final notes = ref.watch(storyNotesProvider(storyPk)).value ?? const [];
     final scheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

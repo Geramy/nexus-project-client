@@ -6,27 +6,78 @@ part of 'theme_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$appThemeNotifierHash() => r'a10c904051bd2022097c8e9cc8b359159b7ab8f7';
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, type=warning
+/// The user's selected app theme, persisted in SharedPreferences.
+///
+/// Defaults to [AppThemeChoice.defaultChoice] (the website-style "Nebula") on
+/// first run, then hydrates the saved choice asynchronously — mirroring the
+/// persistence pattern used by [PanelLayoutNotifier] in app_shell_provider.dart.
+
+@ProviderFor(AppThemeNotifier)
+final appThemeProvider = AppThemeNotifierProvider._();
 
 /// The user's selected app theme, persisted in SharedPreferences.
 ///
 /// Defaults to [AppThemeChoice.defaultChoice] (the website-style "Nebula") on
 /// first run, then hydrates the saved choice asynchronously — mirroring the
 /// persistence pattern used by [PanelLayoutNotifier] in app_shell_provider.dart.
-///
-/// Copied from [AppThemeNotifier].
-@ProviderFor(AppThemeNotifier)
-final appThemeNotifierProvider =
-    AutoDisposeNotifierProvider<AppThemeNotifier, AppThemeChoice>.internal(
-      AppThemeNotifier.new,
-      name: r'appThemeNotifierProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$appThemeNotifierHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
+final class AppThemeNotifierProvider
+    extends $NotifierProvider<AppThemeNotifier, AppThemeChoice> {
+  /// The user's selected app theme, persisted in SharedPreferences.
+  ///
+  /// Defaults to [AppThemeChoice.defaultChoice] (the website-style "Nebula") on
+  /// first run, then hydrates the saved choice asynchronously — mirroring the
+  /// persistence pattern used by [PanelLayoutNotifier] in app_shell_provider.dart.
+  AppThemeNotifierProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'appThemeProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
 
-typedef _$AppThemeNotifier = AutoDisposeNotifier<AppThemeChoice>;
-// ignore_for_file: type=lint
-// ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package
+  @override
+  String debugGetCreateSourceHash() => _$appThemeNotifierHash();
+
+  @$internal
+  @override
+  AppThemeNotifier create() => AppThemeNotifier();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(AppThemeChoice value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<AppThemeChoice>(value),
+    );
+  }
+}
+
+String _$appThemeNotifierHash() => r'05885e16df7d20a2655e028f7fdb46d7b18b01ce';
+
+/// The user's selected app theme, persisted in SharedPreferences.
+///
+/// Defaults to [AppThemeChoice.defaultChoice] (the website-style "Nebula") on
+/// first run, then hydrates the saved choice asynchronously — mirroring the
+/// persistence pattern used by [PanelLayoutNotifier] in app_shell_provider.dart.
+
+abstract class _$AppThemeNotifier extends $Notifier<AppThemeChoice> {
+  AppThemeChoice build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref = this.ref as $Ref<AppThemeChoice, AppThemeChoice>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<AppThemeChoice, AppThemeChoice>,
+              AppThemeChoice,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}

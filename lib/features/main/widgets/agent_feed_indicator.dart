@@ -22,6 +22,7 @@ library;
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import 'package:nexus_projects_client/core/providers/app_shell_provider.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
@@ -69,10 +70,10 @@ class AgentFeedIndicator extends ConsumerWidget {
     final projectId = ref.watch(currentProjectIdProvider);
     final clientId = ref.watch(currentClientIdProvider);
     final tasks =
-        ref.watch(allTasksForProjectProvider(projectId)).valueOrNull ??
+        ref.watch(allTasksForProjectProvider(projectId)).value ??
         const [];
     final personas =
-        ref.watch(agentPersonasForClientProvider(clientId)).valueOrNull ??
+        ref.watch(agentPersonasForClientProvider(clientId)).value ??
         const [];
     final nameOf = {for (final p in personas) p.agent_pk: p.name};
     String agentName(int? pk) => (pk == null ? null : nameOf[pk]) ?? 'Agent';

@@ -57,12 +57,17 @@ class NexusAuthState {
 
 /// The gateway base URL (overridable). Defaults to the production gateway, but
 /// hydrates from secure storage if the user has set an override.
-@riverpod
+// keepAlive: this hydrates from storage asynchronously after build; if it could
+// auto-dispose mid-hydrate, riverpod 3 would strand it (the post-await state set
+// is skipped), leaving the gateway URL/auth unhydrated — and the routed server
+// never materializes.
+@Riverpod(keepAlive: true)
 class NexusGatewayBaseUrl extends _$NexusGatewayBaseUrl {
   @override
   String build() {
     // Kick off async hydration; default is returned synchronously.
     NexusAccountStore.readGatewayBaseUrl().then((saved) {
+      if (!ref.mounted) return;
       if (saved != null && saved.isNotEmpty && saved != state) {
         state = saved;
       }
@@ -98,7 +103,11 @@ NexusAccountClient nexusAccountClient(Ref ref) {
 
 /// Signed-in account state. Hydrates the token + cached identity from secure
 /// storage on build, then exposes login / register / logout.
-@riverpod
+// keepAlive: auth must persist for the whole app session AND must not auto-dispose
+// while `_hydrate()` awaits the keychain — otherwise the post-await state set is
+// skipped (riverpod 3), auth stays stuck `busy: true`, and routerServerSyncProvider
+// (which bails on `auth.busy`) never creates the routed inference server.
+@Riverpod(keepAlive: true)
 class NexusAuth extends _$NexusAuth {
   @override
   NexusAuthState build() {
@@ -111,11 +120,15 @@ class NexusAuth extends _$NexusAuth {
 
   Future<void> _hydrate() async {
     final token = await NexusAccountStore.readToken();
+    // Riverpod 3 throws if `state` is set after the provider was disposed during
+    // an await; bail instead of crashing (a fresh build re-hydrates).
+    if (!ref.mounted) return;
     if (token == null || token.isEmpty) {
       state = NexusAuthState.signedOut;
       return;
     }
     final identity = await NexusAccountStore.readIdentity();
+    if (!ref.mounted) return;
     state = NexusAuthState(
       token: token,
       user: identity?.user,
@@ -162,7 +175,7 @@ class NexusAuth extends _$NexusAuth {
       );
       await _persist(result);
     } finally {
-      state = state.copyWith(busy: false);
+      if (ref.mounted) state = state.copyWith(busy: false);
     }
   }
 
@@ -186,13 +199,14 @@ class NexusAuth extends _$NexusAuth {
       );
       await _persist(result);
     } finally {
-      state = state.copyWith(busy: false);
+      if (ref.mounted) state = state.copyWith(busy: false);
     }
   }
 
   Future<void> _persist(AuthResult result) async {
     await NexusAccountStore.writeToken(result.token);
     await NexusAccountStore.writeIdentity(result.user, result.client);
+    if (!ref.mounted) return;
     // Replace state outright (token is non-null now) so isSignedIn flips true.
     state = NexusAuthState(
       token: result.token,
@@ -205,6 +219,7 @@ class NexusAuth extends _$NexusAuth {
   /// Sign out: clear the keychain and reset to signed-out.
   Future<void> logout() async {
     await NexusAccountStore.clear();
+    if (!ref.mounted) return;
     state = NexusAuthState.signedOut;
   }
 }

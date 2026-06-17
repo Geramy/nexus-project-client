@@ -15,7 +15,7 @@ class GithubTokenStore {
     iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
     // See nexus_account_store.dart: legacy keychain avoids the macOS
     // keychain-access-groups entitlement that crashes ad-hoc debug builds.
-    mOptions: MacOsOptions(useDataProtectionKeyChain: false),
+    mOptions: MacOsOptions(usesDataProtectionKeychain: false),
   );
 
   static const _key = 'github/pat';

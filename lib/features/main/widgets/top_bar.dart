@@ -112,7 +112,7 @@ class TopBar extends ConsumerWidget {
                 final projects =
                     ref
                         .watch(projectsForClientProvider(currentClientId))
-                        .valueOrNull ??
+                        .value ??
                     const [];
                 final projectName =
                     projects
@@ -189,13 +189,13 @@ class TopBar extends ConsumerWidget {
           // Connection mode toggle (icon-only on phones to save width).
           Consumer(
             builder: (context, ref, _) {
-              final mode = ref.watch(connectionModeNotifierProvider);
+              final mode = ref.watch(connectionModeProvider);
               final icon = Icon(
                 mode == 'local' ? Icons.computer : Icons.cloud,
                 size: 16,
               );
               void toggle() =>
-                  ref.read(connectionModeNotifierProvider.notifier).toggle();
+                  ref.read(connectionModeProvider.notifier).toggle();
               if (narrow) {
                 return IconButton(
                   tooltip: mode == 'local' ? 'Local' : 'Remote',

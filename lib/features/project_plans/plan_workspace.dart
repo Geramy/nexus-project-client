@@ -22,7 +22,7 @@ class PlanWorkspaceView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final projectId = ref.watch(currentProjectIdProvider);
-    final openPath = ref.watch(openPlanNotifierProvider);
+    final openPath = ref.watch(openPlanProvider);
 
     if (openPath == null) {
       return _placeholder(context);

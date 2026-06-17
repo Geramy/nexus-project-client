@@ -3,6 +3,7 @@
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'database_provider.dart';

@@ -6,25 +6,58 @@ part of 'connection_mode_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, type=warning
+
+@ProviderFor(ConnectionModeNotifier)
+final connectionModeProvider = ConnectionModeNotifierProvider._();
+
+final class ConnectionModeNotifierProvider
+    extends $NotifierProvider<ConnectionModeNotifier, ConnectionMode> {
+  ConnectionModeNotifierProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'connectionModeProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$connectionModeNotifierHash();
+
+  @$internal
+  @override
+  ConnectionModeNotifier create() => ConnectionModeNotifier();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(ConnectionMode value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<ConnectionMode>(value),
+    );
+  }
+}
+
 String _$connectionModeNotifierHash() =>
     r'70e420df5a8206f90677df41e848f5bc260cf9bf';
 
-/// See also [ConnectionModeNotifier].
-@ProviderFor(ConnectionModeNotifier)
-final connectionModeNotifierProvider =
-    AutoDisposeNotifierProvider<
-      ConnectionModeNotifier,
-      ConnectionMode
-    >.internal(
-      ConnectionModeNotifier.new,
-      name: r'connectionModeNotifierProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$connectionModeNotifierHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-typedef _$ConnectionModeNotifier = AutoDisposeNotifier<ConnectionMode>;
-// ignore_for_file: type=lint
-// ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package
+abstract class _$ConnectionModeNotifier extends $Notifier<ConnectionMode> {
+  ConnectionMode build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref = this.ref as $Ref<ConnectionMode, ConnectionMode>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<ConnectionMode, ConnectionMode>,
+              ConnectionMode,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}

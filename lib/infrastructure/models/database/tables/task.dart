@@ -78,6 +78,12 @@ class Tasks extends Table {
   /// The git branch this task is being worked on (e.g. `task/42`).
   TextColumn get workBranch => text().nullable()();
 
+  /// Which milestone batch this task belongs to (0-based), assigned by the
+  /// Templater stage when it splits the backlog into sequential, topic-grouped
+  /// milestones. Workers only pick up tasks whose milestone is the project's
+  /// current one. Null = unassigned (short projects / legacy tasks → batch 0).
+  IntColumn get milestoneOrder => integer().nullable()();
+
   // ==================== Build pipeline config ====================
   /// When true, the orchestration pipeline runs a Docker build / CI gate on this
   /// task after verification passes and before it is handed off for merge.

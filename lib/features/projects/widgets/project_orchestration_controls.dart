@@ -266,7 +266,7 @@ class _ActiveAgentsChip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tasks = ref.watch(allTasksForProjectProvider(projectId)).valueOrNull;
+    final tasks = ref.watch(allTasksForProjectProvider(projectId)).value;
     final n = tasks == null
         ? 0
         : tasks.where((t) => _active.contains(t.executionStatus)).length;

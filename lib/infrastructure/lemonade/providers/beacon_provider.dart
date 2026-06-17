@@ -6,6 +6,7 @@
 /// (adapted to live under the Nexus infrastructure/lemonade/ tree).
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../models/discovered_server.dart';
 import '../services/beacon_listener_service.dart';

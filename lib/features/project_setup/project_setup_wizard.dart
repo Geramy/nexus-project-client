@@ -66,7 +66,7 @@ class _ProjectSetupWizardState extends ConsumerState<ProjectSetupWizard> {
     final status =
         ref
             .watch(projectRowProvider(widget.projectId))
-            .valueOrNull
+            .value
             ?.setupStatus ??
         'notStarted';
     return Scaffold(

@@ -32,6 +32,7 @@ class LeanContextNotifier extends _$LeanContextNotifier {
   Future<void> _hydrate() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getBool(_prefsKey) ?? true;
+    if (!ref.mounted) return; // provider disposed during the await (riverpod 3)
     if (saved != state) state = saved;
   }
 

@@ -39,7 +39,7 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
     final fsAsync = ref.watch(viewWorkspaceFsProvider(projectId));
     ref.watch(workspaceRevisionProvider(projectId)); // re-walk on mutations
     final git =
-        ref.watch(gitStatusProvider(projectId)).valueOrNull ??
+        ref.watch(gitStatusProvider(projectId)).value ??
         GitStatusSnapshot.noRepo;
     final selectedPath = ref.watch(selectedWorkspaceFileProvider(projectId));
     // When viewing a task branch read-only, the live git status (which tracks
@@ -190,7 +190,7 @@ class _FileBrowserViewState extends ConsumerState<FileBrowserView> {
     int projectId,
     String? viewBranch,
   ) {
-    final branches = ref.watch(branchListProvider(projectId)).valueOrNull ?? [];
+    final branches = ref.watch(branchListProvider(projectId)).value ?? [];
     final scheme = Theme.of(context).colorScheme;
     final viewing = viewBranch != null;
 

@@ -65,7 +65,7 @@ class _OnboardingWizardState extends ConsumerState<OnboardingWizard> {
   /// NOT signed in, record the auth skip so the login wall stays down later.
   void _goToServers() {
     if (!ref.read(nexusAuthProvider).isSignedIn) {
-      ref.read(authSkippedNotifierProvider.notifier).skip();
+      ref.read(authSkippedProvider.notifier).skip();
     }
     setState(() => _byoServers = true);
     _go(OnboardingStep.localServer);

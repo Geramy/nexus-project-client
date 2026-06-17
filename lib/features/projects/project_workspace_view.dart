@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import 'package:nexus_projects_client/core/providers/app_shell_provider.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
@@ -100,7 +101,7 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
     ref.watch(projectOrchestratorProvider(projectId));
 
     // When a plan is opened from the explorer, surface the Plan tab.
-    ref.listen<String?>(openPlanNotifierProvider, (prev, next) {
+    ref.listen<String?>(openPlanProvider, (prev, next) {
       if (next != null && next != prev && _tabs.index != _planTabIndex) {
         _tabs.animateTo(_planTabIndex);
       }
@@ -109,8 +110,8 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
     // When setup finishes (status flips to 'complete'), drop the user on the
     // first tab — now User Stories, the project's main screen.
     ref.listen(projectRowProvider(projectId), (prev, next) {
-      final was = prev?.valueOrNull?.setupStatus;
-      final now = next.valueOrNull?.setupStatus;
+      final was = prev?.value?.setupStatus;
+      final now = next.value?.setupStatus;
       // Only jump on a GENUINE transition into 'complete'. Guard `was != null`
       // so the first Loading→Data emission (where `was` is null) isn't mistaken
       // for "setup just completed" and yanked to tab 0 out from under the user.
@@ -134,7 +135,7 @@ class _ProjectWorkspaceViewState extends ConsumerState<ProjectWorkspaceView>
 
     // Setup is now a resumable full-screen WIZARD (not a tab). On a fresh
     // project we auto-open it once; it's also reachable from the Summary tab.
-    final projectRow = ref.watch(projectRowProvider(projectId)).valueOrNull;
+    final projectRow = ref.watch(projectRowProvider(projectId)).value;
     final setupStatus = projectRow?.setupStatus;
 
     // The post-setup discovery phase is NOT a one-shot full-screen takeover any

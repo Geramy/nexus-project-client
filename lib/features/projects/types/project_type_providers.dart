@@ -20,7 +20,7 @@ final projectByIdProvider = StreamProvider.family<Project?, int>((
 /// The [ProjectType] of a given project (resolved from its `projectType`
 /// column, defaulting to application-development for legacy/blank rows).
 final projectTypeProvider = Provider.family<ProjectType, int>((ref, projectId) {
-  final row = ref.watch(projectByIdProvider(projectId)).valueOrNull;
+  final row = ref.watch(projectByIdProvider(projectId)).value;
   return projectTypeByKey(row?.projectType);
 });
 

@@ -38,7 +38,7 @@ class _SummaryTabState extends ConsumerState<SummaryTab> {
   Future<void> _rename() async {
     final db = ref.read(nexusDatabaseProvider);
     final current =
-        ref.read(projectRowProvider(widget.projectId)).valueOrNull?.name ?? '';
+        ref.read(projectRowProvider(widget.projectId)).value?.name ?? '';
     final controller = TextEditingController(text: current);
     final newName = await showDialog<String>(
       context: context,
@@ -106,7 +106,7 @@ class _SummaryTabState extends ConsumerState<SummaryTab> {
                 child: Text(
                   ref
                           .watch(projectRowProvider(widget.projectId))
-                          .valueOrNull
+                          .value
                           ?.name ??
                       'Project Summary',
                   style: const TextStyle(
@@ -203,7 +203,7 @@ class _SetupCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final status =
-        ref.watch(projectRowProvider(projectId)).valueOrNull?.setupStatus ??
+        ref.watch(projectRowProvider(projectId)).value?.setupStatus ??
         'notStarted';
     final (label, action, icon) = switch (status) {
       'complete' => (

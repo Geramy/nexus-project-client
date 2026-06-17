@@ -141,9 +141,12 @@ class _ProjectCoordinatorChatScreenState
   Future<void> _initializeCoordinator() async {
     try {
       final clientId = ref.read(currentClientIdProvider);
-      final servers = await ref.read(
-        inferenceServersForClientProvider(clientId).future,
-      );
+      // One-shot DB read (not the StreamProvider `.future`, which hangs under
+      // riverpod 3 with no active stream listener). The reactive provider is
+      // still used by the AI-providers UI via ref.watch.
+      final servers = await ref
+          .read(nexusDatabaseProvider)
+          .getInferenceServersForClient(clientId);
 
       if (servers.isEmpty) {
         setState(() {
@@ -399,7 +402,7 @@ class _ProjectCoordinatorChatScreenState
             personaName: persona?.name,
           ),
         ),
-        leanTools: ref.read(leanContextNotifierProvider),
+        leanTools: ref.read(leanContextProvider),
         discoveryMode: widget.discoveryMode,
         systemPromptOverride: widget.systemPromptOverride,
       );

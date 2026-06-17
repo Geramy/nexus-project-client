@@ -2,7 +2,7 @@
 // Author: Geramy Loveless <support@nexus-projects.ai>
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 /// Bump counter used to request that the project workspace switch to its
 /// Overview tab (where the orchestration Start/Pause/Stop controls live).

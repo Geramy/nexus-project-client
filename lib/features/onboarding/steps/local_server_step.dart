@@ -122,7 +122,7 @@ class _LocalServerStepState extends ConsumerState<LocalServerStep> {
     final theme = Theme.of(context);
     final clientId = ref.watch(currentClientIdProvider);
     final serversAsync = ref.watch(inferenceServersForClientProvider(clientId));
-    final servers = serversAsync.valueOrNull ?? const [];
+    final servers = serversAsync.value ?? const [];
 
     return SingleChildScrollView(
       child: Column(

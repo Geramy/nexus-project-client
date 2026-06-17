@@ -55,17 +55,16 @@ final projectInferenceProvider = FutureProvider.family<ResolvedInference?, ({int
   ref,
   args,
 ) async {
-  // WATCH (not read) the server stream so this re-resolves whenever the configs
-  // change — critically when router_server_sync rewrites the routed server's
-  // apiKey after a re-login. Reading once cached a backend with a baked,
-  // never-refreshed token, which is why the Setup interview kept 401-ing on STT
-  // while the Coordinator (which rebuilds its client on every open) worked.
-  final servers = await ref.watch(
-    inferenceServersForClientProvider(args.clientId).future,
-  );
-  if (servers.isEmpty) return null;
-
   final db = ref.read(nexusDatabaseProvider);
+
+  // Stay reactive to server-config changes (re-login rewrites the routed
+  // server's apiKey) by WATCHING the stream provider, but read the actual rows
+  // via a one-shot DB query: riverpod 3's StreamProvider `.future` never
+  // completes unless something is actively listening to the stream, so awaiting
+  // it here just hangs (which silently broke Setup/Coordinator inference).
+  ref.watch(inferenceServersForClientProvider(args.clientId));
+  final servers = await db.getInferenceServersForClient(args.clientId);
+  if (servers.isEmpty) return null;
 
   // Setup is hosted by the PROJECT MANAGER agent — resolve it by role so the
   // interview always runs as the PM (and gets its NXS-PJX-Interview collection),

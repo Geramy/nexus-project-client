@@ -870,7 +870,7 @@ class _PersonaEditorState extends ConsumerState<PersonaEditor> {
 
   Future<void> _save() async {
     if (widget.personaId == null) {
-      if (mounted) ref.read(selectedPersonaNotifierProvider.notifier).clear();
+      if (mounted) ref.read(selectedPersonaProvider.notifier).clear();
       return;
     }
     try {
@@ -941,7 +941,7 @@ class _PersonaEditorState extends ConsumerState<PersonaEditor> {
         return;
       }
       // Close the editor panel via the notifier (not Navigator.pop — this isn't a route)
-      ref.read(selectedPersonaNotifierProvider.notifier).clear();
+      ref.read(selectedPersonaProvider.notifier).clear();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

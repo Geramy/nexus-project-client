@@ -14,7 +14,7 @@ class NexusProjectsApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final choice = ref.watch(appThemeNotifierProvider);
+    final choice = ref.watch(appThemeProvider);
     return MaterialApp.router(
       title: 'Nexus Projects',
       // The selected theme fully determines the look (incl. brightness), so we

@@ -29,7 +29,7 @@ class _TasksViewState extends ConsumerState<TasksView> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedId = ref.watch(selectedTaskIdNotifierProvider);
+    final selectedId = ref.watch(selectedTaskIdProvider);
     final currentProjectId = ref.watch(currentProjectIdProvider);
     final allTasksAsync = ref.watch(
       allTasksForProjectProvider(currentProjectId),
@@ -146,7 +146,7 @@ class _TasksViewState extends ConsumerState<TasksView> {
           onTap: () {
             widget.onTaskSelected(task.task_pk);
             ref
-                .read(selectedTaskIdNotifierProvider.notifier)
+                .read(selectedTaskIdProvider.notifier)
                 .selectTask(task.task_pk);
           },
           child: Container(

@@ -232,10 +232,10 @@ class _OverviewTabState extends ConsumerState<OverviewTab> {
                     ),
                     onPressed: () {
                       ref
-                          .read(openPlanNotifierProvider.notifier)
+                          .read(openPlanProvider.notifier)
                           .open(_planPath);
                       ref
-                          .read(planModeNotifierProvider.notifier)
+                          .read(planModeProvider.notifier)
                           .set(PlanMode.edit);
                       ref
                           .read(currentMainViewProvider.notifier)

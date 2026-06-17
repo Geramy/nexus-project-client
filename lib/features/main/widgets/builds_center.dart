@@ -27,7 +27,7 @@ class BuildsCenter extends ConsumerWidget {
     // carries project_fk); falls back to "Project #id" until names load.
     final projectNames = {
       for (final p
-          in ref.watch(projectsForClientProvider(currentClientId)).valueOrNull ??
+          in ref.watch(projectsForClientProvider(currentClientId)).value ??
               const <Project>[])
         p.project_pk: p.name,
     };

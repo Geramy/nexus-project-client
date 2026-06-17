@@ -12,6 +12,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../core/providers/database_provider.dart';
 import '../../../infrastructure/database/nexus_database.dart';
@@ -205,6 +206,11 @@ class TaskGenerator extends ChangeNotifier {
       // Leave the Exploration phase and start orchestration only once done.
       await db.setProjectExplorationStatus(projectId, 'complete');
       if (totalTasks > 0) {
+        // Gate the run on the Templater: it scaffolds a compiling base project
+        // (committed to main) and splits the backlog into sequential milestones
+        // BEFORE any worker starts — so the agents don't all race to create the
+        // project from an empty main at once.
+        await db.setProjectTemplateStatus(projectId, 'pending');
         await db.setProjectOrchestrationState(projectId, 'running');
       }
       _emit(progress.copyWith(running: false, done: true));

@@ -13,6 +13,7 @@
 /// EndpointsTab + ServerConfigDialog path and are never presented through this provider.
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'dart:convert';
 
 import 'package:drift/drift.dart' show Value;

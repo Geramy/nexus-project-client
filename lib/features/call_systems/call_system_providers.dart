@@ -26,7 +26,7 @@ final callSystemProjectProvider = Provider.family<CallSystemProject, int>((
   ref,
   projectId,
 ) {
-  final row = ref.watch(callSystemRowProvider(projectId)).valueOrNull;
+  final row = ref.watch(callSystemRowProvider(projectId)).value;
   final raw = row?.json.trim() ?? '';
   if (raw.isEmpty || raw == '{}') return starterCallSystem();
   try {
