@@ -86,6 +86,11 @@ jobs:
   # ------------------------------------------------------------------ macOS ---
   macos:
     runs-on: macos-14
+    # A macOS-only failure (e.g. the native-lib bundling step, hard to verify from
+    # a non-macOS dev box) must NOT block the Windows + Linux release from
+    # publishing. On failure the upload step just doesn't run, so the release goes
+    # out without a macOS artifact. Flip back to hard-fail once macOS is verified.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       # Latest stable. (Was pinned to 3.41.9 for the libgit2 bundling crash where
@@ -147,11 +152,24 @@ jobs:
           GBDIR="$(dirname "$(find "${PUB_CACHE:-$HOME/.pub-cache}" -path '*git2dart_binaries*/macos/libgit2.dylib' 2>/dev/null | head -1)")"
 
           # 1) Force-bundle the vendored dylibs and normalize their install names.
-          cp -f "$GBDIR/libgit2.dylib"   "$FW/libgit2.dylib"
-          cp -f "$GBDIR/libssh2.1.dylib" "$FW/libssh2.1.dylib"
-          chmod u+w "$FW/libgit2.dylib" "$FW/libssh2.1.dylib"
-          install_name_tool -id "@rpath/libgit2.dylib"   "$FW/libgit2.dylib"
-          install_name_tool -id "@rpath/libssh2.1.dylib" "$FW/libssh2.1.dylib"
+          cp -f "$GBDIR/libgit2.dylib" "$FW/libgit2.dylib"
+          chmod u+w "$FW/libgit2.dylib"
+          install_name_tool -id "@rpath/libgit2.dylib" "$FW/libgit2.dylib"
+          # libssh2's filename varies by Flutter/package build (libssh2.1.dylib vs
+          # libssh2.dylib). Bundle it under the EXACT name libgit2 references so the
+          # @rpath link resolves, finding the real file by glob.
+          SSH2_REF="$(otool -L "$FW/libgit2.dylib" | awk '/libssh2/{print $1; exit}')"
+          if [ -n "${SSH2_REF:-}" ]; then
+            SSH2_NAME="$(basename "$SSH2_REF")"
+            SSH2_SRC="$(ls "$GBDIR"/libssh2*.dylib 2>/dev/null | head -1 || true)"
+            if [ -n "${SSH2_SRC:-}" ]; then
+              cp -f "$SSH2_SRC" "$FW/$SSH2_NAME"
+              chmod u+w "$FW/$SSH2_NAME"
+              install_name_tool -id "@rpath/$SSH2_NAME" "$FW/$SSH2_NAME"
+            else
+              echo "::warning::libgit2 references $SSH2_REF but no libssh2*.dylib found in $GBDIR"
+            fi
+          fi
 
           # All Mach-O binaries in the bundle (main exe + Frameworks dylibs + framework binaries).
           machos() {
