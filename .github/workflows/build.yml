@@ -88,13 +88,14 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-      # Pinned: newer Flutter (3.44+) routes git2dart through the Dart
-      # native-assets path, which links a phantom "libgit2-experimental.1.9.dylib"
-      # that isn't embedded -> the app crashes at launch. 3.41.9 uses the
-      # CocoaPods vendored libgit2.dylib that bundles correctly (verified locally).
+      # Latest stable. (Was pinned to 3.41.9 for the libgit2 bundling crash where
+      # newer Flutter's native-assets path links a phantom
+      # @rpath/libgit2-experimental.1.9.dylib — but the "Embed & normalize native
+      # libraries" step below now rewrites that reference back to the bundled
+      # @rpath/libgit2.dylib, so the pin is no longer needed.) The pin also became
+      # too old for the riverpod3/analyzer12 deps, which need a newer SDK (meta 1.18).
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.41.9
           channel: stable
           cache: true
 
