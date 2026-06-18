@@ -2405,14 +2405,16 @@ class CoordinatorToolExecutor {
     if (inference == null) {
       return 'Diagram request noted: "$prompt". (No inference server configured for image generation right now.)';
     }
+    final imgModel = _resolveImageModel();
+    if (imgModel == null) {
+      return 'Diagram request noted: "$prompt". ($_noImageModelMessage)';
+    }
 
     try {
       final resp = await inference!.generateImage(
         prompt: prompt,
         size: size,
-        // Never post an empty model id (router 502s). Prefer the resolved image
-        // model, fall back to the chat/collection id.
-        model: imageModel ?? model,
+        model: imgModel,
       );
       final url = resp.data.isNotEmpty
           ? (resp.data.first.url ?? 'generated image')
@@ -2423,6 +2425,24 @@ class CoordinatorToolExecutor {
     }
   }
 
+  static const _noImageModelMessage =
+      'Image generation isn\'t available for this connection — the selected '
+      'model/collection doesn\'t expose an image-generation model. Choose an '
+      'image-capable model (e.g. Flux/SDXL) in Agents Hub, or it may not be '
+      'included in your plan.';
+
+  /// The image-gen model id to send, or null when none resolved. When no real
+  /// image model was resolved, [imageModel] falls back to the chat model
+  /// (== [model]); posting that to /images/generations makes the router 502
+  /// ("all candidate backends failed"), so return null and let callers report it.
+  String? _resolveImageModel() {
+    final chat = (model ?? '').trim();
+    final img = (imageModel ?? '').trim();
+    final effective = img.isNotEmpty ? img : chat;
+    if (effective.isEmpty || effective == chat) return null;
+    return effective;
+  }
+
   Future<String> _generateImage(Map<String, dynamic> args) async {
     final prompt = (args['prompt'] as String? ?? '').trim();
     if (prompt.isEmpty) return 'generate_image needs a prompt.';
@@ -2430,12 +2450,17 @@ class CoordinatorToolExecutor {
     if (inference == null) {
       return 'Image generation is not available (no inference backend).';
     }
+    final imgModel = _resolveImageModel();
+    if (imgModel == null) {
+      return _noImageModelMessage;
+    }
+    // ignore: avoid_print
+    print('[ImageGen] generate_image → model="$imgModel"');
     try {
       final resp = await inference!.generateImage(
         prompt: prompt,
         size: size,
-        // Prefer the resolved image model from the collection; never send empty.
-        model: imageModel ?? model,
+        model: imgModel,
         responseFormat: 'b64_json',
       );
       final b64 = resp.data.isNotEmpty ? resp.data.first.b64Json : null;
@@ -2449,8 +2474,25 @@ class CoordinatorToolExecutor {
           ? 'Generated the image: $url'
           : 'Image generation returned no data.';
     } catch (e) {
-      return 'Image generation failed: $e';
+      return _imageError(e, imgModel);
     }
+  }
+
+  /// Friendly message for an image-gen failure. The router's
+  /// `502 upstream_error "all candidate backends failed"` means the server has no
+  /// working image backend for the (correctly-sent) model — a server/plan issue,
+  /// not the app — so say so instead of dumping the raw exception.
+  String _imageError(Object e, String model) {
+    final m = e.toString();
+    if (m.contains('502') ||
+        m.contains('upstream_error') ||
+        m.toLowerCase().contains('candidate backends failed')) {
+      return 'Image generation failed: the server has no working image backend '
+          'for "$model" right now (the router returned "all candidate backends '
+          'failed"). This is a server-side / plan issue, not the app — try again '
+          'later or confirm image generation is enabled for your account.';
+    }
+    return 'Image generation failed: $e';
   }
 
   Future<String> _editImage(Map<String, dynamic> args) async {
@@ -2463,11 +2505,15 @@ class CoordinatorToolExecutor {
     if (_lastImageB64 == null) {
       return 'There is no image to edit yet — call generate_image first, then edit it.';
     }
+    final imgModel = _resolveImageModel();
+    if (imgModel == null) {
+      return _noImageModelMessage;
+    }
     try {
       final resp = await inference!.generateImageEdit(
         imageBytes: base64Decode(_lastImageB64!),
         prompt: prompt,
-        model: imageModel ?? model,
+        model: imgModel,
         size: size,
         responseFormat: 'b64_json',
       );
@@ -2479,7 +2525,7 @@ class CoordinatorToolExecutor {
       }
       return 'Image edit returned no data.';
     } catch (e) {
-      return 'Image edit failed: $e';
+      return _imageError(e, imgModel);
     }
   }
 

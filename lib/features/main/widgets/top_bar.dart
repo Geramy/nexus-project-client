@@ -46,53 +46,82 @@ class TopBar extends ConsumerWidget {
           ),
           SizedBox(width: narrow ? 10 : 24),
 
-          // Prominent Current Client indicator (multi-tenancy root)
+          // Client switcher — the multi-tenancy root, given the same dropdown
+          // treatment as the project switcher next to it so they're managed the
+          // same way.
           Consumer(
             builder: (context, ref, _) {
               final currentClientId = ref.watch(currentClientIdProvider);
-              final clientsAsync = ref.watch(allClientsProvider);
-
-              final clientName = clientsAsync.when(
-                data: (clients) {
-                  final match = clients
+              final clients = ref.watch(allClientsProvider).value ?? const [];
+              final clientName =
+                  clients
                       .where((c) => c.client_pk == currentClientId)
-                      .firstOrNull;
-                  return match?.name ?? currentClientId.toString();
-                },
-                loading: () => currentClientId.toString(),
-                error: (_, __) => currentClientId.toString(),
-              );
+                      .firstOrNull
+                      ?.name ??
+                  currentClientId.toString();
 
-              return Container(
-                constraints: BoxConstraints(maxWidth: narrow ? 110 : 160),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.primaryContainer.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primary.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.business, size: 14),
-                    const SizedBox(width: 4),
-                    Flexible(
-                      child: Text(
-                        clientName,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+              return PopupMenuButton<int>(
+                tooltip: 'Switch client',
+                position: PopupMenuPosition.under,
+                onSelected: (id) => _switchClient(context, ref, id),
+                itemBuilder: (_) => [
+                  for (final c in clients)
+                    PopupMenuItem(
+                      value: c.client_pk,
+                      child: Row(
+                        children: [
+                          Icon(
+                            c.client_pk == currentClientId
+                                ? Icons.check
+                                : Icons.business,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              c.name,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
+                ],
+                child: Container(
+                  constraints: BoxConstraints(maxWidth: narrow ? 120 : 170),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primaryContainer.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.business, size: 14),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          clientName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const Icon(Icons.arrow_drop_down, size: 18),
+                    ],
+                  ),
                 ),
               );
             },
@@ -213,5 +242,25 @@ class TopBar extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// Switch the focused CLIENT (and jump to its first project). Like the project
+  /// switcher, it confirms leaving a running project and stops it first —
+  /// selectProject then pauses the old project + frees its connections.
+  Future<void> _switchClient(
+    BuildContext context,
+    WidgetRef ref,
+    int clientId,
+  ) async {
+    if (clientId == ref.read(currentClientIdProvider)) return;
+    if (!await confirmLeaveProject(context, ref)) return;
+    ref.read(currentClientIdProvider.notifier).selectClient(clientId);
+    final db = ref.read(nexusDatabaseProvider);
+    final projs = await db.getProjectsForClient(clientId);
+    if (projs.isNotEmpty) {
+      ref
+          .read(currentProjectIdProvider.notifier)
+          .selectProject(projs.first.project_pk);
+    }
   }
 }

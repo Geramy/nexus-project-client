@@ -235,10 +235,25 @@ class NexusDatabase extends _$NexusDatabase {
           // Templater stage + sequential, topic-grouped milestones: a per-task
           // milestone batch index and the project-level templating/milestone
           // bookkeeping that gates workers until a base project is scaffolded.
-          await m.addColumn(tasks, tasks.milestoneOrder);
-          await m.addColumn(projects, projects.templateStatus);
-          await m.addColumn(projects, projects.currentMilestone);
-          await m.addColumn(projects, projects.milestoneCount);
+          //
+          // IDEMPOTENT: SQLite auto-commits DDL, so if a crash interrupts this
+          // step AFTER a column was added but BEFORE Drift commits the new
+          // schemaVersion, the next launch re-runs this block and the ADD COLUMN
+          // fails with "duplicate column" — which would brick the DB (it never
+          // opens, so no projects/account data show). Skip any column already
+          // present instead of crashing.
+          Future<void> addCol(Future<void> Function() add) async {
+            try {
+              await add();
+            } on Object catch (e) {
+              if (!'$e'.toLowerCase().contains('duplicate column')) rethrow;
+            }
+          }
+
+          await addCol(() => m.addColumn(tasks, tasks.milestoneOrder));
+          await addCol(() => m.addColumn(projects, projects.templateStatus));
+          await addCol(() => m.addColumn(projects, projects.currentMilestone));
+          await addCol(() => m.addColumn(projects, projects.milestoneCount));
         }
       },
     );

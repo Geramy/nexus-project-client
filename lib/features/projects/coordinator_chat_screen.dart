@@ -288,6 +288,10 @@ class _ProjectCoordinatorChatScreenState
       // the server advertises. Empty model id makes the router 502 ("All
       // candidate backends failed"); the executor falls back to the chat model.
       imageModel ??= firstImageModelId(serverModels);
+      // ignore: avoid_print
+      print('[ImageGen] resolved imageModel=${imageModel ?? "NONE — will fall "
+          "back to the chat model, which the router 502s on for /images"}; '
+          'available models: ${serverModels.map((m) => m.isCollection ? "${m.id}{${m.compositeModels.join("+")}}" : m.id).join(", ")}');
 
       // Chat model: the routed Nexus Router serves the Omni COLLECTION id directly,
       // so send the agent's collection (or an explicit per-persona model) as-is —

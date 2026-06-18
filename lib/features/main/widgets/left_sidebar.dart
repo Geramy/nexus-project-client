@@ -128,90 +128,103 @@ class LeftSidebar extends ConsumerWidget {
                         const _SectionLabel('CLIENTS'),
                         const SizedBox(height: 4),
 
+                        // Only the FOCUSED client shows here, in a box; tapping it
+                        // opens a dropdown of every client to switch to — the same
+                        // treatment as the PROJECTS switcher below.
                         clientsAsync.when(
                           data: (clients) {
                             final currentClientId = ref.watch(
                               currentClientIdProvider,
                             );
-
-                            return Column(
-                              children: clients.map((client) {
-                                final isSelected =
-                                    client.client_pk == currentClientId;
-                                return InkWell(
-                                  onTap: () {
-                                    ref
-                                        .read(currentClientIdProvider.notifier)
-                                        .selectClient(client.client_pk);
-                                    Future.microtask(() async {
-                                      final db = ref.read(
-                                        nexusDatabaseProvider,
-                                      );
-                                      final projs = await db
-                                          .getProjectsForClient(
-                                            client.client_pk,
-                                          );
-                                      if (projs.isNotEmpty) {
-                                        ref
-                                            .read(
-                                              currentProjectIdProvider.notifier,
-                                            )
-                                            .selectProject(
-                                              projs.first.project_pk,
-                                            );
-                                      }
-                                    });
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: AppSpacing.sm,
-                                      vertical: 5,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: isSelected
-                                          ? Theme.of(context)
-                                                .colorScheme
-                                                .primary
-                                                .withValues(alpha: 0.14)
-                                          : null,
-                                      borderRadius: AppRadius.smAll,
-                                    ),
+                            final current = clients
+                                .where((c) => c.client_pk == currentClientId)
+                                .firstOrNull;
+                            final currentName =
+                                (current?.name ??
+                                    currentClientId.toString()) +
+                                (current?.isDefault == true
+                                    ? ' (Default)'
+                                    : '');
+                            return PopupMenuButton<int>(
+                              tooltip: 'Switch client',
+                              position: PopupMenuPosition.under,
+                              onSelected: (id) =>
+                                  _switchClient(context, ref, id),
+                              itemBuilder: (_) => [
+                                for (final c in clients)
+                                  PopupMenuItem(
+                                    value: c.client_pk,
                                     child: Row(
                                       children: [
+                                        Icon(
+                                          c.client_pk == currentClientId
+                                              ? Icons.check
+                                              : Icons.business,
+                                          size: 16,
+                                        ),
+                                        const SizedBox(width: 8),
                                         Expanded(
                                           child: Text(
-                                            client.name +
-                                                (client.isDefault
+                                            c.name +
+                                                (c.isDefault
                                                     ? ' (Default)'
                                                     : ''),
-                                            style: TextStyle(
-                                              fontWeight: isSelected
-                                                  ? FontWeight.w600
-                                                  : FontWeight.w500,
-                                            ),
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
-                                        if (!client.isDefault)
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.delete_outline,
-                                              size: 16,
-                                            ),
-                                            padding: EdgeInsets.zero,
-                                            constraints: const BoxConstraints(),
-                                            onPressed: () => _deleteClient(
-                                              context,
-                                              ref,
-                                              client,
-                                            ),
-                                            tooltip: 'Delete client',
-                                          ),
                                       ],
                                     ),
                                   ),
-                                );
-                              }).toList(),
+                              ],
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AppSpacing.sm,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.primary
+                                      .withValues(alpha: 0.10),
+                                  border: Border.all(
+                                    color: Theme.of(context).colorScheme.primary
+                                        .withValues(alpha: 0.3),
+                                  ),
+                                  borderRadius: AppRadius.smAll,
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.business, size: 14),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        currentName,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const Icon(Icons.arrow_drop_down, size: 18),
+                                    if (current != null && !current.isDefault)
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.delete_outline,
+                                          size: 14,
+                                        ),
+                                        padding: EdgeInsets.zero,
+                                        visualDensity: VisualDensity.compact,
+                                        constraints: const BoxConstraints(),
+                                        tooltip: 'Delete this client',
+                                        onPressed: () => _deleteClient(
+                                          context,
+                                          ref,
+                                          current,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
                             );
                           },
                           loading: () => const SizedBox(height: 20),
@@ -664,6 +677,26 @@ class _NavItemState extends State<_NavItem> {
         ),
       ),
     );
+  }
+}
+
+/// Switch the focused CLIENT (and jump to its first project). Mirrors the
+/// project switcher: confirm leaving a running project first, then switch —
+/// selectProject pauses the old project + frees its inference connections.
+Future<void> _switchClient(
+  BuildContext context,
+  WidgetRef ref,
+  int clientId,
+) async {
+  if (clientId == ref.read(currentClientIdProvider)) return;
+  if (!await confirmLeaveProject(context, ref)) return;
+  ref.read(currentClientIdProvider.notifier).selectClient(clientId);
+  final db = ref.read(nexusDatabaseProvider);
+  final projs = await db.getProjectsForClient(clientId);
+  if (projs.isNotEmpty) {
+    ref
+        .read(currentProjectIdProvider.notifier)
+        .selectProject(projs.first.project_pk);
   }
 }
 
