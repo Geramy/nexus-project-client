@@ -1380,6 +1380,27 @@ class CoordinatorTools {
     {
       'type': 'function',
       'function': {
+        'name': 'delete_user_story',
+        'description':
+            'Delete a user story the user asked you to remove (e.g. "drop the '
+            'payments story", "that one doesn\'t belong"). This also removes ALL '
+            'of its descendant sub-stories and their notes, so only delete a '
+            'parent when the user means the whole branch — otherwise move the '
+            'children out first with move_user_story, or just delete the leaf. '
+            'Confirm with the user before deleting a story that has children. '
+            'Only delete what the user explicitly asked to remove.',
+        'parameters': {
+          'type': 'object',
+          'properties': {
+            'story_id': {'type': 'string'},
+          },
+          'required': ['story_id'],
+        },
+      },
+    },
+    {
+      'type': 'function',
+      'function': {
         'name': 'list_user_stories',
         'description':
             'List the current user-story tree (ids, titles, parents, status) so '
@@ -1742,6 +1763,8 @@ class CoordinatorToolExecutor {
           return await _updateUserStory(args);
         case 'move_user_story':
           return await _moveUserStory(args);
+        case 'delete_user_story':
+          return await _deleteUserStory(args);
         case 'list_user_stories':
           return await _listUserStories();
         case 'add_note':
@@ -2193,6 +2216,36 @@ class CoordinatorToolExecutor {
     );
     return 'Moved story #$id ${makeRoot ? 'to root' : 'under #$newParent'}'
         '${order != null ? ' at position $order' : ''}.';
+  }
+
+  /// Delete a story (and, recursively, its descendants + notes) the user asked
+  /// to remove. Reports how many nodes went so the agent can tell the user.
+  Future<String> _deleteUserStory(Map<String, dynamic> args) async {
+    final id = _asInt(args['story_id']);
+    if (id == null) return 'delete_user_story failed: story_id is required.';
+    final all = await db.getUserStoriesForProject(projectId);
+    final matches = all.where((s) => s.story_pk == id).toList();
+    if (matches.isEmpty) {
+      return 'delete_user_story failed: story #$id not found.';
+    }
+    final target = matches.first;
+    // Count the whole branch (target + descendants) for an accurate report.
+    final childrenOf = <int, List<int>>{};
+    for (final s in all) {
+      if (s.parent_story_fk != null) {
+        (childrenOf[s.parent_story_fk!] ??= []).add(s.story_pk);
+      }
+    }
+    var branch = 0;
+    final stack = <int>[id];
+    while (stack.isNotEmpty) {
+      branch++;
+      stack.addAll(childrenOf[stack.removeLast()] ?? const []);
+    }
+    await db.deleteUserStory(id);
+    final extra = branch - 1;
+    return 'Deleted story #$id "${target.title}"'
+        '${extra > 0 ? ' and its $extra descendant${extra == 1 ? '' : 's'}' : ''}.';
   }
 
   Future<String> _updateUserStory(Map<String, dynamic> args) async {

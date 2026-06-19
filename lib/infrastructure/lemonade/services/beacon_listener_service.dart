@@ -39,7 +39,9 @@ class BeaconListenerService {
         InternetAddress.anyIPv4,
         _port,
         reuseAddress: true,
-        reusePort: true,
+        // SO_REUSEPORT exists only on Linux/macOS; on Windows it isn't
+        // supported and dart:io logs "reusePort not supported for Windows".
+        reusePort: !Platform.isWindows,
       );
       _socket!.broadcastEnabled = true;
       _isListening = true;

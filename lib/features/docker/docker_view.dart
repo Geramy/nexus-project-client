@@ -10,6 +10,7 @@ import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/infrastructure/docker/docker_models.dart';
 import 'package:nexus_projects_client/infrastructure/docker/docker_providers.dart';
 import 'build_image_dialog.dart';
+import 'run_container_dialog.dart';
 
 /// Global Docker control panel: shows the daemon connection, its images and
 /// containers, and lets you build an image from a project's Dockerfile. All of
@@ -39,6 +40,12 @@ class DockerView extends ConsumerWidget {
                 },
               ),
               const SizedBox(width: 4),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.play_arrow, size: 16),
+                label: const Text('Run container'),
+                onPressed: () => RunContainerDialog.show(context),
+              ),
+              const SizedBox(width: 8),
               FilledButton.icon(
                 icon: const Icon(Icons.build, size: 16),
                 label: const Text('Build image'),
@@ -252,10 +259,21 @@ class _ImageTile extends ConsumerWidget {
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         subtitle: Text('${image.shortId} • ${_fmtSize(image.size)}'),
-        trailing: IconButton(
-          tooltip: 'Remove image',
-          icon: const Icon(Icons.delete_outline, size: 18),
-          onPressed: () async {
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Run container',
+              icon: const Icon(Icons.play_circle_outline, size: 18),
+              onPressed: image.primaryTag.startsWith('<none>')
+                  ? null
+                  : () =>
+                        RunContainerDialog.show(context, imageTag: image.primaryTag),
+            ),
+            IconButton(
+              tooltip: 'Remove image',
+              icon: const Icon(Icons.delete_outline, size: 18),
+              onPressed: () async {
             try {
               await ref
                   .read(dockerEngineClientProvider)
@@ -274,6 +292,8 @@ class _ImageTile extends ConsumerWidget {
               }
             }
           },
+            ),
+          ],
         ),
       ),
     );

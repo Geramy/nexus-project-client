@@ -3,6 +3,7 @@
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
 import 'package:flutter/material.dart';
+import 'package:nexus_projects_client/features/docker/run_container_dialog.dart';
 import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart'
     show NexusDatabase, CiRun, CiJob, CiStep;
 
@@ -55,6 +56,22 @@ class CiRunCard extends StatelessWidget {
               child: Text(
                 run.errorText!,
                 style: const TextStyle(color: Colors.red, fontSize: 12),
+              ),
+            ),
+          if (run.kind == 'dockerBuild' &&
+              run.status == 'success' &&
+              run.imageTag != null &&
+              run.imageTag!.isNotEmpty)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.rocket_launch, size: 16),
+                  label: const Text('Launch via Docker'),
+                  onPressed: () =>
+                      RunContainerDialog.show(context, imageTag: run.imageTag),
+                ),
               ),
             ),
           StreamBuilder<List<CiJob>>(

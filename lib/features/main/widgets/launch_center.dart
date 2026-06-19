@@ -32,7 +32,7 @@ class LaunchCenter extends StatelessWidget {
             tabAlignment: TabAlignment.start,
             tabs: [
               Tab(text: 'Builds'),
-              Tab(text: 'Packaging'),
+              Tab(text: 'Docker'),
               Tab(text: 'Live Sites'),
             ],
           ),

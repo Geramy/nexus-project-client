@@ -1168,12 +1168,11 @@ class ProjectOrchestrator {
   /// proceed (templating done, or not applicable to this project), false when it
   /// kicked off / is still running templating — the pump re-runs when it lands.
   Future<bool> _ensureTemplated(Project project) async {
-    // ignore: avoid_print
-    print('[Templater] gate: templateStatus="${project.templateStatus}" '
-        '_templating=$_templating');
     switch (project.templateStatus) {
       case 'ready':
       case 'none': // legacy / planning-path projects scaffold elsewhere
+        // Templating is done — the gate is open; pass silently (this runs on
+        // every pump, so logging here spams once-per-cycle forever).
         return true;
       case 'failed':
         return false; // surfaced; a human re-runs templating to retry
@@ -1181,7 +1180,8 @@ class ProjectOrchestrator {
         if (_templating) return false;
         _templating = true;
         // ignore: avoid_print
-        print('[Templater] kicking off templating phase for project $projectId');
+        print('[Templater] gate open → kicking off templating for project '
+            '$projectId (status="${project.templateStatus}")');
         unawaited(
           _runTemplatingPhase(project).whenComplete(() {
             _templating = false;

@@ -366,10 +366,15 @@ class SetupTools {
               'Remove tag(s) from the project profile that the user has '
               'explicitly said are WRONG. ONLY call this when the user corrects '
               'or rejects a tag (e.g. "this isn\'t a logistics app", "that\'s not '
-              'ecommerce", "we\'re not B2B — take that off"). Never remove a tag '
-              'the user has not disowned. Give each tag as its category + exact '
-              'value (the mirror of propose_tags). After removing, propose_tags '
-              'the correct value if the user named one.',
+              'ecommerce", "we\'re not B2B — take that off", "the Media tag is '
+              'wrong, it\'s a game"). Never remove a tag the user has not '
+              'disowned. Give each tag as its category + exact value (the mirror '
+              'of propose_tags). Removing an `industries` tag AUTOMATICALLY '
+              'clears the sub-axis selections it introduced (e.g. dropping '
+              '"Media" also clears its genre pick) — you do not need to remove '
+              'those yourself, but DO re-check objectives/features that only fit '
+              'the old industry and remove any that no longer apply. After '
+              'removing, propose_tags the correct value if the user named one.',
           'parameters': {
             'type': 'object',
             'properties': {
@@ -1022,6 +1027,13 @@ class SetupToolExecutor {
   /// deletes the matches; the correct value, if the user named one, is re-added
   /// by a following propose_tags. Only acts on what the model passed — never a
   /// blanket clear.
+  ///
+  /// CASCADE: removing an `industries` tag orphans the sub-axis it introduced
+  /// (e.g. dropping "Media" leaves a stale "genre" pick that only Media's scope
+  /// defined). After the explicit removals, any sub-axis category contributed
+  /// ONLY by a now-removed industry — not by any industry still on the board —
+  /// has its tags removed too, so a category correction takes its derived
+  /// selections with it.
   Future<String> _remove(Map<String, dynamic> args) async {
     final raw = (args['tags'] as List?) ?? const [];
     if (raw.isEmpty) {
@@ -1031,6 +1043,7 @@ class SetupToolExecutor {
     final controller = TagController(db, projectPk);
     final removed = <String>[];
     final notFound = <String>[];
+    var removedAnIndustry = false;
 
     for (final entry in raw) {
       if (entry is! Map) continue;
@@ -1054,12 +1067,21 @@ class SetupToolExecutor {
         await controller.remove(m.tag_pk);
         removed.add(m.value);
         _pendingDecisions.remove(_normPkg(m.value));
+        if (m.category.toLowerCase() == 'industries') removedAnIndustry = true;
       }
     }
+
+    final cascaded = removedAnIndustry ? await _cascadeOrphanedSubAxes() : const <String>[];
 
     final b = StringBuffer();
     if (removed.isNotEmpty) {
       b.write('Removed ${removed.length} tag(s): ${removed.join(', ')}.');
+    }
+    if (cascaded.isNotEmpty) {
+      b.write(
+        '${b.isEmpty ? '' : ' '}Also cleared sub-axis selection(s) left behind '
+        'by the removed industry: ${cascaded.join(', ')}.',
+      );
     }
     if (notFound.isNotEmpty) {
       b.write(
@@ -1068,6 +1090,50 @@ class SetupToolExecutor {
       );
     }
     return b.isEmpty ? 'No matching tags — nothing removed.' : b.toString();
+  }
+
+  /// After an industry is removed, delete tags under any sub-axis category that
+  /// is no longer introduced by ANY industry still selected. Returns the values
+  /// it cleared (for the tool report). Deterministic — only touches sub-axis
+  /// categories the scope vocab defines, never user-picked objectives/features.
+  Future<List<String>> _cascadeOrphanedSubAxes() async {
+    final current = await db.getTagsForProject(projectPk);
+    final remainingIndustries = current
+        .where((t) => t.status != 'rejected' && t.category == 'industries')
+        .map((t) => t.value)
+        .toList();
+    // Sub-axis categories still valid for the surviving industries.
+    final keptAxes = await db.subAxesForIndustries(remainingIndustries);
+    final keptKeys = keptAxes.map((a) => a.key).toSet();
+    // Any sub-axis tag on the board whose category is NOT a kept axis is an
+    // orphan from the removed industry — clear it.
+    final allAxisKeys = <String>{};
+    // Discover which board categories are sub-axes at all (vs. flow stages) by
+    // asking the full set of industries that ever defined them; cheapest is to
+    // treat any category not in the standard flow set and not kept as a sub-axis
+    // orphan only if it WAS an axis. We detect axis categories via the kept set
+    // plus the categories present that aren't standard flow stages.
+    const flowCats = {
+      'industries', 'platforms', 'objectives', 'features', 'languages',
+      'frameworks', 'databases', 'libraries', 'services',
+    };
+    for (final t in current) {
+      if (t.status == 'rejected') continue;
+      if (flowCats.contains(t.category)) continue;
+      allAxisKeys.add(t.category);
+    }
+    final orphanKeys = allAxisKeys.difference(keptKeys);
+    if (orphanKeys.isEmpty) return const [];
+    final controller = TagController(db, projectPk);
+    final cleared = <String>[];
+    for (final t in current) {
+      if (t.status == 'rejected') continue;
+      if (!orphanKeys.contains(t.category)) continue;
+      await controller.remove(t.tag_pk);
+      _pendingDecisions.remove(_normPkg(t.value));
+      cleared.add(t.value);
+    }
+    return cleared;
   }
 
   /// Register a shortlist of options the host is weighing ("let me think about

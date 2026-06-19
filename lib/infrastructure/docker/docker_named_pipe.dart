@@ -73,9 +73,13 @@ class WindowsDockerPipe {
     );
 
     var closed = false;
+    // The reader hands back a control port so we can ask it to STOP gracefully
+    // (free its native buffers + exit its poll loop). kill() is the fallback.
+    SendPort? readerStop;
     void cleanup() {
       if (closed) return;
       closed = true;
+      readerStop?.send(null); // graceful stop (frees native buffers)
       fromPipe.close();
       writerReady.close();
       reader.kill(priority: Isolate.immediate);
@@ -99,6 +103,11 @@ class WindowsDockerPipe {
     });
 
     fromPipe.listen((msg) {
+      // First message from the reader is its control SendPort.
+      if (msg is SendPort) {
+        readerStop = msg;
+        return;
+      }
       if (msg == null) {
         cleanup(); // pipe EOF/closed
         return;
@@ -136,22 +145,59 @@ class _PipeArg {
 
 const int _bufSize = 64 * 1024;
 
+/// Reader isolate: poll the pipe for available bytes and forward them to the
+/// main isolate. Deliberately POLLING (PeekNamedPipe + a periodic timer) rather
+/// than a blocking ReadFile loop: a thread parked inside a blocking native
+/// syscall can't be reclaimed by Isolate.kill() or by VM/app shutdown (the
+/// "waiting for isolate _readerEntry to check in" hang on exit). Staying in the
+/// Dart event loop keeps the isolate killable and lets shutdown complete.
 void _readerEntry(_PipeArg arg) {
+  final control = ReceivePort();
+  // Hand the control port back so the main isolate can request a graceful stop.
+  arg.sendPort.send(control.sendPort);
+
+  final peek = _lookupPeekNamedPipe();
   final readFile = _lookupReadFile();
   final buf = calloc<Uint8>(_bufSize);
   final read = calloc<Uint32>();
-  try {
-    while (true) {
-      final ok = readFile(arg.handle, buf, _bufSize, read, nullptr);
-      final n = read.value;
-      if (ok == 0 || n == 0) break;
-      arg.sendPort.send(Uint8List.fromList(buf.asTypedList(n)));
-    }
-  } finally {
+  final avail = calloc<Uint32>();
+
+  var stopped = false;
+  Timer? timer;
+  void stop({bool sendEof = true}) {
+    if (stopped) return;
+    stopped = true;
+    timer?.cancel();
+    if (sendEof) arg.sendPort.send(null); // signal EOF to main
     calloc.free(buf);
     calloc.free(read);
-    arg.sendPort.send(null); // signal EOF
+    calloc.free(avail);
+    control.close();
   }
+
+  // A message on the control port = "stop now" (the connection is closing); no
+  // EOF needed since the main side already knows.
+  control.listen((_) => stop(sendEof: false));
+
+  timer = Timer.periodic(const Duration(milliseconds: 8), (_) {
+    // How many bytes are buffered, WITHOUT blocking.
+    final ok = peek(arg.handle, nullptr, 0, nullptr, avail, nullptr);
+    if (ok == 0) {
+      stop(); // pipe broken / handle closed
+      return;
+    }
+    final n = avail.value;
+    if (n == 0) return; // nothing yet — try again next tick
+    final toRead = n > _bufSize ? _bufSize : n;
+    // Data is already buffered, so this ReadFile returns immediately.
+    final rok = readFile(arg.handle, buf, toRead, read, nullptr);
+    final got = read.value;
+    if (rok == 0 || got == 0) {
+      stop();
+      return;
+    }
+    arg.sendPort.send(Uint8List.fromList(buf.asTypedList(got)));
+  });
 }
 
 void _writerEntry(_PipeArg arg) {
@@ -236,6 +282,33 @@ typedef _ReadWriteDart =
 
 typedef _CloseHandleNative = Int32 Function(IntPtr hObject);
 typedef _CloseHandleDart = int Function(int hObject);
+
+// BOOL PeekNamedPipe(HANDLE, LPVOID, DWORD, LPDWORD, LPDWORD, LPDWORD) — used to
+// query how many bytes are buffered without blocking (we pass null for the
+// buffer/read/left-in-message outputs and only read lpTotalBytesAvail).
+typedef _PeekNamedPipeNative =
+    Int32 Function(
+      IntPtr hNamedPipe,
+      Pointer<Void> lpBuffer,
+      Uint32 nBufferSize,
+      Pointer<Uint32> lpBytesRead,
+      Pointer<Uint32> lpTotalBytesAvail,
+      Pointer<Uint32> lpBytesLeftThisMessage,
+    );
+typedef _PeekNamedPipeDart =
+    int Function(
+      int hNamedPipe,
+      Pointer<Void> lpBuffer,
+      int nBufferSize,
+      Pointer<Uint32> lpBytesRead,
+      Pointer<Uint32> lpTotalBytesAvail,
+      Pointer<Uint32> lpBytesLeftThisMessage,
+    );
+
+_PeekNamedPipeDart _lookupPeekNamedPipe() =>
+    _kernel32().lookupFunction<_PeekNamedPipeNative, _PeekNamedPipeDart>(
+      'PeekNamedPipe',
+    );
 
 DynamicLibrary _kernel32() => DynamicLibrary.open('kernel32.dll');
 

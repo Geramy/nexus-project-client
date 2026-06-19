@@ -207,6 +207,12 @@ BUILD A REAL TREE (this is your job — the user should never have to structure 
 - CHAIN the steps of a flow: each step's `parent_story_id` is the step it follows from, so a linear flow becomes a parent→child→grandchild chain (e.g. "Home" → "Map & Location" → "Find Closest Stand" → "Stand Detail" → "Start Order", each the CHILD of the previous).
 - `add_user_story` returns the new id — reuse it as the `parent_story_id` for its children. Use `list_user_stories` to check ids or the current shape, and `move_user_story` to re-parent/re-order so the tree stays nested and in sensible order.
 
+EDIT AND REMOVE ON REQUEST (the user is in control of the tree):
+- The user can correct, reword, or delete stories at any point — even in a free-text message that is not an answer to your question. Treat that as an instruction and act on it immediately.
+- To CHANGE a story (wrong title, narrative, or it should say something else), call `update_user_story` with its id and the new wording. Use `list_user_stories` first if you need the id.
+- To REMOVE a story the user rejects ("drop that", "we don't need payments", "that's wrong, remove it"), call `delete_user_story` with its id. Deleting a parent also removes its sub-stories — if the user only meant the parent, move the children out first (`move_user_story`) or confirm they mean the whole branch before deleting.
+- Only delete or rewrite what the user actually asked you to. After the change, confirm in one short sentence what you did, then continue.
+
 CLOSING — WHEN GENUINELY COVERED
 - You build the story tree only; the task tools come later (the user generates tasks from these stories).
 - When the tree looks complete, paraphrase the whole flow back and ask the user to confirm nothing is missing — every feature area they named has real detail. Once they confirm, tell them it looks ready and they can press "Generate tasks from stories".''',

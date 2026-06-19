@@ -193,16 +193,33 @@ class ProjectCoordinatorSession {
         ..._fullTrace,
       ];
 
+  /// Drop tools this agent is DENIED so the model only ever sees a schema it may
+  /// actually call. Each agent's permissions are unique (worker, verifier, PM,
+  /// coordinator each deny a different set), so this shrinks the per-call payload
+  /// to that agent's real toolset — the Generalist worker, for instance, sheds
+  /// ~20 task/plan/verifier/push tools it can't use. The `_gate` still enforces
+  /// `ask`/`deny` at call time; this just stops paying tokens to advertise a tool
+  /// the agent can't invoke. No-op for an agent on all-defaults (nothing denied).
+  List<Map<String, dynamic>> _permittedTools(List<Map<String, dynamic>> all) {
+    return all.where((t) {
+      final name = (t['function'] as Map?)?['name']?.toString() ?? '';
+      if (name.isEmpty) return true;
+      return permissions.permFor(name) != ToolPerm.deny;
+    }).toList();
+  }
+
   /// Filter the full tool list to those active right now: every non-gated tool,
   /// plus the tools of any unlocked group, plus the `request_tools` meta-tool.
-  /// When [leanTools] is off, returns the full list unchanged.
+  /// Denied tools are always removed first (see [_permittedTools]); when
+  /// [leanTools] is off, the permitted list is returned as-is.
   List<Map<String, dynamic>> _effectiveTools(List<Map<String, dynamic>> all) {
-    if (!leanTools) return all;
+    final permitted = _permittedTools(all);
+    if (!leanTools) return permitted;
     final hidden = <String>{};
     _gatedToolGroups.forEach((group, names) {
       if (!_unlockedToolGroups.contains(group)) hidden.addAll(names);
     });
-    final out = all.where((t) {
+    final out = permitted.where((t) {
       final name = (t['function'] as Map?)?['name']?.toString() ?? '';
       return !hidden.contains(name);
     }).toList();
@@ -824,11 +841,58 @@ class ProjectCoordinatorSession {
   /// long same-role runs. We merge consecutive same-role *text* messages into
   /// one. Messages carrying tool_calls and `tool`-role results are left intact
   /// (they must keep their exact structure for tool-calling to work).
+  /// Recent tool results kept VERBATIM on the wire; older ones are elided.
+  static const int _keepFullToolResults = 6;
+
+  /// Only old tool results bigger than this (chars) get elided — small status
+  /// messages are left alone (they're cheap and often still relevant).
+  static const int _elideToolResultOver = 1200;
+
+  /// Context compaction. A worker re-sends its ENTIRE history on every tool
+  /// round, across up to a dozen turns, so every file it read early is re-billed
+  /// dozens of times — token cost grows quadratically and dominates the bill.
+  /// Replace the content of OLDER, large `tool` results (keeping the most recent
+  /// few verbatim) with a short stub. Message structure — including each tool
+  /// result's `tool_call_id` pairing with its assistant `tool_calls` — is
+  /// preserved, recent context stays intact, and the model can simply re-read a
+  /// file if it needs an elided one again. No-op for short conversations (e.g.
+  /// the interactive coordinator chat), which rarely accumulate big tool dumps.
+  static List<Map<String, dynamic>> _compactToolResults(
+    List<Map<String, dynamic>> msgs,
+  ) {
+    final toolIdx = <int>[
+      for (var i = 0; i < msgs.length; i++)
+        if (msgs[i]['role'] == 'tool') i,
+    ];
+    if (toolIdx.length <= _keepFullToolResults) return msgs;
+    // Everything before this index is "old" and eligible for elision.
+    final keepFrom = toolIdx[toolIdx.length - _keepFullToolResults];
+    final out = <Map<String, dynamic>>[];
+    for (var i = 0; i < msgs.length; i++) {
+      final m = msgs[i];
+      if (m['role'] == 'tool' && i < keepFrom) {
+        final content = (m['content'] ?? '').toString();
+        if (content.length > _elideToolResultOver) {
+          out.add({
+            ...m,
+            'content':
+                '[earlier tool output elided to save context '
+                '(${content.length} chars). Re-read the file/resource if you '
+                'still need it.]',
+          });
+          continue;
+        }
+      }
+      out.add(m);
+    }
+    return out;
+  }
+
   static List<Map<String, dynamic>> _sanitizeForWire(
     List<Map<String, dynamic>> msgs,
   ) {
     final out = <Map<String, dynamic>>[];
-    for (final m in msgs) {
+    for (final m in _compactToolResults(msgs)) {
       final role = m['role'];
       final hasToolCalls = m['tool_calls'] != null;
       if (out.isNotEmpty &&

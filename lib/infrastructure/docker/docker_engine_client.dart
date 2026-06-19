@@ -146,6 +146,63 @@ class DockerEngineClient {
     await _postEmpty('/containers/${Uri.encodeComponent(id)}/stop');
   }
 
+  /// Create a container from [imageTag] (does NOT start it — call
+  /// [startContainer] with the returned id, or use [runContainer]).
+  ///
+  /// [env] are `KEY=VALUE` strings. [portBindings] maps a container port
+  /// (`'8080'` or `'8080/tcp'`) to a host port (`'8080'`).
+  Future<String> createContainer({
+    required String imageTag,
+    String? name,
+    List<String> env = const [],
+    Map<String, String> portBindings = const {},
+  }) async {
+    final exposed = <String, dynamic>{};
+    final bindings = <String, dynamic>{};
+    portBindings.forEach((containerPort, hostPort) {
+      final key = containerPort.contains('/')
+          ? containerPort
+          : '$containerPort/tcp';
+      exposed[key] = <String, dynamic>{};
+      bindings[key] = [
+        {'HostPort': hostPort},
+      ];
+    });
+    final body = <String, dynamic>{
+      'Image': imageTag,
+      if (env.isNotEmpty) 'Env': env,
+      if (exposed.isNotEmpty) 'ExposedPorts': exposed,
+      'HostConfig': {if (bindings.isNotEmpty) 'PortBindings': bindings},
+    };
+    final json = await _postJson(
+      '/containers/create',
+      body,
+      (name != null && name.trim().isNotEmpty) ? {'name': name.trim()} : null,
+    );
+    if (json is Map && json['Id'] is String) return json['Id'] as String;
+    throw DockerEngineException(
+      'Unexpected /containers/create response: $json',
+    );
+  }
+
+  /// Create AND start a container from [imageTag] (the `docker run` equivalent);
+  /// returns the new container id.
+  Future<String> runContainer({
+    required String imageTag,
+    String? name,
+    List<String> env = const [],
+    Map<String, String> portBindings = const {},
+  }) async {
+    final id = await createContainer(
+      imageTag: imageTag,
+      name: name,
+      env: env,
+      portBindings: portBindings,
+    );
+    await startContainer(id);
+    return id;
+  }
+
   /// Build an image from [contextTar] (a tar of the build context, with the
   /// Dockerfile inside it). Streams decoded progress/log lines as the daemon
   /// emits them. The stream completes when the build finishes; a failed build
@@ -240,6 +297,24 @@ class DockerEngineClient {
     if (resp.statusCode >= 400) {
       throw DockerEngineException('DELETE $path → ${resp.statusCode}: $body');
     }
+  }
+
+  Future<dynamic> _postJson(
+    String path,
+    Object body, [
+    Map<String, String>? query,
+  ]) async {
+    final req = await _http.postUrl(_uri(path, query));
+    req.headers.contentType = ContentType('application', 'json');
+    final bytes = utf8.encode(jsonEncode(body));
+    req.headers.contentLength = bytes.length;
+    req.add(bytes);
+    final resp = await req.close();
+    final respBody = await resp.transform(utf8.decoder).join();
+    if (resp.statusCode >= 400) {
+      throw DockerEngineException('POST $path → ${resp.statusCode}: $respBody');
+    }
+    return respBody.isEmpty ? null : jsonDecode(respBody);
   }
 
   Future<void> _postEmpty(String path, [Map<String, String>? query]) async {
