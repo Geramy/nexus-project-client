@@ -791,7 +791,9 @@ class ProjectCoordinatorSession {
       if (wrapRecovered.isNotEmpty) {
         await _runRecoveredCalls(wrapRecovered, executor, onToolResult);
         wrapStr = _stripInlineToolCalls(wrapStr);
-        if (wrapStr.isEmpty) wrapStr = 'Updated the story tree.';
+        if (wrapStr.isEmpty) {
+          wrapStr = discoveryMode ? 'Updated the story tree.' : 'Applied the changes.';
+        }
         yield ChatContentDelta(wrapStr);
       } else if (wrapInlineText) {
         yield ChatContentDelta(wrapStr); // looked like a tool block but wasn't

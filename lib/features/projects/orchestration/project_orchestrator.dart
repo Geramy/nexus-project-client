@@ -55,11 +55,14 @@ import 'package:nexus_projects_client/features/projects/task_workflow.dart';
 /// it advances tasks through the full pipeline, one unit of work per loop:
 ///   1. **Implement** — an assigned worker task on the board gets an ephemeral
 ///      worker session on branch `task/<id>`, driven to `submit_for_completion`.
-///   2. **Verify** — a submitted task gets an ephemeral Verification Agent that
-///      runs the task's verification and emits a pass/fail verdict.
-///   3. **Build** — a verified task that `requiresBuild` is built/CI'd directly
-///      by the orchestrator (no LLM); the result advances it to `built` or back
-///      to the board. Tasks without a build gate skip straight to merge.
+///   2. **Verify (lightweight review)** — per-task review runs NO build. A task
+///      with a functional `verification` gets a short Verification Agent that
+///      reads the changed code to confirm the behavior; everything else passes
+///      immediately. The project's CI/test runs ONCE at the end (see
+///      [_maybeFinalizeProject]) rather than per task.
+///   3. **Build** — legacy/explicit per-task build gate for a verified task that
+///      still carries `requiresBuild`; stage 2 advances such tasks straight to
+///      `built`, so this effectively never runs in the default pipeline.
 ///   4. **Merge** — a merge-ready task (built, or verified without a build gate)
 ///      gets an ephemeral Coordinator that merges the task's work branch into
 ///      its integration target (the parent task's branch for a subtask,
@@ -108,6 +111,37 @@ class ProjectOrchestrator {
   void _releaseLocks(int taskPk) =>
       _fileOwners.removeWhere((_, owner) => owner == taskPk);
 
+  /// LEARNED file footprint per task: every workspace path a task has touched —
+  /// claimed OR been denied — accumulated across ALL its attempts (unlike
+  /// [_fileOwners], which is dropped the moment a non-submitting run releases).
+  /// This is what makes scheduling PREDICTIVE instead of reactive: once we know
+  /// two tasks edit overlapping files, the dispatcher refuses to run them at the
+  /// same time (see [_scopeConflict]) so the second waits cleanly on the board
+  /// instead of starting, colliding mid-edit, and throwing away its exploration.
+  /// Reset on dispose; an entry is dropped once its task reaches Done/Blocked.
+  final Map<int, Set<String>> _taskFootprint = {};
+
+  /// True if dispatching [taskPk] now would collide with work already in flight,
+  /// based on its LEARNED footprint: a file it is known to touch is currently
+  /// locked by another task (active or awaiting merge), OR its footprint overlaps
+  /// the footprint of a currently-active task. A task whose footprint is still
+  /// unknown (never run) returns false — first run is unconstrained, and the
+  /// collision it may hit teaches us the overlap for next time.
+  bool _scopeConflict(int taskPk) {
+    final mine = _taskFootprint[taskPk];
+    if (mine == null || mine.isEmpty) return false;
+    for (final f in mine) {
+      final owner = _fileOwners[f];
+      if (owner != null && owner != taskPk) return true; // file held by another
+    }
+    for (final other in _active) {
+      if (other == taskPk) continue;
+      final theirs = _taskFootprint[other];
+      if (theirs != null && mine.any(theirs.contains)) return true; // overlap
+    }
+    return false;
+  }
+
   /// Normalize a workspace path for lock identity (case-insensitive FS, ignore a
   /// leading slash) so "/Assets/X.cs" and "assets/x.cs" are the same lock.
   static String _normFile(String path) {
@@ -123,6 +157,15 @@ class ProjectOrchestrator {
   /// stages keep running, and the task that 429'd goes back to the board (it is
   /// NOT counted as a failure or Blocked; it's pure backpressure).
   DateTime? _connBackoffUntil;
+
+  /// Guards the end-of-project CI scan so the (long) final build runs only once at
+  /// a time, even though it's triggered from every pump once the backlog drains.
+  bool _finalGateInFlight = false;
+
+  /// Signature of the completed-task set the last GREEN end-of-project scan ran
+  /// against, so a passed project isn't re-scanned every tick — only when the
+  /// done set actually changes (a task reopened+refixed, or new work completed).
+  String? _finalScanPassedSig;
 
   // Per-task retry budget within ONE run before a task is surfaced as Blocked.
   // Kept generous so a couple of transient hiccups (a flaky worker turn, a
@@ -142,6 +185,16 @@ class ProjectOrchestrator {
 
   static const int _maxTurnsPerTask = 12;
   static const int _maxTurnsPerStage = 8;
+
+  /// Functional review is a quick spot-check (the build gate already proved it
+  /// compiles), so the Verification Agent gets only a few turns — not the full
+  /// stage budget — keeping review the fastest step.
+  static const int _maxFunctionalVerifyTurns = 3;
+
+  /// The project's default deterministic CI gate, scaffolded once by the Templater
+  /// (see [_ensureDefaultCiWorkflow]) and run with NO LLM by both per-task review
+  /// and the end-of-project scan.
+  static const String _defaultCiPath = '/.github/workflows/ci.yml';
   static const Duration _connBackoff = Duration(seconds: 20);
   static const Duration _tickInterval = Duration(seconds: 30);
   static const Duration _buildPollInterval = Duration(seconds: 3);
@@ -187,6 +240,7 @@ class ProjectOrchestrator {
     // Drop all file claims so a fresh orchestrator (e.g. after a project swap)
     // never inherits a stale lock — the anti-hog reset.
     _fileOwners.clear();
+    _taskFootprint.clear();
   }
 
   /// Fill up to N agent slots (N = the account's max concurrency) with the next
@@ -228,6 +282,7 @@ class ProjectOrchestrator {
       }
       await _surfaceStalledTasks();
       await _maybeAdvanceMilestone(project);
+      await _maybeFinalizeProject(project);
     } finally {
       _pumping = false;
     }
@@ -293,6 +348,18 @@ class ProjectOrchestrator {
           if (t.status == TaskStatus.review) holding.add(t.task_pk);
         }
         _fileOwners.removeWhere((_, owner) => !holding.contains(owner));
+      }
+
+      // Forget the footprint of any task that's finished for good (Done/Blocked
+      // and not running) — it can never collide again, so its scope shouldn't
+      // keep gating others, and the map stays bounded over a long project.
+      if (_taskFootprint.isNotEmpty) {
+        for (final t in tasks) {
+          if ((t.status == TaskStatus.done || t.status == TaskStatus.blocked) &&
+              !_active.contains(t.task_pk)) {
+            _taskFootprint.remove(t.task_pk);
+          }
+        }
       }
     } catch (e) {
       debugPrint('[Orchestrator p$projectId] stall surface failed: $e');
@@ -433,6 +500,16 @@ class ProjectOrchestrator {
       if (_active.contains(t.task_pk)) continue;
       if ((_attempts[t.task_pk] ?? 0) >= _maxAttemptsPerTask) continue;
       if ((t.milestoneOrder ?? 0) > currentMilestone) continue;
+      // Predictive scope gate: don't start a task that's known to edit files
+      // another in-flight task holds — it would only collide and park. Leave it
+      // on the board; it dispatches cleanly once the conflicting task merges.
+      if (_scopeConflict(t.task_pk)) {
+        debugPrint(
+          '[Orchestrator p$projectId] task ${t.task_pk}: held back — its file '
+          'scope overlaps work in flight; waiting for a clean slot.',
+        );
+        continue;
+      }
       final isStartable =
           t.status == TaskStatus.todo &&
           (t.executionStatus == TaskExecStatus.idle ||
@@ -489,18 +566,34 @@ class ProjectOrchestrator {
     // Subtasks branch off their parent's branch so their commits merge back
     // into the parent (not the trunk); top-level tasks branch off main.
     final base = await _integrationTargetBranch(task);
-    // Root the task branch on its base and hydrate this task's tree from it,
-    // serialized through the lane (shared object/ref DB is single-isolate).
+    // PRESERVE WORK ON RESUME: a task that was parked/yielded mid-build (exec
+    // `queued`) and already has commits on its branch keeps them — we just rebuild
+    // its scratch tree from the branch and continue, instead of tossing the work
+    // and redoing from scratch. (Staleness vs the latest base is reconciled at
+    // merge time, which escalates only real same-file conflicts.) A fresh task
+    // (no branch yet) is rooted on its base; a rework after a real merge conflict
+    // or failed gate (exec idle/failed) re-roots onto the CURRENT target so the
+    // redo rebases cleanly.
+    final branchExists = (await th.git.branches()).contains(branch);
+    final preserveWork =
+        branchExists && task.executionStatus == TaskExecStatus.queued;
+    // Root the task branch / hydrate its tree, serialized through the lane (the
+    // shared object/ref DB is single-isolate).
     await th.lane.run(() async {
-      // RE-ROOT every (re)attempt: drop any prior branch first so a redo after a
-      // merge conflict — or a task resuming after being parked for a file lock —
-      // rebases onto the CURRENT target instead of its stale, diverged work.
-      // This is what makes the merge-conflict "reject → worker rebases" recovery
-      // actually rebase (createBranchAt alone no-ops on an existing branch).
-      await th.git.deleteBranch(branch);
-      await th.git.createBranchAt(branch, base: base);
-      await th.git.materializeInto(branch, th.tree);
+      if (preserveWork) {
+        await th.git.materializeInto(branch, th.tree);
+      } else {
+        await th.git.deleteBranch(branch);
+        await th.git.createBranchAt(branch, base: base);
+        await th.git.materializeInto(branch, th.tree);
+      }
     });
+    if (preserveWork) {
+      debugPrint(
+        '[Orchestrator p$projectId] task ${task.task_pk}: resuming on its '
+        'existing branch — prior work preserved.',
+      );
+    }
 
     // File-claim queue: claim a file the first time this worker edits it; if
     // another task holds it, deny (the tool returns a "queued" message) and flag
@@ -510,11 +603,18 @@ class ProjectOrchestrator {
     // can read `submitted`.
     var parked = false;
     var submitted = false;
+    // Whether this run was granted at least one file to edit — i.e. it may have
+    // produced uncommitted changes worth checkpointing if it then parks.
+    var madeEdit = false;
     bool claim(String path) {
       final p = _normFile(path);
+      // Learn this task's footprint whether the claim is granted or denied — a
+      // denied file is one it WANTS, so it counts toward future scope conflicts.
+      (_taskFootprint[task.task_pk] ??= <String>{}).add(p);
       final owner = _fileOwners[p];
       if (owner == null || owner == task.task_pk) {
         _fileOwners[p] = task.task_pk;
+        madeEdit = true;
         return true;
       }
       parked = true;
@@ -524,6 +624,10 @@ class ProjectOrchestrator {
     try {
       final prompts = await _loadPrompts();
       final vars = _varsFor(task, branch, targetBranch: base);
+      // Give the worker PROJECT-WIDE CONTEXT (the task decomposition + the current
+      // file tree + stay-in-your-lane rules) so parallel tasks build on each other
+      // instead of each silo re-creating and overwriting shared files.
+      final projectContext = await _buildWorkerProjectContext(task, th.tree);
 
       // One conversation PER AGENT: reuse this worker's dedicated session so all
       // of its tasks land in a single ongoing thread (the person can follow the
@@ -563,12 +667,9 @@ class ProjectOrchestrator {
         // Autonomous coders need file/git/build tools directly — no progressive
         // disclosure (that's for the interactive PM chat).
         leanTools: false,
-        systemPromptOverride: await _framedPrompt(
-          role,
-          OrchestratorPromptField.workerFraming,
-          prompts,
-          vars,
-        ),
+        systemPromptOverride:
+            '${await _framedPrompt(role, OrchestratorPromptField.workerFraming, prompts, vars)}'
+            '\n\n$projectContext',
         enableThinking: resolveEnableThinking(
           agent: personaThinkingMode(
             persona.configJson,
@@ -672,13 +773,30 @@ class ProjectOrchestrator {
         // Parked: the worker needs a file another task holds. Don't burn an
         // attempt (it's waiting, not failing) — yield back and retry later; the
         // finally releases this task's own locks so it can't block others while
-        // it waits, and the re-root on its next attempt rebuilds against current
-        // main once the holder has merged.
+        // it waits. HOLD ITS WORK, don't toss it: checkpoint any uncommitted
+        // edits onto the task branch so the resume continues from here (the
+        // resume preserves the branch instead of re-rooting — see above).
         if (parked) {
+          if (madeEdit) {
+            try {
+              await th.lane.run(
+                () => th.git.commitFrom(
+                  th.tree,
+                  branch: branch,
+                  message:
+                      'wip: checkpoint before pausing for a held file (task #${task.task_pk})',
+                ),
+              );
+            } catch (e) {
+              debugPrint(
+                '[Orchestrator p$projectId] task ${task.task_pk}: could not checkpoint parked work: $e',
+              );
+            }
+          }
           _undoAttempt(task.task_pk);
           debugPrint(
             '[Orchestrator p$projectId] task ${task.task_pk}: parked — a file it '
-            'needs is held by another task; will retry after that task merges.',
+            'needs is held by another task; work preserved, will resume after that task merges.',
           );
           await _db.markTaskYieldedBack(task.task_pk);
           return;
@@ -745,6 +863,62 @@ class ProjectOrchestrator {
     verification: task.verification ?? '',
   );
 
+  /// PROJECT-WIDE CONTEXT for a worker: the full task decomposition + the current
+  /// file tree (from its own branch) + the "stay in your lane" rules. Without this
+  /// a worker only sees its single task and the stack, so with more tasks each
+  /// silo re-creates and overwrites the shared/glue files the others also touch —
+  /// the "more tasks = more overwriting" failure. Caps keep it cheap to inject on
+  /// every worker turn even on a large backlog.
+  Future<String> _buildWorkerProjectContext(Task task, Workspace tree) async {
+    final b = StringBuffer();
+    try {
+      final tasks = await _db.getTasksForProject(projectId)
+        ..sort((a, c) => a.task_pk.compareTo(c.task_pk));
+      b.writeln(
+        '=== PROJECT TASK MAP (the full decomposition — build ON these; do NOT '
+        'redo or duplicate another task\'s work) ===',
+      );
+      const taskCap = 80;
+      var shown = 0;
+      for (final t in tasks) {
+        if (shown >= taskCap) {
+          b.writeln('… (+${tasks.length - taskCap} more tasks)');
+          break;
+        }
+        shown++;
+        final mark = t.task_pk == task.task_pk ? '   ← THIS TASK' : '';
+        b.writeln('- #${t.task_pk} [${t.status}] ${t.title}$mark');
+      }
+    } catch (_) {}
+    try {
+      final files = (await tree.walk())
+          .where((f) => !f.isDirectory)
+          .map((f) => f.path)
+          .toList()
+        ..sort();
+      if (files.isNotEmpty) {
+        b.writeln(
+          '\n=== CURRENT PROJECT FILES (already on your branch — read what you '
+          'need; do NOT re-list directories) ===',
+        );
+        const fileCap = 200;
+        for (var i = 0; i < files.length && i < fileCap; i++) {
+          b.writeln(files[i]);
+        }
+        if (files.length > fileCap) {
+          b.writeln('… (+${files.length - fileCap} more files)');
+        }
+      }
+    } catch (_) {}
+    b.write('''
+
+=== STAY IN YOUR LANE (this is how parallel tasks avoid overwriting each other) ===
+- Implement ONLY your task's artifact (the file[s] this task is about). Other tasks own the other files — do NOT rewrite or "improve" a file that belongs to another task.
+- When you need something another task provides (a model, service, route, widget), reference it by its expected name/path as an interface — do NOT recreate it. If it isn't there yet, code against the interface the task map implies; integration happens at merge.
+- For a SHARED/glue file many tasks touch (a router, DI/service registration, barrel export, schema), make the SMALLEST ADDITIVE change (add your entry) — never rewrite or reformat the whole file.''');
+    return b.toString().trimRight();
+  }
+
   /// The branch [task] integrates into: the parent task's work branch when it is
   /// a subtask, otherwise the trunk ("main"). Falls back to "main" if the parent
   /// is missing.
@@ -759,19 +933,49 @@ class ProjectOrchestrator {
 
   // ── Verify stage ──────────────────────────────────────────────────────
 
-  /// Spawn an ephemeral Verification Agent for a submitted [task]. It runs the
-  /// task's verification and emits a verdict (run_verification → submit_verdict),
-  /// which advances the task to `verified` (awaiting build/merge) or back to the
-  /// board on failure. If no Verification Agent persona exists, the task is left
-  /// submitted for a human to verify.
+  /// REVIEW. The project's CI/test gate is consolidated into a SINGLE end-of-
+  /// project scan ([_maybeFinalizeProject]) — for a mostly-automated pipeline,
+  /// testing once at the end is far faster than a full build per task. So per-task
+  /// review runs NO build: a task with a real functional `verification` gets a
+  /// short Verification Agent to confirm the described behavior; anything else
+  /// passes immediately. Compile/test correctness is enforced once, at the end.
   Future<void> _runVerifyStage(Task task) async {
     // Count this Review attempt against the retry budget so a task that can
     // never get a verdict is surfaced to Blocked instead of cycling forever.
     _attempts[task.task_pk] = (_attempts[task.task_pk] ?? 0) + 1;
+    final branch = task.workBranch ?? 'task/${task.task_pk}';
+
+    final verification = (task.verification ?? '').trim();
+    if (verification.isEmpty) {
+      // Nothing functional to confirm — pass immediately (the end-of-project CI
+      // scan is the test gate). This is the fast path for most tasks.
+      await _db.recordTaskVerdict(task.task_pk, passed: true);
+      if (task.requiresBuild) {
+        await _db.recordTaskBuildOutcome(task.task_pk, passed: true);
+      }
+      debugPrint(
+        '[Orchestrator p$projectId] task ${task.task_pk}: review passed (no functional verification; CI runs at project end).',
+      );
+      return;
+    }
+    await _runFunctionalVerify(task, branch);
+  }
+
+  /// Spawn a SHORT Verification Agent to confirm the task's FUNCTIONAL behavior
+  /// by reading the changed code (it must NOT run the build/CI — tests run once at
+  /// project end). On a pass for a `requiresBuild` task the result is advanced to
+  /// `built` so the legacy build stage stays out of the way. Falls through to a
+  /// pass when no verifier persona exists.
+  Future<void> _runFunctionalVerify(Task task, String branch) async {
     final persona = await _findPersonaForRole(AgentRole.verificationAgent);
     if (persona == null) {
+      // No verifier persona — pass it through (the end-of-project scan is the net).
+      await _db.recordTaskVerdict(task.task_pk, passed: true);
+      if (task.requiresBuild) {
+        await _db.recordTaskBuildOutcome(task.task_pk, passed: true);
+      }
       debugPrint(
-        '[Orchestrator p$projectId] task ${task.task_pk}: no Verification Agent persona; leaving submitted.',
+        '[Orchestrator p$projectId] task ${task.task_pk}: no verifier persona; review passed.',
       );
       return;
     }
@@ -782,7 +986,6 @@ class ProjectOrchestrator {
       );
       return;
     }
-    final branch = task.workBranch ?? 'task/${task.task_pk}';
     final th = await _resolveTaskHandles(task.task_pk);
     if (th == null) return;
     // Hydrate an isolated tree with the submitted task branch so the verifier
@@ -829,7 +1032,9 @@ class ProjectOrchestrator {
       );
 
       var kickoff = prompts.render(OrchestratorPromptField.verifyKickoff, vars);
-      for (var turn = 0; turn < _maxTurnsPerStage && !_disposed; turn++) {
+      for (var turn = 0;
+          turn < _maxFunctionalVerifyTurns && !_disposed;
+          turn++) {
         if (!await _stillRunning()) return;
         try {
           await for (final _ in session.runTurn(kickoff)) {}
@@ -838,7 +1043,7 @@ class ProjectOrchestrator {
             _undoAttempt(task.task_pk); // backpressure/transient — don't penalize
           } else {
             debugPrint(
-              '[Orchestrator p$projectId] task ${task.task_pk}: verify turn $turn failed: $e',
+              '[Orchestrator p$projectId] task ${task.task_pk}: functional verify turn $turn failed: $e',
             );
           }
           return;
@@ -847,19 +1052,87 @@ class ProjectOrchestrator {
         if (fresh == null) return;
         if (fresh.executionStatus != TaskExecStatus.submitted &&
             fresh.executionStatus != TaskExecStatus.verifying) {
+          // A functional PASS on a build-gated task jumps to `built` so the legacy
+          // build stage doesn't re-run anything (CI is the end-of-project scan).
+          if (fresh.executionStatus == TaskExecStatus.verified &&
+              task.requiresBuild) {
+            await _db.recordTaskBuildOutcome(task.task_pk, passed: true);
+          }
           debugPrint(
-            '[Orchestrator p$projectId] task ${task.task_pk}: verdict recorded (${fresh.executionStatus}).',
+            '[Orchestrator p$projectId] task ${task.task_pk}: functional verdict recorded (${fresh.executionStatus}).',
           );
           return;
         }
         kickoff = prompts.render(OrchestratorPromptField.verifyContinue, vars);
       }
       debugPrint(
-        '[Orchestrator p$projectId] task ${task.task_pk}: verify hit turn cap without a verdict.',
+        '[Orchestrator p$projectId] task ${task.task_pk}: functional verify hit turn cap without a verdict.',
       );
     } finally {
       await _releaseTaskTree(task.task_pk);
     }
+  }
+
+  /// Run a workflow/dockerfile gate on [branch] and wait for its terminal result
+  /// — deterministic, NO LLM. Returns null when the build infra can't run (the
+  /// caller retries without penalty); `(passed: true, runPk: null)` when there is
+  /// nothing to run; otherwise the run's pass/fail and its id.
+  Future<({bool passed, int? runPk})?> _runWorkflowGate({
+    required int clientPk,
+    required String branch,
+    String? workflowPath,
+    String? dockerfilePath,
+    String? imageTag,
+    required String triggeredBy,
+  }) async {
+    final handles = await _resolveWorkspaceHandles();
+    final ws = handles.ws;
+    final build = handles.build;
+    if (ws == null || build == null) return null;
+    int runPk;
+    try {
+      if (workflowPath != null && workflowPath.isNotEmpty) {
+        runPk = (await build.startWorkflowRun(
+          clientPk: clientPk,
+          projectPk: projectId,
+          ws: ws,
+          workflowPath: workflowPath,
+          branch: branch,
+          triggeredBy: triggeredBy,
+        )).runPk;
+      } else if (dockerfilePath != null && dockerfilePath.isNotEmpty) {
+        final tag = (imageTag != null && imageTag.isNotEmpty)
+            ? imageTag
+            : 'gate-${branch.replaceAll('/', '-')}:latest';
+        runPk = (await build.startDockerBuild(
+          clientPk: clientPk,
+          projectPk: projectId,
+          ws: ws,
+          dockerfilePath: dockerfilePath,
+          imageTag: tag,
+          branch: branch,
+          triggeredBy: triggeredBy,
+        )).runPk;
+      } else {
+        return (passed: true, runPk: null);
+      }
+    } catch (e) {
+      debugPrint(
+        '[Orchestrator p$projectId] gate failed to start on "$branch": $e',
+      );
+      return (passed: false, runPk: null);
+    }
+    final deadline = DateTime.now().add(_buildTimeout);
+    while (!_disposed && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(_buildPollInterval);
+      final run = await _db.getCiRun(runPk);
+      if (run == null) break;
+      final status = CiStatusX.fromWire(run.status);
+      if (status.isTerminal) {
+        return (passed: status == CiStatus.success, runPk: runPk);
+      }
+    }
+    return (passed: false, runPk: runPk); // timed out → fail the gate
   }
 
   // ── Build stage ───────────────────────────────────────────────────────
@@ -1210,9 +1483,11 @@ class ProjectOrchestrator {
         debugPrint('[Orchestrator p$projectId] templater could not scaffold; gated.');
         return;
       }
-      // "Passes CI inspection": run the configured gate once against main (if any
-      // task configured a workflow/dockerfile). No config → the compiling
-      // scaffold is the bar and we proceed.
+      // Guarantee a deterministic CI gate exists so per-task review and the
+      // end-of-project scan always have a fast, no-LLM build to run.
+      await _ensureDefaultCiWorkflow(project);
+      // "Passes CI inspection": run the configured gate once against main (the
+      // task-configured workflow/dockerfile, else the default CI just written).
       final ciOk = await _runBaseCiGate(project);
       await _db.setProjectTemplateStatus(projectId, ciOk ? 'ready' : 'failed');
       debugPrint(
@@ -1445,63 +1720,134 @@ class ProjectOrchestrator {
     return buf.toString().trim();
   }
 
-  /// Run the project's configured CI once against main as the base gate. Honors
-  /// the per-task build config: if no task configured a workflow/dockerfile,
-  /// there's nothing to run and the gate passes (the compiling scaffold is the
-  /// bar). Returns true on green / nothing-to-run, false on a red run.
+  /// Run the project's CI once against main as the base gate: the first
+  /// task-configured workflow/dockerfile, else the default CI workflow scaffolded
+  /// by [_ensureDefaultCiWorkflow]. Returns true on green / nothing-to-run, false
+  /// on a red run (infra-down does NOT block templating).
   Future<bool> _runBaseCiGate(Project project) async {
     final tasks = await _db.getTasksForProject(projectId);
-    Task? cfg;
+    String? workflowPath;
+    String? dockerfilePath;
     for (final t in tasks) {
       final wf = t.workflowPath?.trim() ?? '';
       final df = t.dockerfilePath?.trim() ?? '';
       if (wf.isNotEmpty || df.isNotEmpty) {
-        cfg = t;
+        workflowPath = wf.isNotEmpty ? wf : null;
+        dockerfilePath = df.isNotEmpty ? df : null;
         break;
       }
     }
-    if (cfg == null) return true;
-    final handles = await _resolveWorkspaceHandles();
-    final ws = handles.ws;
-    final build = handles.build;
-    if (ws == null || build == null) return true; // can't run → don't block
-    final workflowPath = cfg.workflowPath?.trim() ?? '';
-    final dockerfilePath = cfg.dockerfilePath?.trim() ?? '';
-    int runPk;
-    try {
-      if (workflowPath.isNotEmpty) {
-        runPk = (await build.startWorkflowRun(
-          clientPk: project.client_fk,
-          projectPk: projectId,
-          ws: ws,
-          workflowPath: workflowPath,
-          branch: 'main',
-          triggeredBy: 'templater',
-        )).runPk;
+    if (workflowPath == null && dockerfilePath == null) {
+      // Fall back to the default CI workflow if one was scaffolded.
+      final ws = (await _resolveWorkspaceHandles()).ws;
+      if (ws != null && await ws.exists(_defaultCiPath)) {
+        workflowPath = _defaultCiPath;
       } else {
-        runPk = (await build.startDockerBuild(
-          clientPk: project.client_fk,
-          projectPk: projectId,
-          ws: ws,
-          dockerfilePath: dockerfilePath,
-          imageTag: 'base:latest',
-          branch: 'main',
-          triggeredBy: 'templater',
-        )).runPk;
+        return true; // nothing to run → the compiling scaffold is the bar
       }
+    }
+    final outcome = await _runWorkflowGate(
+      clientPk: project.client_fk,
+      branch: 'main',
+      workflowPath: workflowPath,
+      dockerfilePath: dockerfilePath,
+      imageTag: 'base:latest',
+      triggeredBy: 'templater',
+    );
+    return outcome?.passed ?? true; // infra unavailable → don't block templating
+  }
+
+  /// Guarantee the project has ONE deterministic CI workflow at [_defaultCiPath]
+  /// on main, so per-task review and the end-of-project scan always have a fast,
+  /// no-LLM gate to run. Idempotent (no-op if the Templater already wrote one).
+  /// Written + committed deterministically — no agent — so it can't be skipped or
+  /// hallucinated.
+  Future<void> _ensureDefaultCiWorkflow(Project project) async {
+    try {
+      final handles = await _resolveWorkspaceHandles();
+      final ws = handles.ws;
+      final git = handles.git;
+      if (ws == null || git == null) return;
+      if (await ws.exists(_defaultCiPath)) return;
+      final kind = await _detectStackKind();
+      final yaml = _defaultCiYaml(kind);
+      final lane = ref.read(gitLaneProvider(projectId));
+      await lane.run(() async {
+        try {
+          await git.checkoutBranch('main');
+        } catch (_) {
+          // Unborn main — the scaffolder's commit will have created it by now;
+          // if not, commitAll roots the first commit.
+        }
+        await ws.writeString(_defaultCiPath, yaml);
+        await git.commitAll(message: 'ci: add default $kind CI gate');
+      });
+      ref.read(workspaceRevisionProvider(projectId).notifier).state++;
+      debugPrint(
+        '[Orchestrator p$projectId] wrote default CI gate ($kind) at $_defaultCiPath.',
+      );
     } catch (e) {
-      debugPrint('[Orchestrator p$projectId] base CI failed to start: $e');
-      return false;
+      debugPrint(
+        '[Orchestrator p$projectId] could not ensure default CI gate: $e',
+      );
     }
-    final deadline = DateTime.now().add(_buildTimeout);
-    while (!_disposed && DateTime.now().isBefore(deadline)) {
-      await Future<void>.delayed(_buildPollInterval);
-      final run = await _db.getCiRun(runPk);
-      if (run == null) break;
-      final status = CiStatusX.fromWire(run.status);
-      if (status.isTerminal) return status == CiStatus.success;
-    }
-    return false;
+  }
+
+  /// Pick the CI workflow flavor from the project's chosen stack (tags). Drives
+  /// which `run:` steps the local runner executes for the compile/analyze gate.
+  Future<String> _detectStackKind() async {
+    try {
+      final tags = await _db.getTagsForProject(projectId);
+      final stack = tags
+          .where((t) => t.status != 'rejected')
+          .map((t) => '${t.category}:${t.value}'.toLowerCase())
+          .join(' ');
+      bool has(List<String> needles) => needles.any(stack.contains);
+      if (has(['flutter'])) return 'flutter';
+      if (has(['dart'])) return 'dart';
+      if (has(['c#', 'csharp', '.net', 'dotnet', 'asp.net'])) return 'dotnet';
+      if (has(['node', 'javascript', 'typescript', 'react', 'next', 'vue', 'angular', 'express'])) {
+        return 'node';
+      }
+      if (has(['python', 'django', 'flask', 'fastapi'])) return 'python';
+      if (has(['golang', ' go ', ':go'])) return 'go';
+      if (has(['rust', 'cargo'])) return 'rust';
+    } catch (_) {}
+    return 'generic';
+  }
+
+  /// The default GitHub-Actions-format CI body for [kind]. The local runner runs
+  /// `run:` steps as shell commands (`uses:` steps are recorded but skipped), so
+  /// these are the conventional compile/analyze/test commands for each stack.
+  static String _defaultCiYaml(String kind) {
+    final steps = switch (kind) {
+      'flutter' => '      - run: flutter pub get\n'
+          '      - run: flutter analyze\n'
+          '      - run: flutter test',
+      'dart' => '      - run: dart pub get\n'
+          '      - run: dart analyze\n'
+          '      - run: dart test',
+      'dotnet' => '      - run: dotnet restore\n'
+          '      - run: dotnet build --no-restore\n'
+          '      - run: dotnet test --no-build',
+      'node' => '      - run: npm ci\n'
+          '      - run: npm run build --if-present\n'
+          '      - run: npm test --if-present',
+      'python' => '      - run: pip install -r requirements.txt\n'
+          '      - run: python -m pytest',
+      'go' => '      - run: go build ./...\n'
+          '      - run: go test ./...',
+      'rust' => '      - run: cargo build\n'
+          '      - run: cargo test',
+      _ => '      - run: echo "No build configured for this stack"',
+    };
+    return 'name: CI\n'
+        'on: [push, pull_request]\n'
+        'jobs:\n'
+        '  build:\n'
+        '    runs-on: ubuntu-latest\n'
+        '    steps:\n'
+        '$steps\n';
   }
 
   /// Advance to the next milestone batch once every task in the current-or-earlier
@@ -1524,6 +1870,87 @@ class ProjectOrchestrator {
       '[Orchestrator p$projectId] milestone $current complete → opening '
       '$next/${count - 1}.',
     );
+  }
+
+  /// END-OF-PROJECT CI SCAN — the hard gate on "complete". Once the whole backlog
+  /// is Done (final milestone, nothing open) we run the project's CI gate ONCE
+  /// against main:
+  ///   • GREEN → the project is genuinely complete; nothing to do.
+  ///   • RED → reopen the most-recently-finished task with the FULL diagnostics
+  ///     attached, so the failure is fixed before the project can be counted
+  ///     complete (the board is no longer empty, so it isn't "done"). The task's
+  ///     retry budget eventually surfaces it as Blocked if it can't be made green.
+  /// Per-task review already gated each branch, but the post-merge integration on
+  /// main can still surface issues no single branch saw — this is that net.
+  Future<void> _maybeFinalizeProject(Project project) async {
+    if (_finalGateInFlight) return;
+    // Only when the project is on its last milestone batch.
+    if (project.currentMilestone < project.milestoneCount - 1) return;
+    final tasks = await _db.getTasksForProject(projectId);
+    if (tasks.isEmpty) return;
+    final open = tasks.where(
+      (t) =>
+          t.status == TaskStatus.todo ||
+          t.status == TaskStatus.inProgress ||
+          t.status == TaskStatus.review,
+    );
+    if (open.isNotEmpty) return; // work still in flight — not finished yet
+    final done = tasks.where((t) => t.status == TaskStatus.done).toList();
+    if (done.isEmpty) return; // nothing actually built (all blocked) — leave it
+    // Skip if this exact completed state already passed a scan (don't re-run the
+    // full CI every tick on a finished project).
+    final sig = '${done.length}:'
+        '${done.map((t) => t.updatedAt.millisecondsSinceEpoch).fold<int>(0, (a, b) => a > b ? a : b)}';
+    if (sig == _finalScanPassedSig) return;
+    // Need a gate to scan against; if none exists there's nothing to enforce.
+    final ws = (await _resolveWorkspaceHandles()).ws;
+    if (ws == null || !await ws.exists(_defaultCiPath)) return;
+
+    _finalGateInFlight = true;
+    try {
+      debugPrint(
+        '[Orchestrator p$projectId] backlog drained → running end-of-project CI scan on main.',
+      );
+      final outcome = await _runWorkflowGate(
+        clientPk: project.client_fk,
+        branch: 'main',
+        workflowPath: _defaultCiPath,
+        triggeredBy: 'final-scan',
+      );
+      if (outcome == null) return; // infra down — retry on a later pump
+      if (outcome.passed) {
+        _finalScanPassedSig = sig; // don't re-scan this finished state every tick
+        debugPrint(
+          '[Orchestrator p$projectId] end-of-project CI scan GREEN — project complete.',
+        );
+        return;
+      }
+      // Red: reopen the most-recently-finished task with the diagnostics so a
+      // worker fixes it before the project is counted complete.
+      done.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      final target = done.first;
+      try {
+        final errors = outcome.runPk != null
+            ? await _collectBuildErrors(outcome.runPk!)
+            : '';
+        final detail = [
+          'The end-of-project CI scan failed on main. Fix EVERY error below '
+              'before the project can be completed.',
+          if (errors.isNotEmpty) errors,
+        ].join('\n\n').trim();
+        if (detail.isNotEmpty) {
+          await _db.attachTaskBuildFailure(target.task_pk, detail);
+        }
+      } catch (_) {}
+      await _db.reopenTask(target.task_pk);
+      _attempts.remove(target.task_pk); // fresh budget for the fix
+      debugPrint(
+        '[Orchestrator p$projectId] end-of-project CI scan RED — reopened task '
+        '${target.task_pk} to fix before completion.',
+      );
+    } finally {
+      _finalGateInFlight = false;
+    }
   }
 
   // ── Shared helpers ──────────────────────────────────────────────────────

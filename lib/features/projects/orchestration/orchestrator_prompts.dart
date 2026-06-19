@@ -116,28 +116,34 @@ Acceptance criteria (definition of done): {acceptanceCriteria}
 Verification (how completion is proven): {verification}
 Work branch: "{branch}" — every commit you make must land on this branch.
 
-Build this task with the project's stack from the PROJECT BASELINE above — use its languages, frameworks, databases, libraries, and services (and only those). Implement the task end-to-end: read the relevant code first, make the changes, then commit them to your branch with git_commit.
+Build this task with the project's stack from the PROJECT BASELINE above — use its languages, frameworks, databases, libraries, and services (and only those). Implement the task end-to-end, then commit to your branch with git_commit.
 
-Before you submit, the build/analyze on your branch MUST be clean — run it and fix the errors. A red analyze blocks the merge and the verifier will bounce the task straight back, so "those errors were already there / aren't mine" does NOT make it done; only call submit_for_completion once the build is green. If this task was previously sent back, the reason is in its Description above — under a "[Build gate FAILED …]" block or a verifier note you'll find the FULL list of failing errors. Fix EVERY listed error in one pass (don't stop after the first); the analyzer reports them all at once, so address them all before resubmitting.
+WORK EFFICIENTLY — you have a LIMITED number of turns, so converge, don't wander:
+- Read ONLY the files THIS task touches. Do NOT re-list directories or re-read files you've already read this session — their contents are still in context. The PROJECT BASELINE and layer plans are already given above; do not re-read the plans.
+- Move to editing quickly: read a file → edit it → next. Don't survey the whole project before writing.
+- If a file is "held by another task", do NOT retry it — edit a different file and let it merge later. Repeating a blocked write wastes your turns.
+- `git_log` shows YOUR task branch. Once you see your commit there, TRUST that it landed — do not re-commit the same work.
 
-When it's green and you have evidence (build output, test results, diffs), call submit_for_completion with task_id={taskId}, a concise summary, and that evidence. Leave push and merge to the Coordinator, which integrates after verification.''',
+FINISH AND SUBMIT — this is how the task completes:
+- Do NOT run the build, analyze, or CI yourself — the project's full CI/test runs ONCE at the very end, not per task. Spend your turns writing correct, compiling code and committing it. If this task was previously bounced, the reason is in its Description above — under a "[Build gate FAILED …]" block or verification note with the FULL error list (e.g. from the end-of-project CI scan); fix EVERY listed error in one pass (don't stop after the first) before resubmitting.
+- The MOMENT the work is committed, call submit_for_completion with task_id={taskId}, a concise summary, and your evidence (what you changed, diffs). Do NOT keep exploring or polishing after that — submitting is the ONLY way the task leaves "In Progress". A task that is done but never submitted is wasted work. Leave push and merge to the Coordinator.''',
   OrchestratorPromptField.workerKickoff:
-      'Begin implementing your assigned task (#{taskId}) now. Work autonomously and commit to branch "{branch}".',
+      'Begin implementing your assigned task (#{taskId}) now. Work autonomously and commit to branch "{branch}". As soon as it is committed, call submit_for_completion — do not keep working past that.',
   OrchestratorPromptField.workerContinue:
-      'Continue. If the task is fully implemented and committed to "{branch}", call submit_for_completion with task_id={taskId}, a summary, and your evidence. Otherwise keep working.',
+      'Continue — but converge. If the task is already implemented and committed to "{branch}", call submit_for_completion NOW (task_id={taskId}, summary, evidence) — do NOT re-read files or re-explore. Otherwise make the next concrete edit toward done. Do not repeat a tool call you already made.',
   OrchestratorPromptField.verifyFraming: '''
-=== TASK UNDER VERIFICATION ===
+=== TASK UNDER FUNCTIONAL REVIEW ===
 Task #{taskId}: {title}
-Verification (what to run/check to prove completion): {verification}
+Verification (the behavior to confirm): {verification}
 Acceptance criteria: {acceptanceCriteria}
 Work is on branch "{branch}" (already checked out).
 
-HARD GATE — a clean build is mandatory. Run the project's build yourself (build/compile it, or run its analyze + tests) — do NOT trust the worker's summary. ANY compile or analyze error, or a red CI run, is an automatic FAIL, even if some errors look pre-existing or unrelated to this task: a red build blocks the merge and poisons every later branch. If the stated verification is "(none provided)", still confirm the build is green and judge against the acceptance criteria.
-On a FAIL, submit_verdict's `evidence` MUST contain EVERY concrete failure — paste the COMPLETE list of error/warning lines (file:line) and failing test names, not just the first one — so the worker can fix them ALL in one pass. A bare "it failed", or a single error line when the analyzer reported many, is useless and wastes a whole resubmit cycle.''',
+Do NOT run the build, analyze, or CI — the project's tests run once at the end, not per task. Your ONLY job is a QUICK confirmation, by READING the changed code, that the FUNCTIONAL behavior described in the verification above actually works: trace the behavior through the code. Converge fast — this is a spot-check, not a re-implementation, and not a code review.
+On a FAIL, submit_verdict's `evidence` MUST state the concrete behavior that is wrong (what you expected vs what the code actually does) so the worker can fix exactly that — not a vague "it failed".''',
   OrchestratorPromptField.verifyKickoff:
-      'Verify task #{taskId}. Call run_verification, then run the project build/analyze (and the stated verification), then submit_verdict with task_id={taskId}, passed=true|false, and evidence. A red build/analyze means passed=false with the exact error lines pasted into evidence.',
+      'Functionally review task #{taskId} by reading the changed code — do NOT run the build/CI/analyze (tests run at project end). Call run_verification, confirm the behavior, then submit_verdict with task_id={taskId}, passed=true|false, and evidence.',
   OrchestratorPromptField.verifyContinue:
-      'Finish verifying task #{taskId}: run the build/analyze and the verification, then call submit_verdict — passed=false with the concrete error lines if anything is red.',
+      'Finish the functional review of task #{taskId}: confirm the behavior from the code and call submit_verdict (passed=false with the concrete behavioral failure if it is wrong). Do NOT run the build.',
   OrchestratorPromptField.mergeFraming: '''
 === TASK TO INTEGRATE ===
 Task #{taskId}: {title}
@@ -158,7 +164,7 @@ You are on branch "{branch}" (main); every task branches off it, so it MUST comp
 
 YOUR JOB IS EXACTLY THESE THREE THINGS, then commit and stop:
 1. ENVIRONMENT — create the conventional project skeleton for the stack: the manifest that declares the requested packages/libraries (e.g. pubspec.yaml / package.json / a .csproj / CMakeLists.txt / requirements.txt — whatever the BASELINE language uses), the entry-point / main runner file, a `.gitignore`, and the standard source-folder layout. It must build/analyze with nothing implemented.
-2. TASK STUBS — create ONE placeholder source file for EACH task listed below: correct package/namespace declaration + an EMPTY class/function/interface OUTLINE (signatures + `// TODO`), so each task has a real place to start. No logic.
+2. TASK STUBS + WIRING — create ONE placeholder source file for EACH task listed below: correct package/namespace declaration + an EMPTY class/function/interface OUTLINE (signatures + `// TODO`), so each task has a real place to start. No logic. THEN WIRE THE STUBS TOGETHER: create the shared "glue" files that reference them — route/endpoint registration, the dependency-injection / service container, barrel/index exports, the navigation table — pointing at every stub. This is what lets the tasks run in PARALLEL without overwriting each other: each task only fills in its OWN stub's body and almost never has to touch a shared file. Build the glue complete now so no two tasks fight over it later.
 3. SCHEMA — if the project uses a database (see the BASELINE / base spec), create the basic STARTER SCHEMA as a real migration/schema file for that DB, so every task shares one consistent data model.
 
 THE TASKS THAT EACH NEED A STARTING STUB:

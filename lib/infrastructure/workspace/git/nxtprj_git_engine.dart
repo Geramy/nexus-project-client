@@ -273,8 +273,10 @@ class NxtprjGitEngine {
 
   /// Delete a branch ref outright. Used to RE-ROOT a task branch: deleting it and
   /// then [createBranchAt] again rebases the next attempt onto the CURRENT target,
-  /// so a redo after a merge conflict (or a parked task resuming) builds on the
-  /// latest main instead of its stale, diverged work. No-op if absent. Orphaned
+  /// so a redo after a merge conflict or failed gate builds on the latest main
+  /// instead of its stale, diverged work. (A task parked on a held file instead
+  /// PRESERVES its branch and resumes from it — it is not re-rooted.) No-op if
+  /// absent. Orphaned
   /// commits are reclaimed by later GC. Never pass a branch that is checked out
   /// as a live HEAD — task branches are re-rooted while detached on their own
   /// scratch tree, which is safe.
@@ -497,15 +499,20 @@ class NxtprjGitEngine {
 
   // ── Log ───────────────────────────────────────────────────────────────
 
-  /// Walk the first-parent commit chain from HEAD, newest first.
+  /// Walk the first-parent commit chain newest first. Starts at HEAD by
+  /// default, or at the tip of [from] (a branch name) when given — orchestrated
+  /// workers are pinned to their task branch while HEAD stays on the trunk, so
+  /// without this their own commits would be invisible to `git_log`.
   Future<List<({String oid, String message, DateTime when, String author})>>
-  log({int limit = 50}) async {
+  log({int limit = 50, String? from}) async {
     final out =
         <({String oid, String message, DateTime when, String author})>[];
-    final headHex = await headOid();
-    if (headHex == null) return out;
+    final startHex = (from != null && from.trim().isNotEmpty)
+        ? _resolveOid('refs/heads/${from.trim()}')
+        : await headOid();
+    if (startHex == null) return out;
 
-    String? cursor = headHex;
+    String? cursor = startHex;
     final seen = <String>{};
     while (cursor != null && out.length < limit && seen.add(cursor)) {
       final oid = calloc<git_oid>();

@@ -3309,7 +3309,13 @@ class CoordinatorToolExecutor {
     if (git == null) return 'Git is unavailable in this context.';
     final limit = _asInt(args['limit']) ?? 20;
     try {
-      final commits = await git!.log(limit: limit);
+      // An isolated worker commits to its task branch while HEAD stays on the
+      // trunk — log THAT branch so the worker sees its own commits (otherwise it
+      // thinks its commit never landed and re-commits forever, never submitting).
+      final commits = await git!.log(
+        limit: limit,
+        from: _isolatedTask ? workBranch : null,
+      );
       if (commits.isEmpty) return 'No commits yet.';
       final b = StringBuffer('Recent commits (${commits.length}):\n');
       for (final c in commits) {
