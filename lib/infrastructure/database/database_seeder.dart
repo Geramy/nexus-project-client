@@ -9,6 +9,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
 import 'package:nexus_projects_client/features/agents/agent_role.dart';
+import 'package:nexus_projects_client/features/agents/agent_role_policy.dart'
+    show kGeneralistDeniedTools;
 import 'package:nexus_projects_client/features/agents/agent_tool_permissions.dart';
 import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart';
 import 'package:nexus_projects_client/infrastructure/lemonade/services/persona_model_resolver.dart'
@@ -78,6 +80,43 @@ Future<void> seedInitialData(NexusDatabase db) async {
     await _ensureCoordinatorCanFinalizeMerges(db);
   } catch (e) {
     debugPrint('Seeder: merge-permission reconcile warning (non-fatal): $e');
+  }
+
+  // Lean down the Generalist (the coder) to its coder-only tool set on installs
+  // seeded before the trim, so its per-turn tool payload shrinks (the Generalist
+  // determines most of the project's speed/token cost). Generalist-only.
+  try {
+    await _leanGeneralistTools(db);
+  } catch (e) {
+    debugPrint('Seeder: generalist-tool reconcile warning (non-fatal): $e');
+  }
+}
+
+/// Forces the coder-irrelevant tools ([kGeneralistDeniedTools]) to `deny` on
+/// existing Generalist personas, shrinking the tool payload the coder carries
+/// every turn. GENERALIST-ONLY (agent permissions are unique per agent) and
+/// idempotent — writes only when some denied tool isn't already denied, and
+/// preserves every other override (so a deliberately-tuned coder tool is kept).
+Future<void> _leanGeneralistTools(NexusDatabase db) async {
+  for (final p in await db.getAllAgentPersonas()) {
+    if (agentRoleFromKey(p.title) != AgentRole.sdeGeneralist) continue;
+    final perms = AgentToolPermissions.fromConfigJson(p.configJson);
+    final needs = kGeneralistDeniedTools.any(
+      (t) => perms.permFor(t) != ToolPerm.deny,
+    );
+    if (!needs) continue;
+
+    final merged = Map<String, ToolPerm>.from(perms.overrides);
+    for (final t in kGeneralistDeniedTools) {
+      merged[t] = ToolPerm.deny;
+    }
+    final newJson = AgentToolPermissions.writeIntoConfigJson(
+      p.configJson,
+      merged,
+    );
+    await db.updateAgentPersona(
+      p.toCompanion(true).copyWith(configJson: Value(newJson)),
+    );
   }
 }
 

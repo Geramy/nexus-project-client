@@ -585,7 +585,7 @@ class CoordinatorTools {
         'function': {
           'name': 'list_files',
           'description':
-              'List the files and folders in the project workspace at a directory path. Use to explore the codebase before reading or editing.',
+              'List the files and folders at a workspace directory path.',
           'parameters': {
             'type': 'object',
             'properties': {
@@ -602,8 +602,7 @@ class CoordinatorTools {
         'type': 'function',
         'function': {
           'name': 'read_file',
-          'description':
-              'Read the full text contents of a file in the project workspace by its path.',
+          'description': 'Read a file\'s full text contents.',
           'parameters': {
             'type': 'object',
             'properties': {
@@ -621,7 +620,7 @@ class CoordinatorTools {
         'function': {
           'name': 'write_file',
           'description':
-              'Create or overwrite a file in the project workspace with the given text content. Creates parent folders as needed. Provide the COMPLETE new file contents.',
+              'Create or overwrite a file (creates parent folders as needed). Provide the COMPLETE new file contents.',
           'parameters': {
             'type': 'object',
             'properties': {
@@ -1178,7 +1177,7 @@ class CoordinatorTools {
         'function': {
           'name': 'edit_file',
           'description':
-              'Safely edit a file with an exact search-and-replace. Reads the file, replaces the FIRST occurrence of old_text with new_text, and writes it back. Aborts if old_text is not found exactly.',
+              'Edit a file by exact search-and-replace: replaces the FIRST occurrence of old_text with new_text. Aborts if old_text is not found exactly.',
           'parameters': {
             'type': 'object',
             'properties': {

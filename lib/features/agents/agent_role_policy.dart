@@ -315,38 +315,43 @@ String configJsonForSkills(Iterable<String> skills) =>
       toolPermissionsForSkills(skills),
     );
 
-/// The Generalist worker's authoritative tool permissions — the exact map the
-/// project owner tuned by hand (story + image tools on, push/merge/pull and the
-/// plan/task-mutation + verifier tools off). Captured verbatim so a fresh
-/// install seeds the SAME Generalist the owner runs, instead of the older
-/// skill-derived default the Generalist was misbehaving with.
+/// The Generalist worker's authoritative tool permissions — a LEAN coder set:
+/// read/search/edit/create files, local git (status/log/branches/create/checkout/
+/// commit), read its own task, and submit. EVERYTHING else is denied — task/plan
+/// authoring (PM), story/notes (discovery), image generation, CI/build (the coder
+/// no longer runs CI — one end-of-project scan), the verifier/coordinator
+/// orchestration tools, and remote git. Denying them keeps the worker's per-turn
+/// tool payload small (the Generalist is the coder, so it determines most of the
+/// project's speed and token cost) AND keeps it in its lane.
 ///
 /// This is intentionally GENERALIST-ONLY: every other role keeps its own
 /// distinct, skill-derived permissions — agent permissions are unique per agent.
+/// [kGeneralistDeniedTools] derives the deny set from this map so existing
+/// personas can be reconciled to it without a second hand-maintained list.
 const Map<String, ToolPerm> kGeneralistToolPermissions = {
-  'add_note': ToolPerm.grant,
-  'add_user_story': ToolPerm.grant,
+  'add_note': ToolPerm.deny,
+  'add_user_story': ToolPerm.deny,
   'approve_task': ToolPerm.deny,
   'assign_agent_to_task': ToolPerm.deny,
-  'build_docker_image': ToolPerm.grant,
+  'build_docker_image': ToolPerm.deny,
   'create_directory': ToolPerm.grant,
   'create_file': ToolPerm.grant,
   'create_plan': ToolPerm.deny,
-  'create_task': ToolPerm.grant,
+  'create_task': ToolPerm.deny,
   'delete_file': ToolPerm.ask,
   'delete_folder': ToolPerm.ask,
-  'delete_note': ToolPerm.grant,
+  'delete_note': ToolPerm.deny,
   'delete_path': ToolPerm.ask,
   'delete_plan': ToolPerm.deny,
   'delete_task': ToolPerm.deny,
-  'draft_stories_from_text': ToolPerm.grant,
+  'draft_stories_from_text': ToolPerm.deny,
   'edit_file': ToolPerm.grant,
-  'edit_image': ToolPerm.grant,
+  'edit_image': ToolPerm.deny,
   'generate_diagram': ToolPerm.deny,
-  'generate_image': ToolPerm.grant,
-  'get_ci_run': ToolPerm.grant,
-  'get_note': ToolPerm.grant,
-  'get_notes': ToolPerm.grant,
+  'generate_image': ToolPerm.deny,
+  'get_ci_run': ToolPerm.deny,
+  'get_note': ToolPerm.deny,
+  'get_notes': ToolPerm.deny,
   'get_task': ToolPerm.grant,
   'git_branches': ToolPerm.grant,
   'git_checkout_branch': ToolPerm.grant,
@@ -358,42 +363,50 @@ const Map<String, ToolPerm> kGeneralistToolPermissions = {
   'git_push': ToolPerm.deny,
   'git_status': ToolPerm.grant,
   'link_task_to_plan': ToolPerm.deny,
-  'list_agents': ToolPerm.grant,
-  'list_ci_runs': ToolPerm.grant,
+  'list_agents': ToolPerm.deny,
+  'list_ci_runs': ToolPerm.deny,
   'list_directory': ToolPerm.grant,
   'list_files': ToolPerm.grant,
-  'list_open_tasks': ToolPerm.grant,
-  'list_plans': ToolPerm.grant,
-  'list_tasks': ToolPerm.grant,
-  'list_user_stories': ToolPerm.grant,
+  'list_open_tasks': ToolPerm.deny,
+  'list_plans': ToolPerm.deny,
+  'list_tasks': ToolPerm.deny,
+  'list_user_stories': ToolPerm.deny,
   'move_path': ToolPerm.ask,
-  'move_user_story': ToolPerm.grant,
+  'move_user_story': ToolPerm.deny,
   'propose_plan_adjustment': ToolPerm.deny,
   'read_file': ToolPerm.grant,
   'read_file_chunk': ToolPerm.grant,
-  'read_plan': ToolPerm.grant,
+  'read_plan': ToolPerm.deny,
   'reject_task': ToolPerm.deny,
   'rename_plan': ToolPerm.deny,
-  'review_submission': ToolPerm.grant,
+  'review_submission': ToolPerm.deny,
   'run_verification': ToolPerm.deny,
-  'run_workflow': ToolPerm.grant,
-  'scaffold_ci_workflow': ToolPerm.grant,
+  'run_workflow': ToolPerm.deny,
+  'scaffold_ci_workflow': ToolPerm.deny,
   'search_directory': ToolPerm.grant,
   'search_file_content': ToolPerm.grant,
   'set_task_build_config': ToolPerm.deny,
   'set_task_dates': ToolPerm.deny,
   'submit_for_completion': ToolPerm.grant,
   'submit_verdict': ToolPerm.deny,
-  'sync_plans_to_tasks': ToolPerm.grant,
-  'update_note': ToolPerm.grant,
+  'sync_plans_to_tasks': ToolPerm.deny,
+  'update_note': ToolPerm.deny,
   'update_plan': ToolPerm.deny,
   'update_task': ToolPerm.deny,
   'update_task_status': ToolPerm.deny,
-  'update_user_story': ToolPerm.grant,
-  'view_current_plan': ToolPerm.grant,
-  'view_plan': ToolPerm.grant,
+  'update_user_story': ToolPerm.deny,
+  'view_current_plan': ToolPerm.deny,
+  'view_plan': ToolPerm.deny,
   'write_file': ToolPerm.grant,
   'write_plan': ToolPerm.deny,
+};
+
+/// Tools the Generalist is denied — derived from [kGeneralistToolPermissions] so
+/// there is ONE source of truth. Used by the seeder to lean down existing
+/// Generalist personas (seeded before the trim) to the same coder-only set.
+Set<String> get kGeneralistDeniedTools => {
+  for (final e in kGeneralistToolPermissions.entries)
+    if (e.value == ToolPerm.deny) e.key,
 };
 
 /// Builds the full default tool-permission map for [role]. Tools outside the

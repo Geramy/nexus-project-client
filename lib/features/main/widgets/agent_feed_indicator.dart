@@ -26,13 +26,15 @@ import 'package:flutter_riverpod/legacy.dart';
 
 import 'package:nexus_projects_client/core/providers/app_shell_provider.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
+import 'package:nexus_projects_client/features/projects/orchestration/project_orchestrator.dart'
+    show orchestratorStatusProvider;
 import 'package:nexus_projects_client/features/projects/task_workflow.dart';
 
 /// The worker (by task pk) the user has pinned in the top-bar feed, per project
 /// (null = auto: first working). Auto-falls back if that worker leaves the feed.
 final focusedWorkerProvider = StateProvider.family<int?, int>((ref, _) => null);
 
-enum _AgentState { working, complete, stopped, templating }
+enum _AgentState { working, complete, stopped, templating, waiting }
 
 class _AgentActivity {
   const _AgentActivity(this.taskPk, this.agent, this.task, this.state);
@@ -91,10 +93,28 @@ class AgentFeedIndicator extends ConsumerWidget {
           ..sort((a, b) => a.task_pk.compareTo(b.task_pk));
     final workingCount = workers.length;
 
-    // Feed entries = the active workers; if none, a single representative (the
-    // first agent-assigned task) so the chip still shows the latest agent.
+    // HELD/WAITING slots: tasks the orchestrator wants to run but can't because
+    // their files overlap a task in flight. These occupy no connection and have
+    // no running agent, so they'd otherwise be invisible — surfacing them is why
+    // "2 working" can really be "2 working + 1 waiting" on a contended project.
+    final orch = ref.watch(orchestratorStatusProvider(projectId));
+    final titleOf = {for (final t in tasks) t.task_pk: t.title};
+    final heldEntries = [
+      for (final w in orch.waiting)
+        _AgentActivity(
+          w.taskPk,
+          agentName(w.agentFk),
+          '${titleOf[w.taskPk] ?? 'task'} — ${w.reason}',
+          _AgentState.waiting,
+        ),
+    ];
+    final heldCount = heldEntries.length;
+
+    // Feed entries = active workers + held slots; if neither, a single
+    // representative (the first agent-assigned task) so the chip still shows the
+    // latest agent.
     final List<_AgentActivity> entries;
-    if (workers.isNotEmpty) {
+    if (workers.isNotEmpty || heldEntries.isNotEmpty) {
       entries = [
         for (final t in workers)
           _AgentActivity(
@@ -103,6 +123,7 @@ class AgentFeedIndicator extends ConsumerWidget {
             t.title,
             _AgentState.working,
           ),
+        ...heldEntries,
       ];
     } else {
       final assigned =
@@ -159,11 +180,11 @@ class AgentFeedIndicator extends ConsumerWidget {
               )
               .join('\n');
 
-    final chip = _buildChip(theme, rep, workingCount);
+    final chip = _buildChip(theme, rep, workingCount, heldCount);
 
-    // Dropdown to focus an agent only matters with MORE THAN TWO working at once;
-    // otherwise keep the simple tap-through to the Tasks view.
-    if (workingCount > 2) {
+    // Dropdown to focus an agent only matters with MORE THAN TWO slots in play
+    // (working or held); otherwise keep the simple tap-through to the Tasks view.
+    if (workingCount + heldCount > 2) {
       return PopupMenuButton<int>(
         tooltip: '',
         position: PopupMenuPosition.under,
@@ -227,8 +248,13 @@ class AgentFeedIndicator extends ConsumerWidget {
   }
 
   /// A small square count box (normal colour scheme) on the LEFT, then the
-  /// state-coloured agent chip.
-  Widget _buildChip(ThemeData theme, _AgentActivity? rep, int workingCount) {
+  /// state-coloured agent chip, then a blue "held" badge when slots are blocked.
+  Widget _buildChip(
+    ThemeData theme,
+    _AgentActivity? rep,
+    int workingCount, [
+    int heldCount = 0,
+  ]) {
     final ({Color bg, Color fg})? pal = rep == null
         ? null
         : _palette(rep.state, theme.brightness == Brightness.dark);
@@ -281,33 +307,70 @@ class AgentFeedIndicator extends ConsumerWidget {
       ),
     );
 
-    if (workingCount < 1) return chip;
+    // Blue "N waiting" badge for held slots (no running agent, but a real blocked
+    // task) so a slot held by file contention is visible, not silently missing.
+    final dark = theme.brightness == Brightness.dark;
+    final heldBadge = heldCount < 1
+        ? null
+        : Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            decoration: BoxDecoration(
+              color: dark ? const Color(0xFF1565C0) : const Color(0xFFBBDEFB),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.hourglass_top,
+                  size: 12,
+                  color: dark ? Colors.white : Colors.black,
+                ),
+                const SizedBox(width: 3),
+                Text(
+                  '$heldCount waiting',
+                  style: TextStyle(
+                    fontSize: 11,
+                    height: 1,
+                    fontWeight: FontWeight.w700,
+                    color: dark ? Colors.white : Colors.black,
+                  ),
+                ),
+              ],
+            ),
+          );
 
-    // Themed (normal colour-scheme) square counter to the LEFT of the chip.
+    if (workingCount < 1 && heldBadge == null) return chip;
+
+    // Themed (normal colour-scheme) square counter to the LEFT of the chip, then
+    // the chip, then the held badge.
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          width: 20,
-          height: 20,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: theme.colorScheme.primaryContainer,
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: theme.colorScheme.outlineVariant),
-          ),
-          child: Text(
-            '$workingCount',
-            style: TextStyle(
-              fontSize: 11,
-              height: 1,
-              fontWeight: FontWeight.w800,
-              color: theme.colorScheme.onPrimaryContainer,
+        if (workingCount >= 1) ...[
+          Container(
+            width: 20,
+            height: 20,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+            ),
+            child: Text(
+              '$workingCount',
+              style: TextStyle(
+                fontSize: 11,
+                height: 1,
+                fontWeight: FontWeight.w800,
+                color: theme.colorScheme.onPrimaryContainer,
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 6),
+          const SizedBox(width: 6),
+        ],
         chip,
+        if (heldBadge != null) ...[const SizedBox(width: 6), heldBadge],
       ],
     );
   }
@@ -363,6 +426,7 @@ class AgentFeedIndicator extends ConsumerWidget {
     _AgentState.complete => 'complete',
     _AgentState.stopped => 'stopped',
     _AgentState.templating => 'templating',
+    _AgentState.waiting => 'waiting (file held)',
   };
 
   /// Saturated dot colour for the dropdown rows (legible on any menu surface).
@@ -371,6 +435,7 @@ class AgentFeedIndicator extends ConsumerWidget {
     _AgentState.complete => const Color(0xFF2E7D32),
     _AgentState.stopped => const Color(0xFFC62828),
     _AgentState.templating => const Color(0xFFF9A825), // yellow
+    _AgentState.waiting => const Color(0xFF1565C0), // blue
   };
 
   /// State → (background, foreground), per theme brightness.
@@ -404,6 +469,11 @@ class AgentFeedIndicator extends ConsumerWidget {
         return dark
             ? (bg: const Color(0xFFF9A825), fg: black)
             : (bg: const Color(0xFFFFF59D), fg: black);
+      case _AgentState.waiting:
+        // Blue — a slot's task is held back (its files overlap work in flight).
+        return dark
+            ? (bg: const Color(0xFF1565C0), fg: white)
+            : (bg: const Color(0xFFBBDEFB), fg: black);
     }
   }
 }

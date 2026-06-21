@@ -7,6 +7,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart' show StateProvider;
 
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/core/providers/worker_capture_provider.dart';
@@ -196,6 +197,14 @@ class ProjectOrchestrator {
   /// and the end-of-project scan.
   static const String _defaultCiPath = '/.github/workflows/ci.yml';
   static const Duration _connBackoff = Duration(seconds: 20);
+
+  /// Idle-timeout watchdog for a single agent turn: if the model/stream produces
+  /// NO event for this long, the turn is considered stalled (a backend that
+  /// accepted the connection but never streams — the "hung worker that never
+  /// frees its slot, so the loop stops" failure) and is aborted. The task yields
+  /// back (NOT penalized — a stall isn't its fault), the slot frees, and the pump
+  /// moves on. Generous so a slow-but-working turn under load is never killed.
+  static const Duration _turnIdleTimeout = Duration(minutes: 4);
   static const Duration _tickInterval = Duration(seconds: 30);
   static const Duration _buildPollInterval = Duration(seconds: 3);
   static const Duration _buildTimeout = Duration(minutes: 30);
@@ -251,6 +260,7 @@ class ProjectOrchestrator {
   Future<void> _pump() async {
     if (_pumping || _disposed) return;
     _pumping = true;
+    var advancedMilestone = false;
     try {
       final project = await _db.getProjectById(projectId);
       if (project == null || project.orchestrationState != 'running') return;
@@ -281,10 +291,71 @@ class ProjectOrchestrator {
         unawaited(_runStage(task, stage));
       }
       await _surfaceStalledTasks();
-      await _maybeAdvanceMilestone(project);
+      advancedMilestone = await _maybeAdvanceMilestone(project, workerCap);
       await _maybeFinalizeProject(project);
+      await _publishSlotStatus(workerCap);
     } finally {
       _pumping = false;
+    }
+    // A just-opened milestone has fresh assignable work — re-pump now to fill the
+    // idle slots immediately instead of waiting for the next 30s tick.
+    if (advancedMilestone && !_disposed) unawaited(_pump());
+  }
+
+  /// Publish a live snapshot of worker-slot usage so the UI can show WHY a slot is
+  /// idle — most often a startable task HELD BACK because its files overlap work
+  /// in flight (the predictive scope gate) — instead of silently showing fewer
+  /// agents than the plan allows. [workerSlots] is the worker pool (cap minus the
+  /// reserved Coordinator slot).
+  Future<void> _publishSlotStatus(int workerSlots) async {
+    try {
+      final tasks = await _db.getTasksForProject(projectId);
+      final currentMilestone =
+          (await _db.getProjectById(projectId))?.currentMilestone ?? 0;
+      final waiting = <OrchestratorWait>[];
+      for (final t in tasks) {
+        if (t.task_agent_fk == null) continue;
+        if (_active.contains(t.task_pk)) continue;
+        if ((t.milestoneOrder ?? 0) > currentMilestone) continue;
+        if ((_attempts[t.task_pk] ?? 0) >= _maxAttemptsPerTask) continue;
+        final startable =
+            t.status == TaskStatus.todo &&
+            (t.executionStatus == TaskExecStatus.idle ||
+                t.executionStatus == TaskExecStatus.queued ||
+                t.executionStatus == TaskExecStatus.failed);
+        if (!startable) continue;
+        // Only report tasks that are ready but BLOCKED by file-scope overlap — a
+        // plain queued task that simply hasn't been reached yet isn't "held".
+        if (!_scopeConflict(t.task_pk)) continue;
+        final mine = _taskFootprint[t.task_pk] ?? const <String>{};
+        String? heldFile;
+        int? owner;
+        for (final f in mine) {
+          final o = _fileOwners[f];
+          if (o != null && o != t.task_pk) {
+            heldFile = f;
+            owner = o;
+            break;
+          }
+        }
+        waiting.add(
+          OrchestratorWait(
+            taskPk: t.task_pk,
+            agentFk: t.task_agent_fk,
+            reason: heldFile != null
+                ? 'needs "${heldFile.split('/').last}" held by task #$owner'
+                : 'its files overlap a task in flight',
+          ),
+        );
+      }
+      ref.read(orchestratorStatusProvider(projectId).notifier).state =
+          OrchestratorStatus(
+            workerSlots: workerSlots,
+            activeStages: _active.length,
+            waiting: waiting,
+          );
+    } catch (_) {
+      // Status is best-effort telemetry; never let it disturb the pump.
     }
   }
 
@@ -547,7 +618,7 @@ class ProjectOrchestrator {
       return;
     }
 
-    final resolved = await _resolveBackend(persona);
+    final resolved = await _resolveBackend(persona, taskPk: task.task_pk);
     if (resolved == null) {
       debugPrint(
         '[Orchestrator p$projectId] task ${task.task_pk}: no inference server for persona ${persona.name}.',
@@ -740,11 +811,20 @@ class ProjectOrchestrator {
                 'tool → ${r.length > 140 ? '${r.substring(0, 140)}…' : r}',
               );
             },
-          )) {
+          ).timeout(_turnIdleTimeout)) {
             // Drain the stream; tool effects are applied inside runTurn.
           }
         } catch (e) {
-          if (_isNotTaskFault(e)) {
+          if (e is TimeoutException) {
+            // The turn stalled — a backend that took the connection but never
+            // streamed. NOT the task's fault: undo the attempt and yield back so
+            // the slot frees and the pump moves on (instead of hanging forever).
+            _undoAttempt(task.task_pk);
+            debugPrint(
+              '[Orchestrator p$projectId] task ${task.task_pk}: turn $turn stalled '
+              '(no stream for ${_turnIdleTimeout.inMinutes}m) — aborting, yielding back.',
+            );
+          } else if (_isNotTaskFault(e)) {
             // 429 backpressure or a transient 5xx — NOT a failure. Undo this
             // attempt so a busy/flaky gateway can never push the task to Blocked.
             // It returns to the board and is retried once things recover.
@@ -979,7 +1059,7 @@ class ProjectOrchestrator {
       );
       return;
     }
-    final resolved = await _resolveBackend(persona);
+    final resolved = await _resolveBackend(persona, taskPk: task.task_pk);
     if (resolved == null) {
       debugPrint(
         '[Orchestrator p$projectId] task ${task.task_pk}: no inference server for verifier ${persona.name}.',
@@ -1037,10 +1117,10 @@ class ProjectOrchestrator {
           turn++) {
         if (!await _stillRunning()) return;
         try {
-          await for (final _ in session.runTurn(kickoff)) {}
+          await for (final _ in session.runTurn(kickoff).timeout(_turnIdleTimeout)) {}
         } catch (e) {
-          if (_isNotTaskFault(e)) {
-            _undoAttempt(task.task_pk); // backpressure/transient — don't penalize
+          if (e is TimeoutException || _isNotTaskFault(e)) {
+            _undoAttempt(task.task_pk); // stall/backpressure/transient — don't penalize
           } else {
             debugPrint(
               '[Orchestrator p$projectId] task ${task.task_pk}: functional verify turn $turn failed: $e',
@@ -1353,7 +1433,7 @@ class ProjectOrchestrator {
       );
       return;
     }
-    final resolved = await _resolveBackend(persona);
+    final resolved = await _resolveBackend(persona, taskPk: task.task_pk);
     if (resolved == null) {
       debugPrint(
         '[Orchestrator p$projectId] task ${task.task_pk}: no inference server for coordinator ${persona.name}.',
@@ -1408,10 +1488,10 @@ class ProjectOrchestrator {
     for (var turn = 0; turn < _maxTurnsPerStage && !_disposed; turn++) {
       if (!await _stillRunning()) return;
       try {
-        await for (final _ in session.runTurn(kickoff)) {}
+        await for (final _ in session.runTurn(kickoff).timeout(_turnIdleTimeout)) {}
       } catch (e) {
-        if (_isNotTaskFault(e)) {
-          _undoAttempt(task.task_pk); // backpressure/transient — don't penalize
+        if (e is TimeoutException || _isNotTaskFault(e)) {
+          _undoAttempt(task.task_pk); // stall/backpressure/transient — don't penalize
         } else {
           debugPrint(
             '[Orchestrator p$projectId] task ${task.task_pk}: merge turn $turn failed: $e',
@@ -1645,13 +1725,13 @@ class ProjectOrchestrator {
             print('[Templater] tool#$toolCalls: '
                 '${r.length > 140 ? "${r.substring(0, 140)}…" : r}');
           },
-        )) {}
+        ).timeout(_turnIdleTimeout)) {}
       } catch (e) {
-        if (!_isNotTaskFault(e)) {
+        if (e is! TimeoutException && !_isNotTaskFault(e)) {
           debugPrint('[Orchestrator p$projectId] templater turn $turn failed: $e');
           return (await git.headOid()) != beforeHead;
         }
-        // transient/backpressure — retry the turn.
+        // stall/transient/backpressure — retry the turn.
       }
       final head = await git.headOid();
       final wsFiles =
@@ -1850,26 +1930,38 @@ class ProjectOrchestrator {
         '$steps\n';
   }
 
-  /// Advance to the next milestone batch once every task in the current-or-earlier
-  /// batches is finished. A Blocked task is surfaced to the human and does NOT
-  /// freeze the project. No-op for single-batch (short) projects or the last batch.
-  Future<void> _maybeAdvanceMilestone(Project project) async {
+  /// Open the next milestone batch when appropriate. Two triggers:
+  ///   1. The current-or-earlier batches are fully finished (clean progression).
+  ///   2. BACKFILL: there are IDLE worker slots and the current batch has no more
+  ///      STARTABLE work — its remaining tasks are all in flight (or held) — so
+  ///      the next batch opens to feed the idle slots instead of the pipeline
+  ///      tailing off to a single task while later batches sit gated. This is what
+  ///      keeps all N connections busy across a batch boundary (the "11 & 12
+  ///      finished but the next 25 never started" stall).
+  /// Advances at most ONE batch per call; since each stage re-pumps on completion,
+  /// it opens just enough batches to keep the workers fed. A Blocked task is
+  /// surfaced to the human and does NOT freeze progression. No-op on the last batch.
+  Future<bool> _maybeAdvanceMilestone(Project project, int workerCap) async {
     final count = project.milestoneCount;
-    if (count <= 1) return;
+    if (count <= 1) return false;
     final current = project.currentMilestone;
-    if (current >= count - 1) return;
+    if (current >= count - 1) return false;
     final tasks = await _db.getTasksForProject(projectId);
     final inScope = tasks.where((t) => (t.milestoneOrder ?? 0) <= current);
-    if (inScope.isEmpty) return;
-    final pending = inScope.where(
+    if (inScope.isEmpty) return false;
+    final batchDone = !inScope.any(
       (t) => t.status != TaskStatus.done && t.status != TaskStatus.blocked,
     );
-    if (pending.isNotEmpty) return;
+    // Idle slots + nothing startable in the current scope → backfill from next.
+    final idleSlots = _active.length < workerCap;
+    final noStartable = _assignableTasks(tasks, current).isEmpty;
+    if (!batchDone && !(idleSlots && noStartable)) return false;
     final next = await _db.advanceProjectMilestone(projectId);
     debugPrint(
-      '[Orchestrator p$projectId] milestone $current complete → opening '
-      '$next/${count - 1}.',
+      '[Orchestrator p$projectId] milestone $current → opening $next/${count - 1} '
+      '(${batchDone ? 'batch complete' : 'backfilling idle worker slots'}).',
     );
+    return true;
   }
 
   /// END-OF-PROJECT CI SCAN — the hard gate on "complete". Once the whole backlog
@@ -2118,8 +2210,9 @@ class ProjectOrchestrator {
   /// Resolve the inference backend + chat model for [persona] from its connected
   /// server (or the client's first server). Returns null when none exist.
   Future<({InferenceBackend client, String? model})?> _resolveBackend(
-    AgentPersona persona,
-  ) async {
+    AgentPersona persona, {
+    int? taskPk,
+  }) async {
     final project = await _db.getProjectById(projectId);
     if (project == null) return null;
     final servers = await _db.getInferenceServersForClient(project.client_fk);
@@ -2195,12 +2288,23 @@ class ProjectOrchestrator {
       selectedModel: chosen.selectedModel,
       availableModels: models,
     );
-    // Per-agent session id → the Router gives each agent its own warm backend and
-    // spreads different agents across the fleet (agent 1..N → server 1..N), instead
-    // of every agent piling onto one box.
+    // Routing session id → the Router pins a session to ONE warm backend and
+    // spreads DIFFERENT sessions across the fleet. For concurrent autonomous work
+    // we key the session by TASK (not just agent) so several tasks of the SAME
+    // persona (e.g. the Generalist doing most of the coding) fan out across
+    // backends instead of all piling onto one box — otherwise only ~2 of N worker
+    // slots ever get a live connection. A task's own turns reuse its id, so each
+    // task still stays warm on its backend. No taskPk (e.g. the one-shot
+    // Templater) falls back to the per-agent id.
+    final sessionId = taskPk != null
+        ? 'agent-${persona.agent_pk}-task-$taskPk'
+        : 'agent-${persona.agent_pk}';
     return (
-      client: backendForServer(uiServer,
-          agentName: persona.name, sessionId: 'agent-${persona.agent_pk}'),
+      client: backendForServer(
+        uiServer,
+        agentName: persona.name,
+        sessionId: sessionId,
+      ),
       model: model,
     );
   }
@@ -2208,6 +2312,50 @@ class ProjectOrchestrator {
 
 /// The pipeline stage a task is ready for, in execution order.
 enum _Stage { implement, verify, build, merge }
+
+/// A live snapshot of the orchestrator's worker-slot usage, published every pump
+/// so the UI can explain an idle slot — e.g. a task held back because its files
+/// overlap work in flight — instead of just showing fewer agents than the plan
+/// allows.
+@immutable
+class OrchestratorStatus {
+  /// Worker pool size = concurrency cap minus the reserved Coordinator slot.
+  final int workerSlots;
+
+  /// Tasks in an active pipeline stage right now (implement/verify/build/merge).
+  final int activeStages;
+
+  /// One entry per startable-but-blocked task (file-scope holds): its task pk,
+  /// the agent assigned to it, and a human-readable reason.
+  final List<OrchestratorWait> waiting;
+
+  const OrchestratorStatus({
+    this.workerSlots = 0,
+    this.activeStages = 0,
+    this.waiting = const [],
+  });
+}
+
+/// A single held/waiting task in [OrchestratorStatus] — surfaced so the UI can
+/// show the blocked slot (which task, which agent, why) instead of just a lower
+/// agent count.
+@immutable
+class OrchestratorWait {
+  final int taskPk;
+  final int? agentFk;
+  final String reason;
+  const OrchestratorWait({
+    required this.taskPk,
+    required this.agentFk,
+    required this.reason,
+  });
+}
+
+/// Per-project orchestrator status the UI reads to surface held/waiting work.
+final orchestratorStatusProvider =
+    StateProvider.family<OrchestratorStatus, int>(
+      (ref, projectId) => const OrchestratorStatus(),
+    );
 
 /// One [ProjectOrchestrator] per project. AUTO-DISPOSED: it lives only while the
 /// project is FOCUSED (the shell + workspace watch the current project's

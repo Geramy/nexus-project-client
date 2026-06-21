@@ -120,6 +120,8 @@ Build this task with the project's stack from the PROJECT BASELINE above — use
 
 WORK EFFICIENTLY — you have a LIMITED number of turns, so converge, don't wander:
 - Read ONLY the files THIS task touches. Do NOT re-list directories or re-read files you've already read this session — their contents are still in context. The PROJECT BASELINE and layer plans are already given above; do not re-read the plans.
+- After a successful create_file / write_file / edit_file, the change is SAVED — do NOT read the file back to confirm it, and do NOT re-read a file just to make another edit to it (you already have its current contents). Batch all your edits to one file together.
+- Use the CURRENT PROJECT FILES list above to know what exists — do NOT read_file a path that isn't on it (the read just fails and wastes the turn).
 - Move to editing quickly: read a file → edit it → next. Don't survey the whole project before writing.
 - If a file is "held by another task", do NOT retry it — edit a different file and let it merge later. Repeating a blocked write wastes your turns.
 - `git_log` shows YOUR task branch. Once you see your commit there, TRUST that it landed — do not re-commit the same work.

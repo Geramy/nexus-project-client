@@ -15,6 +15,8 @@ import 'package:nexus_projects_client/infrastructure/workspace/git/git_engine_pr
 import 'package:nexus_projects_client/infrastructure/workspace/git/nxtprj_git_engine.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/workspace.dart';
 import 'package:nexus_projects_client/infrastructure/workspace/workspace_provider.dart';
+import 'package:nexus_projects_client/features/projects/orchestration/project_orchestrator.dart'
+    show orchestratorStatusProvider;
 import 'package:nexus_projects_client/features/projects/planning/planning_progress.dart';
 import 'package:nexus_projects_client/features/projects/planning/project_planning_run.dart';
 import 'package:nexus_projects_client/features/projects/task_workflow.dart';
@@ -270,29 +272,92 @@ class _ActiveAgentsChip extends ConsumerWidget {
     final n = tasks == null
         ? 0
         : tasks.where((t) => _active.contains(t.executionStatus)).length;
-    if (n == 0) return const SizedBox.shrink();
+    // Held/waiting work — startable tasks blocked because their files overlap a
+    // task in flight. This is why a slot can sit idle and the agent count looks
+    // lower than the plan allows; surface it instead of silently showing fewer.
+    final status = ref.watch(orchestratorStatusProvider(projectId));
+    final waiting = status.waiting;
+    if (n == 0 && waiting.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.bolt, size: 13, color: theme.colorScheme.primary),
-          const SizedBox(width: 3),
-          Text(
-            '$n agent${n == 1 ? '' : 's'} working',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onPrimaryContainer,
+    // Break the active count down by stage so the user can tell a coding worker
+    // from a reviewer / integrator occupying a slot.
+    int cnt(String s) =>
+        tasks == null ? 0 : tasks.where((t) => t.executionStatus == s).length;
+    final breakdown = [
+      if (cnt(TaskExecStatus.running) > 0) '${cnt(TaskExecStatus.running)} coding',
+      if (cnt(TaskExecStatus.verifying) > 0)
+        '${cnt(TaskExecStatus.verifying)} reviewing',
+      if (cnt(TaskExecStatus.building) > 0)
+        '${cnt(TaskExecStatus.building)} building',
+      if (cnt(TaskExecStatus.merging) > 0)
+        '${cnt(TaskExecStatus.merging)} integrating',
+    ].join(' · ');
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (n > 0)
+          Tooltip(
+            message: breakdown.isEmpty ? '' : 'Slots: $breakdown',
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.bolt, size: 13, color: theme.colorScheme.primary),
+                  const SizedBox(width: 3),
+                  Text(
+                    '$n agent${n == 1 ? '' : 's'} working',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (waiting.isNotEmpty) ...[
+          if (n > 0) const SizedBox(width: 6),
+          Tooltip(
+            message: waiting
+                .map((w) => 'Task #${w.taskPk} waiting — ${w.reason}')
+                .join('\n'),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.tertiaryContainer.withValues(
+                  alpha: 0.6,
+                ),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.hourglass_top,
+                    size: 13,
+                    color: theme.colorScheme.onTertiaryContainer,
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    '${waiting.length} waiting (file held)',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onTertiaryContainer,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
-      ),
+      ],
     );
   }
 }
