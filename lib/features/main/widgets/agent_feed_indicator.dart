@@ -154,6 +154,52 @@ class AgentFeedIndicator extends ConsumerWidget {
     final templateStatus = projects
         .firstWhereOrNull((p) => p.project_pk == projectId)
         ?.templateStatus;
+    // Templating FAILED (the base scaffold couldn't be produced) — surface a
+    // persistent, tappable retry so the project isn't silently stuck. Tapping
+    // resets the gate to 'pending'; the orchestrator re-attempts (it reuses the
+    // existing scaffold and just re-runs the build check).
+    if (templateStatus == 'failed') {
+      final dark = theme.brightness == Brightness.dark;
+      return Tooltip(
+        message:
+            "Project setup couldn't finish. Tap to retry — if it keeps failing, "
+            'make sure your build tools (Flutter / Docker) are running.',
+        child: InkWell(
+          borderRadius: BorderRadius.circular(6),
+          onTap: () => ref
+              .read(nexusDatabaseProvider)
+              .setProjectTemplateStatus(projectId, 'pending'),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: dark ? const Color(0xFFC62828) : const Color(0xFFFFCDD2),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.refresh,
+                  size: 14,
+                  color: dark ? Colors.white : Colors.black,
+                ),
+                if (!narrow) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    'Setup failed — tap to retry',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: dark ? Colors.white : Colors.black,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     final isTemplating =
         templateStatus == 'pending' || templateStatus == 'scaffolding';
 

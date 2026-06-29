@@ -117,52 +117,88 @@ String? resolveChatModelId(String? candidate, List<ApiModelInfo> models) {
   return id; // not in the (possibly stale) list — trust it as-is
 }
 
-/// First plain chat/LLM model id from a server list: not a collection and not
-/// an audio/tts/image-only model (so we don't accidentally send chat requests
-/// to Whisper/TTS/diffusion models, which 500). Falls back to any non-collection.
+/// The BEST plain chat/LLM model on the server (not a collection, not an
+/// audio/tts/image-only model — those 500 on chat). Prefers the higher-quality
+/// model over catalog order. Falls back to any non-collection.
 String? firstChatModelId(List<ApiModelInfo> models) {
-  for (final m in models) {
-    if (m.isCollection) continue;
-    if (_isAudio(m) || _isTts(m) || _isImageGen(m)) continue;
-    return m.id;
-  }
+  final best = _bestModelId(
+    models,
+    (m) => !_isAudio(m) && !_isTts(m) && !_isImageGen(m),
+  );
+  if (best != null) return best;
   for (final m in models) {
     if (!m.isCollection) return m.id;
   }
   return null;
 }
 
-/// First transcription/audio (STT) model id on the server, or null. Used as the
-/// safety net so a voice turn never sends OpenAI's `whisper-1` (which Lemonade
-/// servers 404 on) when a persona/collection didn't resolve an STT model.
-String? firstAudioModelId(List<ApiModelInfo> models) {
-  for (final m in models) {
-    if (m.isCollection) continue;
-    if (_isAudio(m)) return m.id;
-  }
-  return null;
-}
+/// The BEST transcription/audio (STT) model on the server, or null. Safety net
+/// so a voice turn never sends OpenAI's `whisper-1` (which Lemonade servers 404
+/// on) when a persona/collection didn't resolve an STT model. Prefers quality
+/// (e.g. Whisper-Large-v3 over Whisper-Tiny) — NOT catalog order. ("turbo" is
+/// fine for STT, e.g. large-v3-turbo, so it isn't penalized here.)
+String? firstAudioModelId(List<ApiModelInfo> models) =>
+    _bestModelId(models, _isAudio);
 
-/// First text-to-speech (TTS) model id on the server, or null. Safety net so a
+/// The BEST text-to-speech (TTS) model on the server, or null. Safety net so a
 /// spoken reply never posts an empty model id (which 404s) when nothing resolved.
-String? firstTtsModelId(List<ApiModelInfo> models) {
-  for (final m in models) {
-    if (m.isCollection) continue;
-    if (_isTts(m)) return m.id;
-  }
-  return null;
-}
+String? firstTtsModelId(List<ApiModelInfo> models) =>
+    _bestModelId(models, _isTts);
 
-/// First image-generation model id on the server, or null. Safety net so a
+/// The BEST image-generation model on the server, or null. Safety net so a
 /// diagram/image request never posts an empty model id (which the router 502s on
 /// — "All candidate backends failed") when a persona/collection didn't resolve
-/// an image model.
-String? firstImageModelId(List<ApiModelInfo> models) {
+/// an image model. Prefers quality over catalog order so a fallback picks Flux/
+/// SDXL ahead of a lite model like SD-Turbo (turbo IS penalized for image).
+String? firstImageModelId(List<ApiModelInfo> models) =>
+    _bestModelId(models, _isImageGen, turboIsBad: true);
+
+/// Pick the highest-quality non-collection model matching [test], by a heuristic
+/// score (penalize tiny/mini/lite/etc., reward large/xl/flux/v3). Ties keep
+/// catalog order (stable). Null when nothing matches.
+String? _bestModelId(
+  List<ApiModelInfo> models,
+  bool Function(ApiModelInfo) test, {
+  bool turboIsBad = false,
+}) {
+  ApiModelInfo? best;
+  var bestScore = -1 << 30;
   for (final m in models) {
     if (m.isCollection) continue;
-    if (_isImageGen(m)) return m.id;
+    if (!test(m)) continue;
+    final s = _qualityScore(m.id, turboIsBad: turboIsBad);
+    if (best == null || s > bestScore) {
+      best = m;
+      bestScore = s;
+    }
   }
-  return null;
+  return best?.id;
+}
+
+/// Rough quality score from a model id: low-tier markers (tiny/nano/mini/lite/
+/// small/base) drag it down; high-tier markers (large/xl/sdxl/flux/v3/medium)
+/// lift it. [turboIsBad] additionally penalizes "turbo" (right for image —
+/// SD-Turbo is the lite one — but not for STT, where large-v3-turbo is best).
+int _qualityScore(String id, {bool turboIsBad = false}) {
+  final l = id.toLowerCase();
+  var s = 0;
+  for (final t in const ['tiny', 'nano']) {
+    if (l.contains(t)) s -= 3;
+  }
+  for (final t in const ['mini', 'lite']) {
+    if (l.contains(t)) s -= 2;
+  }
+  for (final t in const ['small', 'base']) {
+    if (l.contains(t)) s -= 1;
+  }
+  if (turboIsBad && l.contains('turbo')) s -= 3;
+  for (final t in const ['large', 'sdxl', 'flux', 'huge']) {
+    if (l.contains(t)) s += 2;
+  }
+  for (final t in const ['xl', 'v3', 'medium']) {
+    if (l.contains(t)) s += 1;
+  }
+  return s;
 }
 
 /// The Omni Collection id to use when a persona hasn't chosen one: the product

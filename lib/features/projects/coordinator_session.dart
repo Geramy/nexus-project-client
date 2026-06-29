@@ -524,6 +524,10 @@ class ProjectCoordinatorSession {
     // shipping (keep tool-using turns, skip pure chatter).
     var executedTool = false;
     var lastSys = '';
+    // Bounds how many times per turn we poke a DISCOVERY turn that organized/
+    // recorded the story tree but is ending WITHOUT asking a question (the empty-
+    // reasoning "reorganized then stopped" stall) so the interview keeps moving.
+    var discoveryAskNudges = 0;
     try {
       for (var round = 0; round < maxToolRounds; round++) {
         // Rebuilt each round so a request_tools unlock takes effect immediately.
@@ -626,6 +630,26 @@ class ProjectCoordinatorSession {
         _fullTrace.add(Map<String, dynamic>.from(assistantEntry));
 
         if (toolCalls.isEmpty || executor == null) {
+          // DISCOVERY ANTI-STALL: the model reorganized/recorded the story tree
+          // this turn but is ending with NO spoken question (often after an empty
+          // reasoning round) — so the interview silently stops while topics are
+          // still open. Poke it once or twice to ask its next question first.
+          if (discoveryMode &&
+              executor != null &&
+              executedTool &&
+              contentStr.trim().isEmpty &&
+              discoveryAskNudges < 2) {
+            discoveryAskNudges++;
+            _history.add({
+              'role': 'user',
+              'content':
+                  'You updated the story tree but did not ASK anything. Continue '
+                  'the interview now: ask your next ONE focused question about a '
+                  'part of the project that still lacks detail. Do not stop while '
+                  'there is more to learn.',
+            });
+            continue;
+          }
           if (executedTool) onTrace?.call(_traceMessages(lastSys));
           yield ChatStreamFinish(
             finishReason: 'stop',

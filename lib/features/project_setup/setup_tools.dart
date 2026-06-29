@@ -9,6 +9,7 @@ import '../../infrastructure/inference/inference_backend.dart';
 import '../../infrastructure/registry/registry_models.dart';
 import '../../infrastructure/registry/verification_service.dart';
 import '../project_plans/plan_store.dart';
+import 'config/setup_flow.dart';
 import 'models/project_tag.dart';
 import 'models/tag_category.dart';
 import 'plan_generator.dart';
@@ -304,10 +305,12 @@ class SetupTools {
           'name': 'propose_tags',
           'description':
               'Save the user\'s answer(s) to the project profile as tags. Call '
-              'this right after the user answers a question, recording their '
-              'picks under that question\'s category. Each tag value is a SHORT '
-              'label (a few words, ≤5) for ONE concept — give several items as '
-              'several tag objects. Batch tags across categories in one call. '
+              'this right after the user answers a question, recording EXACTLY '
+              'their picks under that question\'s category — ONLY the options '
+              'they selected, never the ones they left unpicked and never extra '
+              'values you invent. Each tag value is a SHORT label (a few words, '
+              '≤5) for ONE concept — give the user\'s several picks for the '
+              'current topic as several tag objects. '
               'Saved as `proposed` for the user to accept. Languages and '
               'platforms use the allowed vocab; databases/services/frameworks '
               'accept free entry. Example: propose_tags(tags: ['
@@ -679,6 +682,16 @@ class SetupToolExecutor {
   /// Cleared the moment propose_tags runs.
   String? lastSelection;
 
+  /// The options shown by the most recent ask_question, and the subset the user
+  /// actually picked (both normalized). Used by [_propose] to REFUSE re-adding an
+  /// option the user was shown but did NOT select — the "asked 3 of 12, don't
+  /// add the other 9 (or invent more)" guard. Reset on each new ask_question and
+  /// on a skipped / free-text answer (where option-filtering doesn't apply).
+  Set<String> _lastOfferedOptions = const {};
+  Set<String> _lastPicks = const {};
+
+  static String _normOpt(String s) => s.trim().toLowerCase();
+
   Future<String> _ask(Map<String, dynamic> args) async {
     final question = (args['question'] ?? '').toString();
     final options = ((args['options'] as List?) ?? const [])
@@ -700,13 +713,22 @@ class SetupToolExecutor {
     if (answer.freeText != null && answer.freeText!.trim().isNotEmpty) {
       final text = answer.freeText!.trim();
       lastSelection = text;
+      // Free-text isn't a pick from the listed options → no option-filtering.
+      _lastOfferedOptions = const {};
+      _lastPicks = const {};
       return 'User answered: "$text"';
     }
     if (answer.picks.isEmpty) {
       lastSelection = null;
+      _lastOfferedOptions = const {};
+      _lastPicks = const {};
       return 'User skipped the question.';
     }
     lastSelection = answer.picks.join(', ');
+    // Remember what was offered vs. picked so propose_tags can't re-add options
+    // the user deliberately left unselected (or invent ones beyond their picks).
+    _lastOfferedOptions = options.map(_normOpt).toSet();
+    _lastPicks = answer.picks.map(_normOpt).toSet();
     return 'User selected: ${answer.picks.join(', ')}.';
   }
 
@@ -788,6 +810,51 @@ class SetupToolExecutor {
     );
     byCat.forEach((cat, vals) => b.write('\n- $cat: ${vals.join(', ')}'));
     return b.toString();
+  }
+
+  /// Categories with at least one non-rejected tag on the board (what's done).
+  Future<Set<String>> filledCategories() async {
+    final tags = await db.getTagsForProject(projectPk);
+    return {
+      for (final t in tags)
+        if (t.status != 'rejected') t.category,
+    };
+  }
+
+  /// The single next topic to ask, walking [orderedStages] IN ORDER so the host
+  /// covers them one at a time instead of jumping ahead or batching. Skips
+  /// AI-derived stages (languages/frameworks — the host proposes those itself)
+  /// and, right after `industries` is filled, enforces any unanswered industry
+  /// sub-axis (e.g. Gaming → Genre) before later stages. Injected into the prompt
+  /// each round; deterministic, so it advances as topics get tagged.
+  Future<String> nextTopicInstruction(List<SetupStage> orderedStages) async {
+    final filled = await filledCategories();
+    for (final s in orderedStages) {
+      if (!s.required) continue;
+      if (s.guidance.toUpperCase().contains('AI-DERIVED')) continue;
+      if (!filled.contains(s.key)) {
+        return 'NEXT TOPIC — ask this and ONLY this now: "${s.title}" '
+            '(category `${s.key}`). Use ask_question, then propose_tags ONLY the '
+            'user\'s picks. Do NOT ask or tag any other topic this turn unless '
+            'the user is correcting an earlier answer. One topic at a time, in order.';
+      }
+      // After industries, an industry-introduced sub-axis (e.g. Genre / business
+      // model) must be answered before moving on to objectives/features.
+      if (s.key == 'industries') {
+        final scope = await _readScope();
+        final pending = scope.subAxes.where((a) => !a.answered).toList();
+        if (pending.isNotEmpty) {
+          final a = pending.first;
+          return 'NEXT TOPIC — ask this and ONLY this now: "${a.name}" '
+              '(category `${a.key}`) using these options: ${a.values.join(', ')}. '
+              'Then propose_tags ONLY the user\'s picks. Do NOT skip ahead to '
+              'other topics this turn.';
+        }
+      }
+    }
+    return 'All required user topics have a tag. If `languages`/`frameworks` are '
+        'not on the board yet, propose them yourself now (derive a minimal stack '
+        'for the chosen platforms), then call finalize_setup.';
   }
 
   Future<String> _scopeStatus() async {
@@ -909,6 +976,7 @@ class SetupToolExecutor {
     final accepted = <String>[];
     final skipped = <String>[];
     final tooLong = <String>[];
+    final unpicked = <String>[];
     final proposedIndustries = <String>[];
 
     for (final entry in raw) {
@@ -944,6 +1012,17 @@ class SetupToolExecutor {
       for (final value in _splitTagValues(rawValue)) {
         if (_tooLongForTag(value)) {
           tooLong.add(value);
+          continue;
+        }
+
+        // STICK TO WHAT THE USER PICKED: if this value was one of the options
+        // shown in the last question but the user did NOT select it, refuse to
+        // add it — the host must not re-add unpicked options (or pad the answer
+        // with extras). Values that were never offered (the initial-description
+        // inferences, the AI-derived stack) are unaffected.
+        if (_lastOfferedOptions.contains(_normOpt(value)) &&
+            !_lastPicks.contains(_normOpt(value))) {
+          unpicked.add(value);
           continue;
         }
 
@@ -996,6 +1075,12 @@ class SetupToolExecutor {
     final b = StringBuffer();
     if (accepted.isNotEmpty) b.write('Proposed: ${accepted.join(', ')}.');
     if (skipped.isNotEmpty) b.write(' Skipped: ${skipped.join('; ')}.');
+    if (unpicked.isNotEmpty) {
+      b.write(
+        ' NOT added (the user was shown these but did NOT pick them — do not '
+        'add options the user left unselected): ${unpicked.join(', ')}.',
+      );
+    }
     if (tooLong.isNotEmpty) {
       b.write(
         ' REJECTED (too long — each tag must be a SHORT label, ≤5 words, one '

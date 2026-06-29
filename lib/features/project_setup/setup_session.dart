@@ -133,21 +133,21 @@ You are the Setup host for "$projectName" (${flow.name}). Your job is to build t
 
 ${flow.intro}
 
-You have $stepCount topics to fill (listed below). Tag what the user already told you FIRST, then ask about whatever is still open — one at a time, in flexible order.
+You have $stepCount topics to fill (listed below). FIRST tag ONLY what the user EXPLICITLY stated; then ask the REMAINING topics in the order listed below — exactly ONE topic per question, and NEVER jump ahead to a later topic. A "NEXT TOPIC" line in the board state tells you the single topic to ask next; follow it.
 
 $steps
 START FROM WHAT THEY SAID:
-- Read the user's description and FIRST call `propose_tags` for everything it already implies, mapping their words to the closest option for each topic. Reasonable inferences are welcome — e.g. "a mobile app for a lemonade stand where users find and order" → propose_tags([{category:"industries", value:"Food & Beverage"}, {category:"platforms", value:"iOS"}, {category:"platforms", value:"Android"}, {category:"objectives", value:"Ordering"}, {category:"objectives", value:"Store locator"}]).
-- Then reflect back in one short sentence what you recorded.
+- Read the user's description and call `propose_tags` ONLY for what it clearly states or unmistakably requires (e.g. "a website" → platform Web; "log in" → Authentication). Do NOT pre-fill `objectives` or `features` with things the user did not say — those are for the user to choose when you ASK each topic, one at a time.
+- Then reflect back in one short sentence what you recorded, and ask the NEXT TOPIC.
 
 HOW TO ASK (for the topics still open):
 - Each remaining question goes through the `ask_question` tool — it shows the options as buttons the user taps, so calling it is how you get their answer.
 - Put any progress label inside the tool call, e.g. ask_question(question: "Objectives — anything else it should do?", options: ["…","…"], multi: true).
 
-FOR EACH REMAINING TOPIC (one the description did not already answer):
-1. Call the `ask_question` tool with the question + its options (multi-select unless it is a yes/no).
-2. Right after the user answers, call `propose_tags` to save their picks under that topic's `category`, then continue.
-3. Move to the next open topic — NEVER re-ask a topic that already has a tag.
+ONE TOPIC AT A TIME, IN ORDER:
+1. Call the `ask_question` tool for the CURRENT topic (the "NEXT TOPIC") with its options, and wait for the answer.
+2. Right after the user answers, call `propose_tags` to save EXACTLY their picks under that topic's `category` — record ONLY the options they selected. NEVER add options they left unpicked, and NEVER invent extra values beyond their selection (if you offered 12 and they picked 3, tag those 3 — not the other 9, and not new ones).
+3. Move to the NEXT topic in order — never re-ask a topic that already has a tag, and never skip ahead past an unanswered earlier topic. (The only thing you tag WITHOUT asking is the AI-derived stack — languages/frameworks.)
 
 RULES:
 - Base every tag on what the user picked or said. Use the `category` shown in each question's brackets.
@@ -270,6 +270,15 @@ How to work:
           if (stateSummary.isNotEmpty)
             {'role': 'system', 'content': stateSummary},
         ];
+        // Deterministic "ask THIS one topic next" instruction (interview only) so
+        // the host walks the topics in order instead of jumping ahead / batching.
+        // Recomputed each round so it advances as topics get tagged this turn.
+        if (phase == SetupPhase.interview) {
+          final next = await executor.nextTopicInstruction(flow.stages);
+          if (next.isNotEmpty) {
+            messages.add({'role': 'system', 'content': next});
+          }
+        }
         final tools = phase == SetupPhase.refine
             ? SetupTools.buildRefineToolSchemas()
             : SetupTools.buildToolSchemas(

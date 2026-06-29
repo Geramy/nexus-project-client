@@ -205,6 +205,11 @@ class ProjectOrchestrator {
   /// back (NOT penalized — a stall isn't its fault), the slot frees, and the pump
   /// moves on. Generous so a slow-but-working turn under load is never killed.
   static const Duration _turnIdleTimeout = Duration(minutes: 4);
+  /// Safety valve for the shared git lane: a single materialize/commit/merge
+  /// that hangs would wedge the lane (and so freeze EVERY task's git step) until
+  /// the app restarts. Cap how long any one lane op may hold the mutex so the
+  /// lane self-heals. Generous — a real merge under load finishes in seconds.
+  static const Duration _laneOpTimeout = Duration(minutes: 4);
   static const Duration _tickInterval = Duration(seconds: 30);
   static const Duration _buildPollInterval = Duration(seconds: 3);
   static const Duration _buildTimeout = Duration(minutes: 30);
@@ -308,6 +313,7 @@ class ProjectOrchestrator {
   /// agents than the plan allows. [workerSlots] is the worker pool (cap minus the
   /// reserved Coordinator slot).
   Future<void> _publishSlotStatus(int workerSlots) async {
+    if (_disposed) return;
     try {
       final tasks = await _db.getTasksForProject(projectId);
       final currentMilestone =
@@ -388,8 +394,18 @@ class ProjectOrchestrator {
         // in Review (a verify/merge that never resolves). The latter is what
         // left tasks frozen in Review holding a slot; now they go Blocked (red)
         // so they're visible and stop consuming the connection pool.
+        // A task that has PASSED review (verified / built) is NOT stalled — it
+        // just needs the deterministic merge, which must never be blocked by the
+        // retry budget (that's what wrongly Blocked a passed task at the finish
+        // line). Only block tasks still TRYING to pass: on the board (todo), or
+        // stuck getting a verdict / re-driving a conflict (submitted / verifying
+        // / merging).
         final stalled =
-            t.status == TaskStatus.todo || t.status == TaskStatus.review;
+            t.status == TaskStatus.todo ||
+            (t.status == TaskStatus.review &&
+                (t.executionStatus == TaskExecStatus.submitted ||
+                    t.executionStatus == TaskExecStatus.verifying ||
+                    t.executionStatus == TaskExecStatus.merging));
         if ((_attempts[t.task_pk] ?? 0) >= _maxAttemptsPerTask &&
             stalled &&
             !_active.contains(t.task_pk)) {
@@ -519,15 +535,18 @@ class ProjectOrchestrator {
     addPool(
       _Stage.merge,
       review
-          // `merging` is included for the same reason: an interrupted merge
-          // (after beginTaskMerge set `merging`) is re-driven instead of stuck.
           .where(
             (t) =>
-                (t.executionStatus == TaskExecStatus.built ||
-                    t.executionStatus == TaskExecStatus.merging ||
-                    (t.executionStatus == TaskExecStatus.verified &&
-                        !t.requiresBuild)) &&
-                live(t),
+                // A task that PASSED review (built, or verified without a build
+                // gate) ALWAYS gets its merge — the deterministic fast-path is
+                // quick, so it's never gated by the retry budget (gating it there
+                // stranded passed tasks at the finish line). Only the conflict
+                // re-drive (`merging`, an interrupted/escalated coordinator merge)
+                // stays budget-bounded so a stuck merge can't loop forever.
+                t.executionStatus == TaskExecStatus.built ||
+                (t.executionStatus == TaskExecStatus.verified &&
+                    !t.requiresBuild) ||
+                (t.executionStatus == TaskExecStatus.merging && live(t)),
           )
           .toList(),
     );
@@ -649,16 +668,32 @@ class ProjectOrchestrator {
     final preserveWork =
         branchExists && task.executionStatus == TaskExecStatus.queued;
     // Root the task branch / hydrate its tree, serialized through the lane (the
-    // shared object/ref DB is single-isolate).
-    await th.lane.run(() async {
-      if (preserveWork) {
-        await th.git.materializeInto(branch, th.tree);
-      } else {
-        await th.git.deleteBranch(branch);
-        await th.git.createBranchAt(branch, base: base);
-        await th.git.materializeInto(branch, th.tree);
-      }
-    });
+    // shared object/ref DB is single-isolate). This runs OUTSIDE the turn loop,
+    // so the SSE watchdog doesn't cover it — guard it with the lane timeout so a
+    // hung git step yields the task back instead of wedging the lane (and every
+    // other task's git op) until restart.
+    try {
+      await th.lane.run(() async {
+        if (preserveWork) {
+          await th.git.materializeInto(branch, th.tree);
+        } else {
+          await th.git.deleteBranch(branch);
+          await th.git.createBranchAt(branch, base: base);
+          await th.git.materializeInto(branch, th.tree);
+        }
+      }, timeout: _laneOpTimeout);
+    } catch (e) {
+      // A hang (TimeoutException) or transient git error here isn't the task's
+      // fault — release locks/tree and yield back so the pump moves on.
+      debugPrint(
+        '[Orchestrator p$projectId] task ${task.task_pk}: branch setup '
+        '${e is TimeoutException ? 'timed out' : 'failed'} ($e) — yielding back.',
+      );
+      _releaseLocks(task.task_pk);
+      await _releaseTaskTree(task.task_pk);
+      await _db.markTaskYieldedBack(task.task_pk);
+      return;
+    }
     if (preserveWork) {
       debugPrint(
         '[Orchestrator p$projectId] task ${task.task_pk}: resuming on its '
@@ -790,7 +825,9 @@ class ProjectOrchestrator {
             // ONLY when the user has toggled worker capture on (it's a lot of
             // data). Gated before the expensive jsonEncode so OFF costs nothing.
             onTrace: (messages) {
-              if (!ref.read(workerCaptureProvider)) return;
+              // Reading a provider after the orchestrator was disposed throws —
+              // skip the capture in that case.
+              if (_disposed || !ref.read(workerCaptureProvider)) return;
               unawaited(
                 _db.upsertTrainingTrace(
                   projectPk: projectId,
@@ -866,6 +903,7 @@ class ProjectOrchestrator {
                   message:
                       'wip: checkpoint before pausing for a held file (task #${task.task_pk})',
                 ),
+                timeout: _laneOpTimeout,
               );
             } catch (e) {
               debugPrint(
@@ -1069,8 +1107,27 @@ class ProjectOrchestrator {
     final th = await _resolveTaskHandles(task.task_pk);
     if (th == null) return;
     // Hydrate an isolated tree with the submitted task branch so the verifier
-    // reads the work without touching any other agent's tree.
-    await th.lane.run(() => th.git.materializeInto(branch, th.tree));
+    // reads the work without touching any other agent's tree. Guard the lane op
+    // (a hang here would wedge the lane for every task) — on timeout/error yield
+    // back so the task stays in Review and the pump retries it.
+    try {
+      await th.lane.run(
+        () => th.git.materializeInto(branch, th.tree),
+        timeout: _laneOpTimeout,
+      );
+    } catch (e) {
+      debugPrint(
+        '[Orchestrator p$projectId] task ${task.task_pk}: verify hydrate '
+        '${e is TimeoutException ? 'timed out' : 'failed'} ($e) — yielding back.',
+      );
+      await _releaseTaskTree(task.task_pk);
+      // A lane hang is infra, not the task's fault — un-count this Review attempt
+      // so a transient freeze can't push a good task toward Blocked. The task is
+      // still `submitted` (verifying isn't marked until below), so the verify
+      // pool re-picks it next pump on the now self-healed lane.
+      _undoAttempt(task.task_pk);
+      return;
+    }
 
     try {
       final prompts = await _loadPrompts();
@@ -1403,7 +1460,7 @@ class ProjectOrchestrator {
             branch,
             message: 'Merge task #${task.task_pk}: ${task.title}',
           );
-        });
+        }, timeout: _laneOpTimeout);
         if (result.outcome != MergeOutcome.conflicts) {
           await _db.approveTask(task.task_pk);
           debugPrint(
@@ -1414,6 +1471,16 @@ class ProjectOrchestrator {
         debugPrint(
           '[Orchestrator p$projectId] task ${task.task_pk}: merge conflicts on ${result.conflicts.length} file(s) — escalating.',
         );
+      } on TimeoutException catch (e) {
+        // The lane op hung (NOT a conflict) — the lane has now self-healed for
+        // the next waiter. Don't drag in a Coordinator to "resolve" a conflict
+        // that doesn't exist; un-count the attempt and leave the task built/
+        // verified so the merge pool retries it cleanly next pump.
+        debugPrint(
+          '[Orchestrator p$projectId] task ${task.task_pk}: auto-merge timed out ($e) — yielding back for retry.',
+        );
+        _undoAttempt(task.task_pk);
+        return;
       } catch (e) {
         debugPrint(
           '[Orchestrator p$projectId] task ${task.task_pk}: auto-merge errored ($e) — escalating.',
@@ -1566,12 +1633,18 @@ class ProjectOrchestrator {
       // Guarantee a deterministic CI gate exists so per-task review and the
       // end-of-project scan always have a fast, no-LLM build to run.
       await _ensureDefaultCiWorkflow(project);
-      // "Passes CI inspection": run the configured gate once against main (the
-      // task-configured workflow/dockerfile, else the default CI just written).
+      // The base CI gate is a BEST-EFFORT sanity check, NOT a blocker. A stub
+      // scaffold legitimately can't pass `flutter test` yet (nothing is built),
+      // and a slow/missing runner shouldn't strand the whole project before any
+      // task starts. So run it for the log, but ALWAYS open the gate — the
+      // end-of-project CI scan is the real test gate (the "test at the end"
+      // design). Templating only ends in `failed` when the SCAFFOLD itself
+      // couldn't be produced (handled above / in the catch).
       final ciOk = await _runBaseCiGate(project);
-      await _db.setProjectTemplateStatus(projectId, ciOk ? 'ready' : 'failed');
+      await _db.setProjectTemplateStatus(projectId, 'ready');
       debugPrint(
-        '[Orchestrator p$projectId] templating done → ${ciOk ? 'ready' : 'failed'}.',
+        '[Orchestrator p$projectId] templating done → ready'
+        '${ciOk ? '' : ' (base CI was red/unrunnable — proceeding; end-of-project scan is the real gate)'}.',
       );
     } catch (e, st) {
       debugPrint('[Orchestrator p$projectId] templating errored: $e\n$st');
@@ -1658,6 +1731,21 @@ class ProjectOrchestrator {
       await git.checkoutBranch('main');
     } catch (_) {
       // No main yet — the scaffolder's first commit creates it.
+    }
+    // RETRY-SAFE: if main already carries a real scaffold (e.g. this is a retry
+    // after a later step failed), don't re-run the agent — it would create no new
+    // commit (the files exist) and look like a failure. Reuse the scaffold and
+    // let the caller proceed (re-run the CI gate, etc.).
+    final existingHead = await git.headOid();
+    if (existingHead != null) {
+      final existingFiles =
+          (await ws.walk()).where((f) => !f.isDirectory).length;
+      if (existingFiles > 0) {
+        // ignore: avoid_print
+        print('[Templater] scaffold already present (head=$existingHead, '
+            '$existingFiles file(s)) — skipping re-scaffold.');
+        return true;
+      }
     }
     // A pre-existing main commit must NOT let the templater "succeed" without
     // doing work, so we only count it scaffolded once a NEW commit lands.
@@ -1861,7 +1949,7 @@ class ProjectOrchestrator {
         }
         await ws.writeString(_defaultCiPath, yaml);
         await git.commitAll(message: 'ci: add default $kind CI gate');
-      });
+      }, timeout: _laneOpTimeout);
       ref.read(workspaceRevisionProvider(projectId).notifier).state++;
       debugPrint(
         '[Orchestrator p$projectId] wrote default CI gate ($kind) at $_defaultCiPath.',
@@ -2062,6 +2150,7 @@ class ProjectOrchestrator {
   /// Any of them may be null if the workspace is unavailable.
   Future<({Workspace? ws, NxtprjGitEngine? git, BuildService? build})>
   _resolveWorkspaceHandles() async {
+    if (_disposed) return (ws: null, git: null, build: null);
     Workspace? ws;
     NxtprjGitEngine? git;
     BuildService? build;
@@ -2087,6 +2176,7 @@ class ProjectOrchestrator {
     })?
   >
   _resolveTaskHandles(int taskPk) async {
+    if (_disposed) return null;
     try {
       final tree = await ref.read(
         taskWorkspaceProvider((projectId: projectId, taskPk: taskPk)).future,
@@ -2107,10 +2197,21 @@ class ProjectOrchestrator {
   /// work lives on the task branch in the shared object DB, so the scratch tree
   /// is disposable.
   Future<void> _releaseTaskTree(int taskPk) async {
-    ref.invalidate(
-      taskWorkspaceProvider((projectId: projectId, taskPk: taskPk)),
-    );
-    await deleteTaskDisk(projectId, taskPk);
+    // The orchestrator provider can be DISPOSED (project unfocused / view
+    // unmounted) while this stage is still in flight; touching `ref` then throws
+    // "Cannot use Ref after it has been disposed". Skip the provider invalidate
+    // in that case — just clean the scratch disk (the committed work is safe on
+    // the task branch). Guarded + caught so cleanup can never crash a stage.
+    if (!_disposed) {
+      try {
+        ref.invalidate(
+          taskWorkspaceProvider((projectId: projectId, taskPk: taskPk)),
+        );
+      } catch (_) {}
+    }
+    try {
+      await deleteTaskDisk(projectId, taskPk);
+    } catch (_) {}
   }
 
   /// True if [e] is the plan's concurrent-connection cap (HTTP 429 /
@@ -2140,9 +2241,18 @@ class ProjectOrchestrator {
       e is LemonadeApiException &&
       (e.statusCode == 502 || e.statusCode == 503 || e.statusCode == 504);
 
-  /// Backpressure (429) OR a transient 5xx — neither should count as a failed
-  /// attempt against the task.
-  bool _isNotTaskFault(Object e) => _isConnCap(e) || _isTransientServer(e);
+  /// True if the shared HTTP client was closed out from under an in-flight
+  /// request — this happens when the project is unfocused mid-turn
+  /// (`resetInferenceConnections`). It is NOT the task's fault: the task yields
+  /// and the next pump re-dispatches it against a freshly-created client.
+  static bool _isClosedClient(Object e) =>
+      e is LemonadeApiException &&
+      e.message.toLowerCase().contains('client is already closed');
+
+  /// Backpressure (429), a transient 5xx, or a client closed by a project swap —
+  /// none should count as a failed attempt against the task.
+  bool _isNotTaskFault(Object e) =>
+      _isConnCap(e) || _isTransientServer(e) || _isClosedClient(e);
 
   /// Undo one attempt for [taskPk] (used when a turn failed for a reason that
   /// isn't the task's fault, so a flaky gateway can't drive it to Blocked).
@@ -2213,6 +2323,7 @@ class ProjectOrchestrator {
     AgentPersona persona, {
     int? taskPk,
   }) async {
+    if (_disposed) return null;
     final project = await _db.getProjectById(projectId);
     if (project == null) return null;
     final servers = await _db.getInferenceServersForClient(project.client_fk);

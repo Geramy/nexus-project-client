@@ -5,6 +5,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
@@ -129,6 +130,30 @@ class SetupChatController extends ChangeNotifier {
       final turns = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
       for (final t in turns) {
         final role = t['role']?.toString();
+        // Interview QUESTIONS restore as answered cards so the multiple-choice
+        // back-and-forth — not just the prose — comes back. (Legacy transcripts
+        // only had user/assistant turns; those still restore below.)
+        if (role == 'question') {
+          messages.add(
+            SetupMsg(
+              kind: SetupMsgKind.question,
+              text: t['content']?.toString() ?? '',
+              options: ((t['options'] as List?) ?? const [])
+                  .map((e) => e.toString())
+                  .toList(),
+              multi: t['multi'] == true,
+            )
+              // Restore is DISPLAY-ONLY (no live completer) — mark handled so the
+              // card never dangles as an unanswerable prompt; the user continues
+              // by typing, which starts a fresh turn.
+              ..answered = true
+              ..selected = ((t['selected'] as List?) ?? const [])
+                  .map((e) => e.toString())
+                  .toList()
+              ..freeText = t['freeText']?.toString(),
+          );
+          continue;
+        }
         final content = t['content']?.toString() ?? '';
         if (content.isEmpty) continue;
         messages.add(
@@ -142,6 +167,65 @@ class SetupChatController extends ChangeNotifier {
     } catch (_) {
       // Malformed/legacy transcript — ignore, start fresh.
     }
+  }
+
+  /// Serialize the visible conversation (user + assistant text and the inline
+  /// QUESTION cards with their options/answer) for persistence, so pausing the
+  /// interview and returning restores the full chat — not just the prose. The
+  /// transient notes (thinking / tool / system / image) are skipped: they're
+  /// regenerable and the huge scope_options dumps would bloat the record. The
+  /// shape stays `[{role, content, …}]` so the baseline's user-message reader and
+  /// the overview seed keep working.
+  String _serializeLog() {
+    final out = <Map<String, dynamic>>[];
+    for (final m in messages) {
+      switch (m.kind) {
+        case SetupMsgKind.user:
+          out.add({'role': 'user', 'content': m.text});
+        case SetupMsgKind.assistant:
+          out.add({'role': 'assistant', 'content': m.text});
+        case SetupMsgKind.question:
+          out.add({
+            'role': 'question',
+            'content': m.text,
+            'options': m.options,
+            'multi': m.multi,
+            'selected': m.selected,
+            if (m.freeText != null) 'freeText': m.freeText,
+          });
+        case SetupMsgKind.thinking:
+        case SetupMsgKind.tool:
+        case SetupMsgKind.system:
+        case SetupMsgKind.image:
+          break; // transient — not persisted
+      }
+    }
+    return jsonEncode(out);
+  }
+
+  /// Persist the current chat log to `Projects.setupTranscriptJson` (best-effort).
+  Future<void> _persistLog() async {
+    _persistTimer?.cancel();
+    try {
+      await _ref
+          .read(nexusDatabaseProvider)
+          .setProjectSetupTranscript(projectId, _serializeLog());
+    } catch (_) {}
+  }
+
+  Timer? _persistTimer;
+
+  /// DEBOUNCED persist: every write to the project row wakes every `watchProject`
+  /// listener across the app, so saving on each message/answer made the whole UI
+  /// churn and feel sluggish. Coalesce rapid changes into ONE write (the chat is
+  /// still safely captured a beat after activity settles; the turn-end save
+  /// flushes immediately).
+  void _schedulePersist() {
+    _persistTimer?.cancel();
+    _persistTimer = Timer(
+      const Duration(milliseconds: 900),
+      () => unawaited(_persistLog()),
+    );
   }
 
   Future<SetupSession?>? _sessionFuture;
@@ -205,6 +289,9 @@ class SetupChatController extends ChangeNotifier {
       projectName: 'Project',
       executor: executor,
       flow: flow,
+      // Respect the PM agent's thinking mode; the reasoning renders as a
+      // COLLAPSED, tappable tile (see onThinking below) so it's out of the way by
+      // default but viewable on demand — not the inline garbage it used to be.
       enableThinking: resolved.enableThinking,
       leanContext: _ref.read(leanContextProvider),
     );
@@ -295,6 +382,7 @@ class SetupChatController extends ChangeNotifier {
     );
     messages.add(msg);
     notifyListeners();
+    _schedulePersist();
     // In call mode, speak the question and let the next utterance answer it.
     // The on-screen picker stays live, so a tap still works (whichever first).
     if (_voice?.isActive ?? false) {
@@ -329,6 +417,7 @@ class SetupChatController extends ChangeNotifier {
     msg.answered = true;
     msg.selected = picks;
     notifyListeners();
+    _schedulePersist();
     if (!(msg.completer?.isCompleted ?? true)) {
       msg.completer!.complete(SetupAnswer.picks(picks));
     }
@@ -347,6 +436,7 @@ class SetupChatController extends ChangeNotifier {
     // Echo the typed answer as a normal user turn in the transcript.
     messages.add(SetupMsg(kind: SetupMsgKind.user, text: trimmed));
     notifyListeners();
+    _schedulePersist();
     if (!(msg.completer?.isCompleted ?? true)) {
       msg.completer!.complete(SetupAnswer.text(trimmed));
     }
@@ -355,6 +445,13 @@ class SetupChatController extends ChangeNotifier {
   void _append(SetupMsg msg) {
     messages.add(msg);
     notifyListeners();
+    // Persist conversation turns as they arrive (debounced) so a pause restores
+    // the full chat (transient notes are skipped by _serializeLog).
+    if (msg.kind == SetupMsgKind.user ||
+        msg.kind == SetupMsgKind.assistant ||
+        msg.kind == SetupMsgKind.question) {
+      _schedulePersist();
+    }
   }
 
   /// Stop the in-flight interview turn (the user tapped the thinking indicator
@@ -396,6 +493,9 @@ class SetupChatController extends ChangeNotifier {
                 ),
           );
         },
+        // Reasoning renders as a COLLAPSED, tappable tile (_ThinkingTile is
+        // collapsed by default) — hidden from view but openable if the user
+        // wants to see it. Not persisted (skipped by _serializeLog).
         onThinking: (r) =>
             _append(SetupMsg(kind: SetupMsgKind.thinking, text: r)),
         onAssistantText: (t) {
@@ -411,9 +511,7 @@ class SetupChatController extends ChangeNotifier {
         onToolResult: (name, result) =>
             _append(SetupMsg(kind: SetupMsgKind.system, text: '✓ $result')),
       );
-      await _ref
-          .read(nexusDatabaseProvider)
-          .setProjectSetupTranscript(projectId, session.toTranscriptJson());
+      await _persistLog();
       // The host may finalize on its own during a turn; surface the refine UI.
       if (!refining && session.phase == SetupPhase.refine) {
         _enterRefineUi();
@@ -526,6 +624,7 @@ class SetupChatController extends ChangeNotifier {
     try {
       await db.setProjectSetupStatus(projectId, 'complete');
       await db.setProjectExplorationStatus(projectId, 'active');
+      await _seedOverviewStory(db);
       _bumpWorkspace();
       _append(
         SetupMsg(
@@ -542,6 +641,51 @@ class SetupChatController extends ChangeNotifier {
     }
   }
 
+
+  /// Seed the root OVERVIEW story from the setup data the moment discovery
+  /// begins, so the overall product description is captured up front and never
+  /// lost. (Previously the first overview only landed once the coordinator's
+  /// FIRST question was answered, so it was dropped.) Idempotent — only when the
+  /// tree is empty, so resuming a project never duplicates it. Best-effort: a
+  /// failure must not block completing setup. The discovery interview nests the
+  /// rest of the tree under this root.
+  Future<void> _seedOverviewStory(NexusDatabase db) async {
+    try {
+      final existing = await db.getUserStoriesForProject(projectId);
+      if (existing.isNotEmpty) return;
+      final proj = await db.getProjectById(projectId);
+      final name = (proj?.name ?? '').trim();
+      var narrative = (proj?.projectSummaryMd ?? '').trim();
+      if (narrative.isEmpty) {
+        // Fall back to the user's own words from the setup transcript.
+        try {
+          final raw = proj?.setupTranscriptJson;
+          if (raw != null && raw.isNotEmpty) {
+            for (final t in (jsonDecode(raw) as List)) {
+              if (t is Map &&
+                  t['role'] == 'user' &&
+                  ((t['content'] as String?)?.trim().isNotEmpty ?? false)) {
+                narrative = (t['content'] as String).trim();
+                break;
+              }
+            }
+          }
+        } catch (_) {}
+      }
+      if (narrative.isEmpty) narrative = 'The overall product captured during setup.';
+      await db.createUserStory(
+        UserStoriesCompanion.insert(
+          project_fk: projectId,
+          title: name.isEmpty ? 'Overview' : name,
+          narrative: Value(narrative),
+          kind: const Value('epic'),
+          orderIndex: const Value(0),
+        ),
+      );
+    } catch (_) {
+      // Best-effort seed — never block completing setup on it.
+    }
+  }
 
   Future<void> skip() async {
     await _ref
@@ -661,6 +805,7 @@ class SetupChatController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _persistTimer?.cancel();
     _voiceStateSub?.cancel();
     _voice?.dispose();
     _voiceRecorder?.dispose();

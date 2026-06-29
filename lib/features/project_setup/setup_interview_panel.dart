@@ -555,30 +555,85 @@ class _ThinkingTileState extends State<_ThinkingTile> {
   }
 }
 
-class _NoteRow extends StatelessWidget {
+/// A tool-call / tool-result note in the interview transcript. Short notes
+/// ("Asking: …", "Proposing tags: …") render inline; LONG ones — chiefly the
+/// `scope_options` results, which are page-long lists of option definitions —
+/// collapse to a single preview line behind an expand toggle, so they stop
+/// burying the questions above. Collapsed by default.
+class _NoteRow extends StatefulWidget {
   const _NoteRow({required this.icon, required this.text});
   final IconData icon;
   final String text;
 
   @override
+  State<_NoteRow> createState() => _NoteRowState();
+}
+
+class _NoteRowState extends State<_NoteRow> {
+  bool _open = false;
+
+  /// Notes longer than this collapse to a one-line preview.
+  static const int _collapseOver = 140;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final style = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.outline,
+      fontStyle: FontStyle.italic,
+    );
+
+    // Short note — render inline as a simple row.
+    if (widget.text.length <= _collapseOver) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(widget.icon, size: 14, color: theme.colorScheme.outline),
+            const SizedBox(width: 6),
+            Expanded(child: Text(widget.text, style: style)),
+          ],
+        ),
+      );
+    }
+
+    // Long note — collapsible (one-line preview + expand toggle).
+    final preview = widget.text.replaceAll('\n', ' ');
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 14, color: theme.colorScheme.outline),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              text,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.outline,
-                fontStyle: FontStyle.italic,
-              ),
+          InkWell(
+            onTap: () => setState(() => _open = !_open),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(widget.icon, size: 14, color: theme.colorScheme.outline),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    preview,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: style,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  _open ? Icons.expand_less : Icons.expand_more,
+                  size: 16,
+                  color: theme.colorScheme.outline,
+                ),
+              ],
             ),
           ),
+          if (_open)
+            Padding(
+              padding: const EdgeInsets.only(left: 20, top: 2, right: 8),
+              child: SelectableText(widget.text, style: style),
+            ),
         ],
       ),
     );
