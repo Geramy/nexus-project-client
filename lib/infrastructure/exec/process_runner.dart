@@ -107,13 +107,21 @@ class ProcessRunner {
       });
     }
 
+    // Decode with allowMalformed: tools like `flutter analyze` print non-ASCII
+    // (e.g. the `•` bullet in each diagnostic) and, on Windows, in the console
+    // code page rather than UTF-8. A STRICT utf8 decoder THROWS on those bytes,
+    // which dropped every issue line and left only the ASCII "N issues found"
+    // summary — so the CI gate captured no actionable errors and the fix agent
+    // flailed blind. Tolerant decoding keeps every line (bad bytes → U+FFFD); the
+    // file:line:message text the fixer needs is ASCII and survives intact.
+    const decoder = Utf8Decoder(allowMalformed: true);
     final stdoutDone = proc.stdout
-        .transform(utf8.decoder)
+        .transform(decoder)
         .transform(const LineSplitter())
         .listen((l) => onLine?.call(ProcLine(ProcStream.stdout, l)))
         .asFuture<void>();
     final stderrDone = proc.stderr
-        .transform(utf8.decoder)
+        .transform(decoder)
         .transform(const LineSplitter())
         .listen((l) => onLine?.call(ProcLine(ProcStream.stderr, l)))
         .asFuture<void>();

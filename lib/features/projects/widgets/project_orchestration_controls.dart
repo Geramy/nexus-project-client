@@ -198,6 +198,7 @@ class _ProjectOrchestrationControlsState
                 Text(switch (state) {
                   'running' => 'Orchestration running',
                   'paused' => 'Orchestration paused',
+                  'completed' => 'Project complete — CI passing ✓',
                   _ => 'Orchestration stopped',
                 }, style: const TextStyle(fontWeight: FontWeight.w600)),
                 if (running) ...[
@@ -243,6 +244,7 @@ class _StateDot extends StatelessWidget {
     final color = switch (state) {
       'running' => Colors.green,
       'paused' => Colors.orange,
+      'completed' => Colors.blue,
       _ => Colors.grey,
     };
     return Container(

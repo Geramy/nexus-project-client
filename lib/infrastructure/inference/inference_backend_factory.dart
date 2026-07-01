@@ -35,9 +35,16 @@ http.Client _sharedClientFor(ui_model.InferenceServer server) {
       : '${uri.scheme}://${uri.host}:${uri.port}';
   return _sharedClients.putIfAbsent(key, () {
     final io = HttpClient()
-      // Drop idle keep-alive sockets quickly so they stop counting toward the
-      // router's connection cap once nothing is in flight.
-      ..idleTimeout = const Duration(seconds: 5);
+      // Release idle keep-alive sockets so they stop counting toward the router's
+      // connection cap once nothing is in flight — but NOT so aggressively that a
+      // streaming response with a normal gap is killed. `idleTimeout` is the max
+      // time a connection may have NO data flowing, including while waiting for a
+      // model's first token; at 5s a loaded 35B model's time-to-first-token (or an
+      // inter-token gap) tripped it → "Connection closed while receiving data",
+      // which broke whole turns. 30s clears the realistic streaming gaps; a truly
+      // dead stream is still caught by the orchestrator's 4-min turn watchdog, and
+      // project switches force-close via resetInferenceConnections().
+      ..idleTimeout = const Duration(seconds: 30);
     return IOClient(io);
   });
 }

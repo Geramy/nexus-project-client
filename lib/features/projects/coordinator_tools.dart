@@ -51,6 +51,22 @@ class CoordinatorTools {
     'build_docker_image',
   };
 
+  /// The end-of-project TESTING fix agent's toolset: file + git ONLY (the
+  /// scaffold set minus the CI/build tools). The phase re-runs CI itself, and the
+  /// generalist persona it runs as DENIES the CI tools — so offering them only
+  /// tempts the model into a blocked call. Keep it to read/edit/write + commit.
+  static final Set<String> _fixToolNames = _scaffoldToolNames
+      .where(
+        (n) => !const {
+          'scaffold_ci_workflow',
+          'run_workflow',
+          'list_ci_runs',
+          'get_ci_run',
+          'build_docker_image',
+        }.contains(n),
+      )
+      .toSet();
+
   static List<Map<String, dynamic>> buildToolSchemas({
     bool includePlanTools = false,
     bool includePlannerComplete = false,
@@ -58,17 +74,21 @@ class CoordinatorTools {
     bool includeStoryTools = false,
     bool discoveryOnly = false,
     bool scaffoldOnly = false,
+    bool fixOnly = false,
   }) {
     // The post-setup Exploration (discovery) session gets ONLY the user-story
     // tools — deliberately NO task/plan-write tools, so it can't be "eager" and
     // create work before the user presses "Generate tasks".
     if (discoveryOnly) return [..._storyToolSchemas];
-    // The Templater (base scaffold) stage gets ONLY file/git/CI tools.
-    if (scaffoldOnly) {
+    // The Templater (base scaffold) stage gets ONLY file/git/CI tools; the
+    // end-of-project Testing fix agent gets file/git ONLY (no CI — it can't run
+    // it and the phase re-runs CI itself).
+    if (scaffoldOnly || fixOnly) {
+      final allow = fixOnly ? _fixToolNames : _scaffoldToolNames;
       return buildToolSchemas().where((t) {
         final fn = t['function'];
         final name = fn is Map ? fn['name'] : null;
-        return name is String && _scaffoldToolNames.contains(name);
+        return name is String && allow.contains(name);
       }).toList();
     }
     return [

@@ -78,12 +78,16 @@ class DockerContainer {
   /// Human status line, e.g. `Up 3 minutes`.
   final String status;
 
+  /// When the container was created (from Docker's `Created` unix seconds).
+  final DateTime? created;
+
   const DockerContainer({
     required this.id,
     required this.names,
     required this.image,
     required this.state,
     required this.status,
+    this.created,
   });
 
   factory DockerContainer.fromJson(Map<String, dynamic> j) {
@@ -92,12 +96,16 @@ class DockerContainer {
             ?.map((e) => '$e'.replaceFirst('/', ''))
             .toList() ??
         const <String>[];
+    final createdRaw = j['Created'];
     return DockerContainer(
       id: '${j['Id'] ?? ''}',
       names: names,
       image: '${j['Image'] ?? ''}',
       state: '${j['State'] ?? ''}',
       status: '${j['Status'] ?? ''}',
+      created: createdRaw is int
+          ? DateTime.fromMillisecondsSinceEpoch(createdRaw * 1000)
+          : null,
     );
   }
 

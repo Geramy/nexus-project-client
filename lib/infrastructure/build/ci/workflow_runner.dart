@@ -2,6 +2,7 @@
 // Author: Geramy Loveless <support@nexus-projects.ai>
 // Licensed under the Sustainable Use License. See LICENSE.md.
 
+import 'dart:convert';
 import 'dart:io';
 
 import '../build_backend.dart';
@@ -183,11 +184,10 @@ class WorkflowRunner {
     CiCancelToken? cancel,
   }) async {
     final script = step.run!;
-    final (executable, args) = _shellFor(step.shell, script);
 
     log(
       CiLogEvent(
-        '\$ $executable ${args.join(' ')}',
+        '\$ $script',
         jobIndex: jobIndex,
         stepIndex: stepIndex,
         stream: CiLogStream.system,
@@ -198,6 +198,40 @@ class WorkflowRunner {
         ? null
         : Map<String, String>.from(step.env);
 
+    // Capture the step's output via a TEMP FILE rather than the live stdout/
+    // stderr pipes. This app runs as a Windows GUI process with NO attached
+    // console, and in that mode the child process's STDOUT pipe is dropped — only
+    // STDERR survives. Tools like `flutter analyze` print every diagnostic to
+    // STDOUT (only the "N issues found" summary to stderr), so pipe capture lost
+    // ALL the actual errors and the CI gate / end-of-project fixer saw nothing.
+    // Redirecting both streams to a file (done by the shell itself, which writes
+    // the file regardless of the parent's console state) and reading it back is
+    // immune to that. Read tolerant of malformed bytes so non-UTF-8 output never
+    // drops lines.
+    final tmpDir = await Directory.systemTemp.createTemp('nxs_ci_');
+    final logPath = '${tmpDir.path}${Platform.pathSeparator}step.log';
+    // Write the step into a SCRIPT FILE that redirects its own output to a file,
+    // then execute the file. Doing the redirect inline (`cmd /C "(...) > "path""`)
+    // breaks on cmd.exe's nested-quote handling ("filename syntax is incorrect").
+    // Inside a .cmd/.sh the quotes parse normally, and the file redirect reliably
+    // captures stdout — which a console-less GUI app otherwise drops from the
+    // child pipe.
+    final String executable;
+    final List<String> args;
+    if (Platform.isWindows) {
+      final sp = '${tmpDir.path}\\step.cmd';
+      await File(
+        sp,
+      ).writeAsString('@echo off\r\n(\r\n$script\r\n) 1> "$logPath" 2>&1\r\n');
+      executable = 'cmd';
+      args = ['/C', sp];
+    } else {
+      final sp = '${tmpDir.path}/step.sh';
+      await File(sp).writeAsString('{\n$script\n} > "$logPath" 2>&1\n');
+      executable = step.shell == 'sh' ? 'sh' : 'bash';
+      args = [sp];
+    }
+
     try {
       final result = await runner.run(
         executable,
@@ -207,6 +241,8 @@ class WorkflowRunner {
         includeParentEnvironment: true,
         cancel: cancel?.whenCancelled,
         onLine: (l) {
+          // With the file redirect the pipes are usually empty, but emit any
+          // stray bytes that do leak through so nothing is silently lost.
           log(
             CiLogEvent(
               l.text,
@@ -219,6 +255,38 @@ class WorkflowRunner {
           );
         },
       );
+
+      // Drain the captured output file into the log (the real diagnostics).
+      try {
+        final f = File(logPath);
+        final exists = await f.exists();
+        final text = exists
+            ? const Utf8Decoder(allowMalformed: true).convert(
+                await f.readAsBytes(),
+              )
+            : '';
+        if (exists && text.trim().isNotEmpty) {
+          // Emit the whole captured output as ONE event. The log sink fires an
+          // UNAWAITED read-modify-write append per event, so emitting line-by-line
+          // races dozens of concurrent appends that clobber each other (only the
+          // last survives — which is why just the "N issues found" summary was
+          // persisted). One append writes the entire block atomically.
+          log(
+            CiLogEvent(
+              text.trimRight(),
+              jobIndex: jobIndex,
+              stepIndex: stepIndex,
+              stream: CiLogStream.stdout,
+            ),
+          );
+        }
+      } catch (_) {
+        // Best-effort capture; never fail a step over log readback.
+      } finally {
+        try {
+          await tmpDir.delete(recursive: true);
+        } catch (_) {}
+      }
 
       final CiStatus status;
       if (result.cancelled) {
@@ -260,17 +328,4 @@ class WorkflowRunner {
     }
   }
 
-  /// Pick the shell executable + args for a `run:` script.
-  ///
-  /// `sh` uses `sh -c <script>`; everything else defaults to `bash -lc <script>`
-  /// on macOS/Linux. On Windows, fall back to `cmd /C`.
-  (String, List<String>) _shellFor(String? shell, String script) {
-    if (Platform.isWindows) {
-      return ('cmd', ['/C', script]);
-    }
-    if (shell == 'sh') {
-      return ('sh', ['-c', script]);
-    }
-    return ('bash', ['-lc', script]);
-  }
 }

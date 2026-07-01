@@ -34,7 +34,7 @@ import 'package:nexus_projects_client/features/projects/task_workflow.dart';
 /// (null = auto: first working). Auto-falls back if that worker leaves the feed.
 final focusedWorkerProvider = StateProvider.family<int?, int>((ref, _) => null);
 
-enum _AgentState { working, complete, stopped, templating, waiting }
+enum _AgentState { working, complete, stopped, templating, testing, waiting }
 
 class _AgentActivity {
   const _AgentActivity(this.taskPk, this.agent, this.task, this.state);
@@ -66,6 +66,7 @@ class AgentFeedIndicator extends ConsumerWidget {
   static const int _autoFocus = -1;
   static const int _openTasks = -2;
   static const int _templatingTaskPk = -99;
+  static const int _testingTaskPk = -98;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -151,9 +152,9 @@ class AgentFeedIndicator extends ConsumerWidget {
     // yellow "templating" chip so the top bar isn't misleadingly idle.
     final projects =
         ref.watch(projectsForClientProvider(clientId)).value ?? const [];
-    final templateStatus = projects
-        .firstWhereOrNull((p) => p.project_pk == projectId)
-        ?.templateStatus;
+    final project = projects.firstWhereOrNull((p) => p.project_pk == projectId);
+    final templateStatus = project?.templateStatus;
+    final orchState = project?.orchestrationState;
     // Templating FAILED (the base scaffold couldn't be produced) — surface a
     // persistent, tappable retry so the project isn't silently stuck. Tapping
     // resets the gate to 'pending'; the orchestrator re-attempts (it reuses the
@@ -202,6 +203,17 @@ class AgentFeedIndicator extends ConsumerWidget {
     }
     final isTemplating =
         templateStatus == 'pending' || templateStatus == 'scaffolding';
+    // The end-of-project TESTING phase (CI scan + focused fix loop) runs after
+    // all tasks are done. Surface it as a yellow "Testing" stage, like Templating.
+    // It applies both while ACTIVELY testing (orch.testing) AND whenever every
+    // task is Done but the project hasn't reached the green `completed` state — in
+    // that window CI hasn't actually passed, so the bar must NOT read as a green
+    // "complete"; the work isn't finished until CI is green (orchState=='completed').
+    final allTasksDone =
+        tasks.isNotEmpty && tasks.every((t) => t.status == TaskStatus.done);
+    final ciValidated = orchState == 'completed';
+    final awaitingTesting = allTasksDone && !ciValidated;
+    final isTesting = !isTemplating && (orch.testing || awaitingTesting);
 
     final rep = isTemplating
         ? const _AgentActivity(
@@ -209,6 +221,15 @@ class AgentFeedIndicator extends ConsumerWidget {
             'Templater',
             'Scaffolding base project…',
             _AgentState.templating,
+          )
+        : isTesting
+        ? _AgentActivity(
+            _testingTaskPk,
+            'Testing',
+            orch.testing
+                ? (orch.testingDetail ?? 'Running CI & fixing the project…')
+                : 'Final CI not passing yet — testing…',
+            _AgentState.testing,
           )
         : ((focused == null
                   ? null
@@ -218,6 +239,12 @@ class AgentFeedIndicator extends ConsumerWidget {
 
     final tooltip = isTemplating
         ? 'Templater — scaffolding the base project before tasks start'
+        : isTesting
+        ? (orch.testing
+              ? (orch.testingDetail ??
+                    'Testing — running CI on main and fixing the project to green')
+              : 'All tasks done, but the final CI gate is not green yet — the '
+                    'project is in the Testing phase until CI passes')
         : entries.isEmpty
         ? 'No agents have tasks yet'
         : entries
@@ -472,6 +499,7 @@ class AgentFeedIndicator extends ConsumerWidget {
     _AgentState.complete => 'complete',
     _AgentState.stopped => 'stopped',
     _AgentState.templating => 'templating',
+    _AgentState.testing => 'testing',
     _AgentState.waiting => 'waiting (file held)',
   };
 
@@ -481,6 +509,7 @@ class AgentFeedIndicator extends ConsumerWidget {
     _AgentState.complete => const Color(0xFF2E7D32),
     _AgentState.stopped => const Color(0xFFC62828),
     _AgentState.templating => const Color(0xFFF9A825), // yellow
+    _AgentState.testing => const Color(0xFFF9A825), // yellow
     _AgentState.waiting => const Color(0xFF1565C0), // blue
   };
 
@@ -512,6 +541,11 @@ class AgentFeedIndicator extends ConsumerWidget {
             : (bg: const Color(0xFFFFCDD2), fg: black);
       case _AgentState.templating:
         // Yellow — the Templater is scaffolding the base project before workers.
+        return dark
+            ? (bg: const Color(0xFFF9A825), fg: black)
+            : (bg: const Color(0xFFFFF59D), fg: black);
+      case _AgentState.testing:
+        // Yellow — the end-of-project Testing phase is running CI + fixing.
         return dark
             ? (bg: const Color(0xFFF9A825), fg: black)
             : (bg: const Color(0xFFFFF59D), fg: black);

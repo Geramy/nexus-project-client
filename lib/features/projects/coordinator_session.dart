@@ -129,6 +129,7 @@ class ProjectCoordinatorSession {
     this.fileClaim,
     this.discoveryMode = false,
     this.scaffoldMode = false,
+    this.fixMode = false,
   });
 
   /// Post-setup Exploration (discovery) mode: the model is offered ONLY the
@@ -141,6 +142,11 @@ class ProjectCoordinatorSession {
   /// — no image/story/task/plan/orchestration tools — so the scaffolder lays down
   /// a compiling base + stubs and nothing else. Framing via [systemPromptOverride].
   final bool scaffoldMode;
+
+  /// End-of-project Testing fix mode: like [scaffoldMode] but file/git ONLY (no
+  /// CI/build tools) — the Testing phase re-runs CI itself and the generalist
+  /// persona denies the CI tools, so the fixer just reads/edits/commits.
+  final bool fixMode;
 
   /// When true (default), only the core task/plan tools are offered each turn;
   /// the file/git/CI groups are pulled in on demand via `request_tools`, cutting
@@ -488,6 +494,8 @@ class ProjectCoordinatorSession {
     // the general project chat (PLANS/ exists from the start of planning).
     final allTools = discoveryMode
         ? CoordinatorTools.buildToolSchemas(discoveryOnly: true)
+        : fixMode
+        ? CoordinatorTools.buildToolSchemas(fixOnly: true)
         : scaffoldMode
         ? CoordinatorTools.buildToolSchemas(scaffoldOnly: true)
         : CoordinatorTools.buildToolSchemas(
@@ -535,7 +543,7 @@ class ProjectCoordinatorSession {
         // gating / request_tools — it must not reach task tools).
         // Discovery + scaffold modes use their curated tool list verbatim (no
         // lean gating / request_tools) so they stay inside their narrow job.
-        final tools = (discoveryMode || scaffoldMode)
+        final tools = (discoveryMode || scaffoldMode || fixMode)
             ? allTools
             : _effectiveTools(allTools);
         final sys = await _buildSystemPrompt(

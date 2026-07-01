@@ -8,7 +8,19 @@ import 'package:nexus_projects_client/infrastructure/lemonade/api/types/model_in
 /// used as the preferred fallback when a persona (or server) hasn't picked a
 /// collection, so voice/vision/image work out of the box. Decomposes into its
 /// component STT/TTS/LLM models via [resolvePersonaModels].
-const String kDefaultOmniCollection = 'LMX-Omni-52B-Halo';
+///
+/// IMPORTANT: this MUST match the collection `id` the Nexus Router advertises
+/// exactly (case + spacing). The router serves the collection id as-is, so a
+/// mismatch sends an unknown id. When the server renames a collection, update
+/// this AND add the old id to [kRetiredOmniCollections] so existing personas are
+/// migrated off it on next launch.
+const String kDefaultOmniCollection = 'NXS-PJX-Chat';
+
+/// Collection ids that were retired/renamed server-side. Any persona still
+/// pointing at one of these is migrated to its role-appropriate default on
+/// launch (see the seeder), so existing projects don't keep sending a model id
+/// the router no longer serves.
+const List<String> kRetiredOmniCollections = <String>['LMX-Omni-52B-Halo'];
 
 /// The Setup interview's default Omni collection — used by the **Project Manager**
 /// agent that hosts the setup screen.
@@ -89,7 +101,18 @@ String resolveAgentChatModel({
   if (routed) {
     // Send the configured id straight to the router (it serves the collection);
     // default to the product Omni collection. No decomposition.
-    return explicit ?? selected ?? kDefaultOmniCollection;
+    final want = explicit ?? selected ?? kDefaultOmniCollection;
+    // SELF-HEAL a server-side rename: if the live catalog is known and does NOT
+    // advertise `want` (e.g. the collection was renamed), fall back to a
+    // collection the server actually lists so inference can't be stranded by a
+    // stale id. Only when the catalog is populated — an empty list means "don't
+    // know", so we trust the configured id.
+    if (serverModels.isNotEmpty &&
+        !serverModels.any((m) => m.id == want)) {
+      final alt = defaultOmniCollectionId(serverModels);
+      if (alt != null) return alt;
+    }
+    return want;
   }
   final candidate = explicit ?? selected ?? firstChatModelId(serverModels);
   return resolveChatModelId(candidate, serverModels) ?? candidate ?? kDefaultOmniCollection;
@@ -212,6 +235,19 @@ String? defaultOmniCollectionId(List<ApiModelInfo> models) {
     if (m.id == kDefaultOmniCollection) return m.id;
   }
   return first?.id;
+}
+
+/// Best routed collection id from a PLAIN advertised-id list (the routed server's
+/// `availableModelsJson`, which has no collection/labels metadata). Used to
+/// self-heal when the configured collection isn't advertised (a server-side
+/// rename): prefer an id that looks like the chat/omni collection, and never
+/// guess a random raw model. Null when nothing suitable is advertised.
+String? pickRoutedCollectionId(List<String> advertised) {
+  for (final id in advertised) {
+    final l = id.toLowerCase();
+    if (l.contains('omni') || l.contains('chat')) return id;
+  }
+  return null;
 }
 
 bool _nameHasAny(String id, List<String> needles) {

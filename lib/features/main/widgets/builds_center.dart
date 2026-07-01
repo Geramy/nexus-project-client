@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nexus_projects_client/core/providers/app_shell_provider.dart';
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/features/builds/ci_run_tree.dart';
+import 'package:nexus_projects_client/features/docker/launch_project_dialog.dart';
 import 'package:nexus_projects_client/infrastructure/build/build_service_provider.dart';
 import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart'
     show CiRun, NexusDatabase, Project;
@@ -125,6 +126,7 @@ class BuildsCenter extends ConsumerWidget {
                     final pid = projectIds[i];
                     return _ProjectBuildsGroup(
                       db: db,
+                      projectPk: pid < 0 ? null : pid,
                       projectName: pid < 0
                           ? 'Unassigned'
                           : (projectNames[pid] ?? 'Project #$pid'),
@@ -210,12 +212,14 @@ class BuildsCenter extends ConsumerWidget {
 /// the list isn't clogged with CI runs.
 class _ProjectBuildsGroup extends StatelessWidget {
   final NexusDatabase db;
+  final int? projectPk;
   final String projectName;
   final List<CiRun> runs;
   final bool initiallyExpanded;
 
   const _ProjectBuildsGroup({
     required this.db,
+    required this.projectPk,
     required this.projectName,
     required this.runs,
     required this.initiallyExpanded,
@@ -228,14 +232,46 @@ class _ProjectBuildsGroup extends StatelessWidget {
     final tests =
         runs.where((r) => r.kind == 'workflow').toList(growable: false);
 
+    // Offer "Launch as Docker container" at the PROJECT level (not per-test) —
+    // we don't keep per-run snapshots, so it's the project's CURRENT code we'd
+    // launch. Only when the MOST RECENT run passed (the code is known-good).
+    final latestOk = runs.isNotEmpty && runs.first.status == 'success';
+    final canLaunch = projectPk != null && latestOk;
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: ExpansionTile(
         initiallyExpanded: initiallyExpanded,
         leading: const Icon(Icons.folder_outlined),
-        title: Text(
-          projectName,
-          style: const TextStyle(fontWeight: FontWeight.w600),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                projectName,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+            if (canLaunch)
+              Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  icon: const Icon(Icons.rocket_launch, size: 16),
+                  label: const Text('Launch'),
+                  onPressed: () => LaunchProjectDialog.show(
+                    context,
+                    projectPk: projectPk!,
+                    db: db,
+                  ),
+                ),
+              ),
+          ],
         ),
         subtitle: Text(
           '${builds.length} build${builds.length == 1 ? '' : 's'}'

@@ -2297,6 +2297,15 @@ class NexusDatabase extends _$NexusDatabase {
         .watch();
   }
 
+  /// The most recent CI run for a project (newest by createdAt), or null.
+  Future<CiRun?> getLatestCiRunForProject(int projectPk) => (select(ciRuns)
+        ..where((c) => c.project_fk.equals(projectPk))
+        ..orderBy([
+          (c) => OrderingTerm(expression: c.createdAt, mode: OrderingMode.desc),
+        ])
+        ..limit(1))
+      .getSingleOrNull();
+
   Future<CiRun?> getCiRun(int runPk) => (select(
     ciRuns,
   )..where((c) => c.ci_run_pk.equals(runPk))).getSingleOrNull();
@@ -2379,12 +2388,14 @@ class NexusDatabase extends _$NexusDatabase {
 
   /// Appends a chunk of captured output to a step's running log.
   Future<void> appendCiStepLog(int stepPk, String chunk) async {
-    final row = await (select(
-      ciSteps,
-    )..where((s) => s.ci_step_pk.equals(stepPk))).getSingleOrNull();
-    if (row == null) return;
-    await (update(ciSteps)..where((s) => s.ci_step_pk.equals(stepPk))).write(
-      CiStepsCompanion(logText: Value(row.logText + chunk)),
+    // ATOMIC append. The log sink fires this UNAWAITED, once per line, so a
+    // read-modify-write (`row.logText + chunk`) raced dozens of concurrent
+    // callers that each read the same value and clobbered one another — only the
+    // last line (the "N issues found" summary) survived, dropping every actual
+    // diagnostic. A single SQL `||` concatenation can't lose updates.
+    await customStatement(
+      'UPDATE ci_steps SET log_text = log_text || ? WHERE ci_step_pk = ?',
+      [chunk, stepPk],
     );
   }
 }

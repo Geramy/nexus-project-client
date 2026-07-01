@@ -14,7 +14,10 @@ import 'package:nexus_projects_client/features/agents/agent_role_policy.dart'
 import 'package:nexus_projects_client/features/agents/agent_tool_permissions.dart';
 import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart';
 import 'package:nexus_projects_client/infrastructure/lemonade/services/persona_model_resolver.dart'
-    show kDefaultOmniCollection, defaultOmniCollectionForTitle;
+    show
+        kDefaultOmniCollection,
+        kRetiredOmniCollections,
+        defaultOmniCollectionForTitle;
 
 /// Seeds initial data and guarantees the built-in "Default" client always
 /// exists. With integer auto-increment PKs we let the DB assign ids; on a fresh
@@ -70,6 +73,15 @@ Future<void> seedInitialData(NexusDatabase db) async {
     await _setManagerDefaultCollections(db);
   } catch (e) {
     debugPrint('Seeder: collection-default reconcile warning (non-fatal): $e');
+  }
+
+  // Migrate personas off any RETIRED/renamed Omni collection (e.g. a collection
+  // the server replaced) to their role-appropriate default, so existing projects
+  // stop sending a model id the router no longer serves.
+  try {
+    await _migrateRetiredOmniCollections(db);
+  } catch (e) {
+    debugPrint('Seeder: retired-collection migration warning (non-fatal): $e');
   }
 
   // Ensure the Coordinator can FINALIZE a merge (approve a clean one / reject a
@@ -165,6 +177,27 @@ Future<void> _setManagerDefaultCollections(NexusDatabase db) async {
     if (cur.isNotEmpty && cur != kDefaultOmniCollection) continue;
     await db.updateAgentPersona(
       p.toCompanion(true).copyWith(omniCollectionModel: Value(want)),
+    );
+  }
+}
+
+/// Migrate every persona still pointing at a RETIRED Omni collection (one the
+/// server renamed/removed — see [kRetiredOmniCollections]) to its role-appropriate
+/// default ([defaultOmniCollectionForTitle]). Idempotent: a persona already on a
+/// live collection is untouched. Without this, existing projects keep sending the
+/// old collection id and the router can't serve it.
+Future<void> _migrateRetiredOmniCollections(NexusDatabase db) async {
+  final retired = kRetiredOmniCollections.toSet();
+  if (retired.isEmpty) return;
+  for (final p in await db.getAllAgentPersonas()) {
+    final cur = p.omniCollectionModel?.trim() ?? '';
+    if (cur.isEmpty || !retired.contains(cur)) continue;
+    final want = defaultOmniCollectionForTitle(p.title);
+    await db.updateAgentPersona(
+      p.toCompanion(true).copyWith(omniCollectionModel: Value(want)),
+    );
+    debugPrint(
+      'Seeder: migrated persona "${p.name}" off retired collection "$cur" → "$want".',
     );
   }
 }

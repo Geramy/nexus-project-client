@@ -126,6 +126,24 @@ class DockerEngineClient {
         .toList();
   }
 
+  /// The host port Docker actually bound to [containerPort] (e.g. `'80'` or
+  /// `'80/tcp'`) for the running container [id]. Returns null if not published
+  /// yet. Use after [runContainer] with an auto-assigned host port to discover
+  /// the real port to open in a browser.
+  Future<String?> containerHostPort(String id, String containerPort) async {
+    final key = containerPort.contains('/') ? containerPort : '$containerPort/tcp';
+    final json = await _getJson('/containers/${Uri.encodeComponent(id)}/json');
+    if (json is! Map) return null;
+    final ports = (json['NetworkSettings'] as Map?)?['Ports'];
+    if (ports is! Map) return null;
+    final binding = ports[key];
+    if (binding is List && binding.isNotEmpty && binding.first is Map) {
+      final hp = (binding.first as Map)['HostPort'];
+      if (hp is String && hp.isNotEmpty) return hp;
+    }
+    return null;
+  }
+
   Future<void> removeImage(String idOrTag, {bool force = false}) async {
     await _delete('/images/${Uri.encodeComponent(idOrTag)}', {
       'force': force ? '1' : '0',

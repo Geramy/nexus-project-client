@@ -23,7 +23,10 @@ import 'package:nexus_projects_client/infrastructure/models/ui/inference_server.
 import 'package:nexus_projects_client/infrastructure/lemonade/api/types/model_info.dart'
     show ApiModelInfo;
 import 'package:nexus_projects_client/infrastructure/lemonade/services/persona_model_resolver.dart'
-    show resolveAgentChatModel, defaultOmniCollectionForTitle;
+    show
+        resolveAgentChatModel,
+        defaultOmniCollectionForTitle,
+        pickRoutedCollectionId;
 import 'package:nexus_projects_client/infrastructure/lemonade/api/exceptions.dart'
     show LemonadeApiException;
 import 'package:nexus_projects_client/features/ai_providers/providers/ai_servers_cache_provider.dart'
@@ -159,14 +162,42 @@ class ProjectOrchestrator {
   /// NOT counted as a failure or Blocked; it's pure backpressure).
   DateTime? _connBackoffUntil;
 
-  /// Guards the end-of-project CI scan so the (long) final build runs only once at
-  /// a time, even though it's triggered from every pump once the backlog drains.
-  bool _finalGateInFlight = false;
-
   /// Signature of the completed-task set the last GREEN end-of-project scan ran
   /// against, so a passed project isn't re-scanned every tick — only when the
   /// done set actually changes (a task reopened+refixed, or new work completed).
   String? _finalScanPassedSig;
+
+  // ── End-of-project TESTING phase ────────────────────────────────────────
+  // Once every task is done, the project enters a dedicated TESTING phase (like
+  // the yellow Templating stage — NOT a task): it repeatedly runs CI on main and,
+  // on RED, drives ONE focused fix agent (the strongest model, given ALL the
+  // failpoints at once) to fix the WHOLE project before the next CI run, then
+  // re-scans — looping until green. This replaces the old "reopen one task
+  // forever" thrash, which only used a single connection (one task = one conn).
+  //
+  // It keeps going as long as it's making PROGRESS (fewer failpoints each CI
+  // run); it only gives up after the failure count fails to drop for
+  // [_maxStagnantRounds] consecutive rounds — so the user doesn't have to step in
+  // while it's still improving. [_absoluteMaxTestingRounds] is a hard backstop
+  // against a pathological infinite loop.
+  static const int _maxStagnantRounds = 6;
+  static const int _absoluteMaxTestingRounds = 40;
+  /// Per-CI-run failpoint payload cap handed to the fixer — generous so e.g. 100
+  /// failures all go in ONE pass (fix them all, THEN re-run CI; don't test after
+  /// every point).
+  static const int _maxFixErrorChars = 24000;
+  /// The fix agent's per-invocation turn budget — high enough to work across many
+  /// files in a single pass before the next CI run.
+  static const int _maxFixAgentTurns = 24;
+  /// Running guard so only one TESTING phase runs at a time (mirrors _templating).
+  bool _testing = false;
+  /// Live phase flag + detail mirrored into [orchestratorStatusProvider] so the
+  /// top-bar shows a yellow "Testing" stage while it runs.
+  bool _testingActive = false;
+  String? _testingDetail;
+  /// Done-set signature the testing loop exhausted its rounds on, so we don't
+  /// immediately re-enter the (slow) loop for the same unchanged red state.
+  String? _testingExhaustedSig;
 
   // Per-task retry budget within ONE run before a task is surfaced as Blocked.
   // Kept generous so a couple of transient hiccups (a flaky worker turn, a
@@ -245,6 +276,41 @@ class ProjectOrchestrator {
       }
     });
     _ticker = Timer.periodic(_tickInterval, (_) => unawaited(_pump()));
+    // AUTO-START TESTING: if a project is loaded with every task already done but
+    // not yet CI-validated, the only work left is the end-of-project Testing gate
+    // — begin it automatically on load instead of making the user press Start.
+    unawaited(_maybeAutoStartTesting());
+  }
+
+  /// Auto-resume a loaded project straight into the TESTING phase when all its
+  /// tasks are done but CI hasn't passed (it isn't `completed`). The sole
+  /// remaining work is the CI/fix gate, so there's nothing for the user to
+  /// "Start" — flip it to `running` and let the normal pump drive testing.
+  Future<void> _maybeAutoStartTesting() async {
+    try {
+      if (_disposed) return;
+      final project = await _db.getProjectById(projectId);
+      if (project == null) return;
+      // Already finished, or already running (the pump handles it) — nothing to do.
+      final state = project.orchestrationState;
+      if (state == 'completed' || state == 'running') return;
+      // Only when the backlog is fully done AND we're on the last milestone — i.e.
+      // the project is genuinely at the end-of-project gate, not mid-build (we
+      // must NOT auto-resume an in-progress build the user deliberately paused).
+      if (project.currentMilestone < project.milestoneCount - 1) return;
+      final tasks = await _db.getTasksForProject(projectId);
+      if (tasks.isEmpty) return;
+      final allDone = tasks.every((t) => t.status == TaskStatus.done);
+      if (!allDone) return;
+      debugPrint(
+        '[Orchestrator p$projectId] all tasks done but CI not validated → '
+        'auto-starting the Testing phase on load.',
+      );
+      await _db.setProjectOrchestrationState(projectId, 'running');
+      if (!_disposed) unawaited(_pump());
+    } catch (e) {
+      debugPrint('[Orchestrator p$projectId] auto-start testing check failed: $e');
+    }
   }
 
   void dispose() {
@@ -266,6 +332,7 @@ class ProjectOrchestrator {
     if (_pumping || _disposed) return;
     _pumping = true;
     var advancedMilestone = false;
+    var spawnedFixWork = false;
     try {
       final project = await _db.getProjectById(projectId);
       if (project == null || project.orchestrationState != 'running') return;
@@ -297,14 +364,17 @@ class ProjectOrchestrator {
       }
       await _surfaceStalledTasks();
       advancedMilestone = await _maybeAdvanceMilestone(project, workerCap);
-      await _maybeFinalizeProject(project);
+      spawnedFixWork = await _maybeFinalizeProject(project);
       await _publishSlotStatus(workerCap);
     } finally {
       _pumping = false;
     }
-    // A just-opened milestone has fresh assignable work — re-pump now to fill the
-    // idle slots immediately instead of waiting for the next 30s tick.
-    if (advancedMilestone && !_disposed) unawaited(_pump());
+    // A just-opened milestone OR a freshly-spawned fix batch has new assignable
+    // work — re-pump now to fill the idle slots immediately instead of waiting
+    // for the next 30s tick.
+    if ((advancedMilestone || spawnedFixWork) && !_disposed) {
+      unawaited(_pump());
+    }
   }
 
   /// Publish a live snapshot of worker-slot usage so the UI can show WHY a slot is
@@ -359,6 +429,8 @@ class ProjectOrchestrator {
             workerSlots: workerSlots,
             activeStages: _active.length,
             waiting: waiting,
+            testing: _testingActive,
+            testingDetail: _testingDetail,
           );
     } catch (_) {
       // Status is best-effort telemetry; never let it disturb the pump.
@@ -1428,6 +1500,45 @@ class ProjectOrchestrator {
     return out;
   }
 
+  /// Like [_collectBuildErrors] but for the TESTING phase: returns EVERY failpoint
+  /// (not just a 4k tail) plus a COUNT, so the fixer can address them ALL in one
+  /// pass and the phase can track progress run-over-run. The count excludes the
+  /// "N issues found" summary line so it reflects actual failures.
+  Future<({String text, int count})> _collectCiFailpoints(int runPk) async {
+    final buf = StringBuffer();
+    final jobs = await _db.getCiJobsForRun(runPk);
+    for (final job in jobs) {
+      final steps = await _db.getCiStepsForJob(job.ci_job_pk);
+      for (final step in steps) {
+        final log = step.logText.trim();
+        if (log.isNotEmpty) buf.writeln(log);
+      }
+    }
+    final lines = buf.toString().split('\n');
+    final hits = lines
+        .where((l) => _diagLineRe.hasMatch(l))
+        .map((l) => l.trimRight())
+        .where((l) => l.isNotEmpty)
+        .toList();
+    // Count = diagnostic lines that are real failpoints (drop the "N issues
+    // found" / summary lines so the progress metric tracks failures, not totals).
+    final summaryRe = RegExp(r'\bissues?\s+found\b', caseSensitive: false);
+    final failpoints = hits.where((l) => !summaryRe.hasMatch(l)).toList();
+    final picked = failpoints.isNotEmpty
+        ? failpoints
+        : (hits.isNotEmpty
+              ? hits
+              : lines.reversed.take(60).toList().reversed.toList());
+    var text = picked.join('\n').trim();
+    // Generous cap (keep the HEAD so the first failures, usually the root cause,
+    // survive) — big enough that ~100 failpoints all reach the fixer in one pass.
+    if (text.length > _maxFixErrorChars) {
+      text =
+          '${text.substring(0, _maxFixErrorChars)}\n… (additional failures truncated — fix these first, the rest surface on the next run)';
+    }
+    return (text: text, count: picked.length);
+  }
+
   // ── Merge stage ───────────────────────────────────────────────────────
 
   /// Spawn an ephemeral Coordinator to integrate a merge-ready [task]: merge
@@ -2062,75 +2173,360 @@ class ProjectOrchestrator {
   ///     retry budget eventually surfaces it as Blocked if it can't be made green.
   /// Per-task review already gated each branch, but the post-merge integration on
   /// main can still surface issues no single branch saw — this is that net.
-  Future<void> _maybeFinalizeProject(Project project) async {
-    if (_finalGateInFlight) return;
+  /// Returns true when it spawned new assignable work (a fix-phase batch), so
+  /// the caller can re-pump immediately to fill idle slots instead of waiting
+  /// for the next tick.
+  Future<bool> _maybeFinalizeProject(Project project) async {
+    if (_testing) return false; // a TESTING phase is already running
     // Only when the project is on its last milestone batch.
-    if (project.currentMilestone < project.milestoneCount - 1) return;
+    if (project.currentMilestone < project.milestoneCount - 1) return false;
     final tasks = await _db.getTasksForProject(projectId);
-    if (tasks.isEmpty) return;
+    if (tasks.isEmpty) return false;
     final open = tasks.where(
       (t) =>
           t.status == TaskStatus.todo ||
           t.status == TaskStatus.inProgress ||
           t.status == TaskStatus.review,
     );
-    if (open.isNotEmpty) return; // work still in flight — not finished yet
+    if (open.isNotEmpty) return false; // work still in flight — not finished yet
     final done = tasks.where((t) => t.status == TaskStatus.done).toList();
-    if (done.isEmpty) return; // nothing actually built (all blocked) — leave it
-    // Skip if this exact completed state already passed a scan (don't re-run the
-    // full CI every tick on a finished project).
+    if (done.isEmpty) return false; // nothing built (all blocked) — leave it
+    // Skip if this exact completed state already passed (or exhausted) testing —
+    // don't re-run the slow loop every tick on a settled project.
     final sig = '${done.length}:'
         '${done.map((t) => t.updatedAt.millisecondsSinceEpoch).fold<int>(0, (a, b) => a > b ? a : b)}';
-    if (sig == _finalScanPassedSig) return;
+    if (sig == _finalScanPassedSig || sig == _testingExhaustedSig) return false;
     // Need a gate to scan against; if none exists there's nothing to enforce.
     final ws = (await _resolveWorkspaceHandles()).ws;
-    if (ws == null || !await ws.exists(_defaultCiPath)) return;
+    if (ws == null || !await ws.exists(_defaultCiPath)) return false;
 
-    _finalGateInFlight = true;
+    // Enter the dedicated TESTING phase (mirrors the templating gate): run it in
+    // the background and re-pump when it lands, so the pump never blocks on the
+    // slow scan/fix loop.
+    _testing = true;
+    unawaited(
+      _runTestingPhase(project, sig).whenComplete(() {
+        _testing = false;
+        if (!_disposed) unawaited(_pump());
+      }),
+    );
+    return false;
+  }
+
+  /// The TESTING phase: a dedicated end-of-project stage (like the yellow
+  /// Templating stage — NOT a task) that repeatedly runs CI on main and, on RED,
+  /// drives ONE focused fix agent (the strongest model, handed ALL the failpoints
+  /// at once) to fix the whole project before the next run, then re-scans. Keeps
+  /// looping while it's making PROGRESS (fewer failpoints each run); only gives up
+  /// after the count fails to drop for [_maxStagnantRounds] rounds. [doneSig] is
+  /// the completed-task signature this run gates, so a pass/exhaust suppresses
+  /// re-running for the same settled state.
+  Future<void> _runTestingPhase(Project project, String doneSig) async {
+    _setTesting(true, 'Testing — running CI on main…');
     try {
-      debugPrint(
-        '[Orchestrator p$projectId] backlog drained → running end-of-project CI scan on main.',
-      );
-      final outcome = await _runWorkflowGate(
-        clientPk: project.client_fk,
-        branch: 'main',
-        workflowPath: _defaultCiPath,
-        triggeredBy: 'final-scan',
-      );
-      if (outcome == null) return; // infra down — retry on a later pump
-      if (outcome.passed) {
-        _finalScanPassedSig = sig; // don't re-scan this finished state every tick
+      var stagnant = 0;
+      int? prevCount;
+      for (var round = 1; round <= _absoluteMaxTestingRounds; round++) {
+        if (!await _stillRunning()) return;
+        _setTesting(true, 'Testing — CI run $round…');
         debugPrint(
-          '[Orchestrator p$projectId] end-of-project CI scan GREEN — project complete.',
+          '[Orchestrator p$projectId] TESTING phase round $round: running CI on '
+          'main (this can take a few minutes)…',
         );
-        return;
-      }
-      // Red: reopen the most-recently-finished task with the diagnostics so a
-      // worker fixes it before the project is counted complete.
-      done.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-      final target = done.first;
-      try {
-        final errors = outcome.runPk != null
-            ? await _collectBuildErrors(outcome.runPk!)
-            : '';
-        final detail = [
-          'The end-of-project CI scan failed on main. Fix EVERY error below '
-              'before the project can be completed.',
-          if (errors.isNotEmpty) errors,
-        ].join('\n\n').trim();
-        if (detail.isNotEmpty) {
-          await _db.attachTaskBuildFailure(target.task_pk, detail);
+        final outcome = await _runWorkflowGate(
+          clientPk: project.client_fk,
+          branch: 'main',
+          workflowPath: _defaultCiPath,
+          triggeredBy: 'testing',
+        );
+        if (outcome == null) return; // infra down — retry on a later pump/tick
+        if (outcome.passed) {
+          _finalScanPassedSig = doneSig; // settled green — stop re-scanning
+          // SUCCESS CONDITION: mark the project complete so the pump stops and
+          // the UI shows a clear "complete" state (not just a silent idle).
+          await _db.setProjectOrchestrationState(projectId, 'completed');
+          debugPrint(
+            '[Orchestrator p$projectId] TESTING phase GREEN at round $round — '
+            'project COMPLETE (CI passing on main).',
+          );
+          return;
         }
-      } catch (_) {}
-      await _db.reopenTask(target.task_pk);
-      _attempts.remove(target.task_pk); // fresh budget for the fix
+
+        // Count this run's failpoints and gather ALL of them for the fixer (so it
+        // fixes everything in one pass, not one error per CI run).
+        final diag = outcome.runPk != null
+            ? await _collectCiFailpoints(outcome.runPk!)
+            : (text: '', count: 0);
+        debugPrint(
+          '[Orchestrator p$projectId] TESTING phase round $round: CI RED — '
+          '${diag.count} failpoint(s)'
+          '${prevCount != null ? ' (was $prevCount)' : ''}.',
+        );
+
+        // PROGRESS GATE: keep going as long as the failure count is dropping;
+        // only count a NON-improving run toward the stagnation budget. This lets
+        // it grind a big backlog (e.g. 100 → 60 → 25 → 0) without the user
+        // stepping in, while still bailing if it's truly stuck.
+        if (prevCount != null && diag.count >= prevCount) {
+          stagnant++;
+          if (stagnant >= _maxStagnantRounds) {
+            _testingExhaustedSig = doneSig;
+            debugPrint(
+              '[Orchestrator p$projectId] TESTING phase: failpoint count hasn\'t '
+              'dropped for $_maxStagnantRounds rounds (${diag.count} left) — '
+              'leaving for manual review.',
+            );
+            return;
+          }
+        } else {
+          stagnant = 0; // made progress this round
+        }
+        prevCount = diag.count;
+
+        _setTesting(
+          true,
+          'Testing — fixing ${diag.count} error(s) (round $round)…',
+        );
+        await _runFixAgent(project, diag.text, round);
+      }
+      // Hard backstop hit (should be rare — progress gate usually ends it first).
+      _testingExhaustedSig = doneSig;
       debugPrint(
-        '[Orchestrator p$projectId] end-of-project CI scan RED — reopened task '
-        '${target.task_pk} to fix before completion.',
+        '[Orchestrator p$projectId] TESTING phase hit the $_absoluteMaxTestingRounds-'
+        'round backstop — CI still RED; leaving for manual review.',
       );
+    } catch (e, st) {
+      debugPrint('[Orchestrator p$projectId] TESTING phase errored: $e\n$st');
     } finally {
-      _finalGateInFlight = false;
+      _setTesting(false, null);
     }
+  }
+
+  /// Drive ONE focused fix agent over the WHOLE project on main: hand it ALL the
+  /// CI errors at once and let it read/edit/commit across as many files as it
+  /// needs (this is the "fix the project", not "fix one file" job). Uses the
+  /// generalist's code-tuned model — on the routed plan that's the full default
+  /// Omni collection (the strongest available). Returns true if it landed a new
+  /// commit (so the next CI scan sees the changes).
+  Future<bool> _runFixAgent(Project project, String errors, int round) async {
+    final persona = await _findPersonaForRole(AgentRole.sdeGeneralist) ??
+        await _findPersonaForRole(AgentRole.coordinator);
+    if (persona == null) return false;
+    final resolved = await _resolveBackend(persona);
+    if (resolved == null) return false;
+    final handles = await _resolveWorkspaceHandles();
+    final ws = handles.ws;
+    final git = handles.git;
+    if (ws == null || git == null) return false;
+
+    // The fixer works directly on main (the backlog is drained, so nothing else
+    // is touching it). Its commits are what the next CI scan reads.
+    try {
+      await git.checkoutBranch('main');
+    } catch (_) {}
+    final beforeHead = await git.headOid();
+
+    final baseline = await buildProjectBaseline(_db, projectId);
+    final fileTree = (await ws.walk())
+        .where((f) => !f.isDirectory)
+        .map((f) => f.path)
+        .toList()
+      ..sort();
+    final filesBlock = fileTree.take(300).join('\n');
+    final systemPrompt = StringBuffer()
+      ..writeln(baseline)
+      ..writeln()
+      ..writeln(defaultSystemPrompt(AgentRole.sdeGeneralist))
+      ..writeln()
+      ..writeln(
+        'You are the end-of-project TESTING & FIX agent. The whole project is '
+        'built and merged onto main, but its CI build/tests are FAILING. Your '
+        'job is to make the WHOLE project compile cleanly and its tests pass.',
+      )
+      ..writeln(
+        '- Work across AS MANY FILES AS NEEDED — read the failing files, find '
+        'the real cause, and fix it. Do not stop at the first error; resolve the '
+        'whole class of failures.',
+      )
+      ..writeln(
+        '- Keep changes minimal and correct; do not delete features or stub '
+        'things out to silence errors. Preserve existing behavior.',
+      )
+      ..writeln(
+        '- ALWAYS read_file the EXACT current contents of a file immediately '
+        'before you edit_file it, and copy old_text VERBATIM (exact whitespace, '
+        'indentation, and punctuation) from what you just read — never from '
+        'memory or a guess. If old_text "was not found", re-read the file and try '
+        'again; for a large or uncertain change, use write_file to replace the '
+        'whole file instead of edit_file.',
+      )
+      ..writeln(
+        '- When you have applied your fixes, git_commit them (an uncommitted '
+        'change does not count — CI only sees committed work). Do NOT run the CI '
+        'workflow yourself; the phase re-runs it for you after you commit.',
+      )
+      ..writeln()
+      ..writeln('=== CURRENT PROJECT FILES (on main) ===')
+      ..writeln(filesBlock);
+
+    final sessionPk = await _db.getOrCreateAgentChatSession(
+      projectId,
+      persona.agent_pk,
+      persona.name,
+    );
+    final session = ProjectCoordinatorSession(
+      client: resolved.client,
+      projectId: projectId,
+      projectName: persona.name,
+      db: _db,
+      model: resolved.model,
+      chatSessionPk: sessionPk,
+      permissions: AgentToolPermissions.fromConfigJson(persona.configJson),
+      confirmAsk: (_, _) async => true,
+      agentName: persona.name,
+      workspace: ws,
+      git: git,
+      buildService: handles.build,
+      leanTools: false,
+      // File/git ONLY toolset — read/edit/write/commit. No CI/build tools (the
+      // phase re-runs CI itself, and the generalist persona denies them, so
+      // offering them only tempts a blocked call), no task/story/image tools.
+      fixMode: true,
+      systemPromptOverride: systemPrompt.toString(),
+      enableThinking: resolveEnableThinking(
+        agent: personaThinkingMode(persona.configJson, personaName: persona.name),
+        task: ThinkingMode.off,
+      ),
+    );
+
+    var kickoff =
+        'CI on main is RED with the failpoints below. Fix EVERY one of them in '
+        'this session — work through the WHOLE list, committing as you finish each '
+        'file or group. Do NOT stop after the first fix and do NOT ask to re-run '
+        'CI: keep going until every listed failure is addressed (the phase re-runs '
+        'CI for you afterwards). Failpoints:\n\n$errors';
+    // Work through ALL failpoints in one pass — do NOT bail on the first commit
+    // (that's what made it "test after every point"). But the "done" signal is the
+    // agent no longer making CHANGES, not no longer using tools: it'll keep
+    // reading/searching the whole tree forever otherwise (observed: 1 failpoint
+    // fixed by turn 3, still re-scanning at turn 10+). So break once it goes a
+    // couple of turns EDITING nothing — then the outer loop re-runs CI once and
+    // tackles whatever's left (including any NEW failures the fixes uncovered).
+    var idleTurns = 0;
+    var noEditTurns = 0;
+    for (var turn = 0; turn < _maxFixAgentTurns && !_disposed; turn++) {
+      if (!await _stillRunning()) break;
+      var sawTool = false;
+      var sawEdit = false;
+      var transient = false;
+      try {
+        await for (final _ in session.runTurn(
+          kickoff,
+          maxToolRounds: 8,
+          onToolResult: (r) {
+            sawTool = true;
+            // Did this tool result actually CHANGE the tree (edit/write/commit/
+            // move/create)? Reads & searches don't count toward "still working".
+            final rl = r.toLowerCase();
+            if (rl.contains('edited "') ||
+                rl.contains('committed all changes') ||
+                rl.contains('committed your working tree') ||
+                rl.contains('updated file') ||
+                rl.contains('created file') ||
+                rl.contains('wrote ') ||
+                rl.contains('moved ')) {
+              sawEdit = true;
+            }
+            debugPrint(
+              '[Orchestrator p$projectId] testing-fix r$round turn $turn tool → '
+              '${r.length > 140 ? '${r.substring(0, 140)}…' : r}',
+            );
+          },
+        ).timeout(_turnIdleTimeout)) {}
+      } catch (e) {
+        if (e is! TimeoutException && !_isNotTaskFault(e)) {
+          debugPrint(
+            '[Orchestrator p$projectId] testing-fix turn $turn failed: $e',
+          );
+          break;
+        }
+        transient = true; // stall / backpressure / transient — retry the turn.
+      }
+      // Keep the Code & Git view fresh as commits land.
+      if (!_disposed) {
+        ref.read(workspaceRevisionProvider(projectId).notifier).state++;
+      }
+      if (transient) continue; // don't count a failed turn as "idle/done"
+      if (!sawTool) {
+        // A turn with no tool calls = the agent thinks it's finished. Give it one
+        // nudge in case it stopped early, then accept it's done.
+        idleTurns++;
+        if (idleTurns >= 2) break;
+        kickoff =
+            'If EVERY failpoint above is now fixed AND committed, reply "done". '
+            'Otherwise keep fixing the remaining ones and git_commit them.';
+        continue;
+      }
+      idleTurns = 0;
+      if (sawEdit) {
+        noEditTurns = 0;
+        kickoff =
+            'Keep going — fix the REMAINING failpoints from the list and '
+            'git_commit them. Re-read each file right before editing. When ALL '
+            'are fixed and committed, reply "done".';
+      } else {
+        // Tools ran but nothing changed (just reading/searching). After a couple
+        // of these the agent is done fixing — stop and let CI re-run rather than
+        // re-scanning the whole project.
+        noEditTurns++;
+        if (noEditTurns >= 2) break;
+        kickoff =
+            'You made no code change that turn. If every failpoint is fixed and '
+            'committed, reply "done" and stop. If something still needs fixing, '
+            'edit it and git_commit now — do NOT keep re-reading files.';
+      }
+    }
+    // SAFETY COMMIT: the next CI run only sees COMMITTED work, so if the agent
+    // left edits uncommitted, commit them now rather than losing the pass.
+    try {
+      if (!(await git.status()).isClean) {
+        final lane = ref.read(gitLaneProvider(projectId));
+        await lane.run(
+          () => git.commitAll(
+            message: 'testing: auto-commit pending fixes (round $round)',
+          ),
+          timeout: _laneOpTimeout,
+        );
+        debugPrint(
+          '[Orchestrator p$projectId] testing-fix r$round: safety-committed '
+          'leftover uncommitted fixes.',
+        );
+      }
+    } catch (e) {
+      debugPrint(
+        '[Orchestrator p$projectId] testing-fix r$round: safety commit skipped ($e).',
+      );
+    }
+    return (await git.headOid()) != beforeHead;
+  }
+
+  /// Update the live TESTING phase flag/detail and mirror it into
+  /// [orchestratorStatusProvider] so the top-bar shows a yellow "Testing" stage.
+  void _setTesting(bool active, String? detail) {
+    _testingActive = active;
+    _testingDetail = detail;
+    if (_disposed) return;
+    try {
+      final cur = ref.read(orchestratorStatusProvider(projectId));
+      ref.read(orchestratorStatusProvider(projectId).notifier).state =
+          OrchestratorStatus(
+            workerSlots: cur.workerSlots,
+            activeStages: cur.activeStages,
+            waiting: cur.waiting,
+            testing: active,
+            testingDetail: detail,
+          );
+    } catch (_) {}
   }
 
   // ── Shared helpers ──────────────────────────────────────────────────────
@@ -2249,10 +2645,34 @@ class ProjectOrchestrator {
       e is LemonadeApiException &&
       e.message.toLowerCase().contains('client is already closed');
 
-  /// Backpressure (429), a transient 5xx, or a client closed by a project swap —
-  /// none should count as a failed attempt against the task.
+  /// True if the stream dropped mid-flight — a transient network/connection error
+  /// (the router or the socket closed the connection while data was streaming),
+  /// NOT a model/task fault. Seen as `http.ClientException: Connection closed
+  /// while receiving data` and similar. Without classifying these as transient, a
+  /// single flaky stream killed the whole turn (the Testing fix agent broke on
+  /// turn 0 and never retried → no progress → the phase gave up). These should be
+  /// retried, exactly like a 502/429.
+  static bool _isTransientNetwork(Object e) {
+    final s = e.toString().toLowerCase();
+    return s.contains('connection closed') ||
+        s.contains('connection reset') ||
+        s.contains('connection terminated') ||
+        s.contains('connection refused') ||
+        s.contains('connection attempt failed') ||
+        s.contains('software caused connection abort') ||
+        s.contains('socketexception') ||
+        s.contains('handshakeexception') ||
+        s.contains('httpexception') ||
+        (s.contains('clientexception') && s.contains('connection'));
+  }
+
+  /// Backpressure (429), a transient 5xx, a client closed by a project swap, or a
+  /// dropped stream — none should count as a failed attempt against the task.
   bool _isNotTaskFault(Object e) =>
-      _isConnCap(e) || _isTransientServer(e) || _isClosedClient(e);
+      _isConnCap(e) ||
+      _isTransientServer(e) ||
+      _isClosedClient(e) ||
+      _isTransientNetwork(e);
 
   /// Undo one attempt for [taskPk] (used when a turn failed for a reason that
   /// isn't the task's fault, so a flaky gateway can't drive it to Blocked).
@@ -2349,9 +2769,9 @@ class ProjectOrchestrator {
         : const <String>[];
 
     // Address the model the SAME way the app/coordinator does. The routed Nexus
-    // Router serves the Omni COLLECTION id (LMX-Omni-52B-Halo) DIRECTLY, so send
-    // it as-is and default to it — never decompose to a raw sub-model, which fell
-    // through to a small 4B (e.g. Qwen3.5-4B): the wrong model, and (when the
+    // Router serves the Omni COLLECTION id (kDefaultOmniCollection) DIRECTLY, so
+    // send it as-is and default to it — never decompose to a raw sub-model, which
+    // fell through to a small 4B (e.g. Qwen3.5-4B): the wrong model, and (when the
     // routed server had no selected model) the null→'default-coordinator'
     // sentinel that 503'd and Blocked every task. Local servers (which 500 on a
     // bare collection) decompose from their live model list instead.
@@ -2377,7 +2797,7 @@ class ProjectOrchestrator {
         ? personaCollection.trim()
         : defaultOmniCollectionForTitle(persona.title);
     final pLlm = persona.llmModel;
-    final model = routed
+    var model = routed
         ? ((pLlm != null && pLlm.trim().isNotEmpty) ? pLlm.trim() : collection)
         : resolveAgentChatModel(
             routed: false,
@@ -2385,6 +2805,19 @@ class ProjectOrchestrator {
             selectedModel: chosen.selectedModel,
             serverModels: serverModels,
           );
+    // SELF-HEAL a server-side collection rename: if the routed server advertises a
+    // model list and it doesn't include the id we're about to send, swap to an
+    // advertised chat/omni collection so a stale persona id can't strand the run.
+    if (routed && models.isNotEmpty && !models.contains(model)) {
+      final alt = pickRoutedCollectionId(models);
+      if (alt != null && alt != model) {
+        debugPrint(
+          '[Orchestrator p$projectId] routed collection "$model" not advertised '
+          '— self-healing to "$alt".',
+        );
+        model = alt;
+      }
+    }
     debugPrint(
       '[Orchestrator p$projectId] worker "${persona.name}" → server '
       '"${chosen.name}" model=$model (routed=$routed, collection=$collection)',
@@ -2440,10 +2873,19 @@ class OrchestratorStatus {
   /// the agent assigned to it, and a human-readable reason.
   final List<OrchestratorWait> waiting;
 
+  /// True while the end-of-project TESTING phase is running (CI scan + focused
+  /// fix loop). The UI shows a yellow "Testing" stage, like Templating.
+  final bool testing;
+
+  /// Human-readable detail for the TESTING phase (e.g. "CI run 2 of 6…").
+  final String? testingDetail;
+
   const OrchestratorStatus({
     this.workerSlots = 0,
     this.activeStages = 0,
     this.waiting = const [],
+    this.testing = false,
+    this.testingDetail,
   });
 }
 
