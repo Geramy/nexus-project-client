@@ -116,10 +116,16 @@ class AiServersCacheNotifier extends StateNotifier<AiServersCache> {
   }
 
   /// Fetch models for a single server by ID.
-  Future<void> refreshServer(int serverId) async {
-    final currentClientId = ref.read(currentClientIdProvider);
+  Future<void> refreshServer(int serverId) =>
+      refreshServerForClient(serverId, ref.read(currentClientIdProvider));
+
+  /// Refresh a server's model catalog looked up under a SPECIFIC client — used by
+  /// the orchestrator, which runs for a project whose client may differ from the
+  /// UI's currently-focused client (`currentClientIdProvider`). Using the wrong
+  /// client threw "Server N not found" and hot-looped the dispatch.
+  Future<void> refreshServerForClient(int serverId, int clientId) async {
     final db = ref.read(nexusDatabaseProvider);
-    final servers = await db.getInferenceServersForClient(currentClientId);
+    final servers = await db.getInferenceServersForClient(clientId);
     final server = servers.firstWhere(
       (s) => s.server_pk == serverId,
       orElse: () => throw StateError('Server $serverId not found'),

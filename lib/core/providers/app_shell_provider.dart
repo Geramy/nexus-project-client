@@ -61,7 +61,7 @@ class CurrentClientId extends _$CurrentClientId {
 @riverpod
 class CurrentProjectId extends _$CurrentProjectId {
   @override
-  int build() => 1; // Seeded sample project (project_pk 1)
+  int build() => 1; // Default seeded project on startup (project_pk 1)
 
   void selectProject(int projectId) {
     final previous = state;

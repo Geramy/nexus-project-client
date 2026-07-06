@@ -99,18 +99,21 @@ String resolveAgentChatModel({
   final explicit = _emptyToNull(personaModel);
   final selected = _emptyToNull(selectedModel);
   if (routed) {
-    // Send the configured id straight to the router (it serves the collection);
-    // default to the product Omni collection. No decomposition.
     final want = explicit ?? selected ?? kDefaultOmniCollection;
-    // SELF-HEAL a server-side rename: if the live catalog is known and does NOT
-    // advertise `want` (e.g. the collection was renamed), fall back to a
-    // collection the server actually lists so inference can't be stranded by a
-    // stale id. Only when the catalog is populated — an empty list means "don't
-    // know", so we trust the configured id.
-    if (serverModels.isNotEmpty &&
-        !serverModels.any((m) => m.id == want)) {
+    // Resolve BY TAGS when the live catalog is known: a collection is decomposed
+    // to its chat/LLM component (see [resolveRoutedChatModel]) so we never send
+    // the bare collection id and let the router land on a non-chat component like
+    // the embedding model (→ HTTP 400 "does not support chat completion"). When
+    // the catalog doesn't advertise `want` at all (e.g. a renamed collection),
+    // self-heal to an advertised collection's chat model. Empty catalog = "don't
+    // know" → trust the configured id as-is.
+    if (serverModels.isNotEmpty) {
+      final direct = resolveRoutedChatModel(want, serverModels);
+      if (direct != null) return direct;
       final alt = defaultOmniCollectionId(serverModels);
-      if (alt != null) return alt;
+      if (alt != null) {
+        return resolveRoutedChatModel(alt, serverModels) ?? alt;
+      }
     }
     return want;
   }
@@ -270,6 +273,74 @@ bool _isVision(ApiModelInfo m) =>
 bool _isImageGen(ApiModelInfo m) =>
     m.hasAnyLabel(const ['image', 'generation']) ||
     _nameHasAny(m.id, const ['dall', 'stable-diffusion', 'sdxl', 'flux']);
+bool _isEmbedding(ApiModelInfo m) =>
+    m.hasAnyLabel(const ['embedding', 'embeddings', 'embed']) ||
+    _nameHasAny(m.id, const ['embedding', 'embed', 'bge', 'gte']);
+
+/// The chat/LLM component of a collection, chosen BY TAGS. A collection bundles
+/// several models (chat, embedding, tts, stt, image); the chat endpoint only
+/// accepts the LLM one — sending the bare collection id lets the router pick a
+/// component itself, and it can land on the EMBEDDING model → HTTP 400 "this
+/// model does not support chat completion". So resolve it here: prefer a
+/// component positively tagged chat/text/llm, else the first that ISN'T
+/// audio/tts/image/embedding (a vision-capable multimodal LLM is a valid chat
+/// model). Returns null if [collection] isn't a decomposable collection.
+String? chatComponentIdOf(ApiModelInfo collection, List<ApiModelInfo> catalog) {
+  if (!collection.isCollection) return null;
+  final comps = <ApiModelInfo>[
+    for (final cid in collection.compositeModels)
+      catalog.firstWhere(
+        (m) => m.id == cid,
+        orElse: () => ApiModelInfo(id: cid, labels: const []),
+      ),
+  ];
+  // EXCLUDE the non-chat modalities FIRST — embedding especially. (The embedding
+  // model is often listed first AND carries generic labels like 'text', so a
+  // label-first pick wrongly chose it → HTTP 400 "does not support chat".) A
+  // vision-capable multimodal LLM is still a valid chat model, so vision is kept.
+  final chatCandidates = comps
+      .where(
+        (c) =>
+            !_isAudio(c) &&
+            !_isTts(c) &&
+            !_isImageGen(c) &&
+            !_isEmbedding(c),
+      )
+      .toList();
+  final pool = chatCandidates.isNotEmpty ? chatCandidates : comps;
+  // Among the survivors, prefer one explicitly tagged as a chat/LLM (NOT the
+  // broad 'text', which embeddings also use).
+  for (final c in pool) {
+    if (c.hasAnyLabel(const [
+      'chat',
+      'llm',
+      'text-generation',
+      'chat-completion',
+      'instruct',
+      'reasoning',
+    ])) {
+      return c.id;
+    }
+  }
+  return pool.isNotEmpty ? pool.first.id : null;
+}
+
+/// Resolve an id to send to the CHAT endpoint on a ROUTED server. If [idOrModel]
+/// is a collection in [catalog], returns its chat/LLM component (see
+/// [chatComponentIdOf]); if it's already a concrete model, returns it; null when
+/// the id isn't in the catalog at all (caller decides the fallback).
+String? resolveRoutedChatModel(String idOrModel, List<ApiModelInfo> catalog) {
+  ApiModelInfo? entry;
+  for (final m in catalog) {
+    if (m.id == idOrModel) {
+      entry = m;
+      break;
+    }
+  }
+  if (entry == null) return null;
+  if (!entry.isCollection) return idOrModel;
+  return chatComponentIdOf(entry, catalog) ?? idOrModel;
+}
 
 /// Resolve the per-modality model ids for a persona.
 ///
@@ -334,22 +405,17 @@ ResolvedModalityModels resolvePersonaModels({
     components.add(found ?? ApiModelInfo(id: cid, labels: const []));
   }
 
-  String? stt, tts, vision, imageGen, llm;
+  String? stt, tts, vision, imageGen;
   for (final c in components) {
     if (stt == null && _isAudio(c)) stt = c.id;
     if (tts == null && _isTts(c)) tts = c.id;
     if (vision == null && _isVision(c)) vision = c.id;
     if (imageGen == null && _isImageGen(c)) imageGen = c.id;
   }
-  // LLM/chat = first component that isn't a pure audio/tts/image-gen model
-  // (vision-capable multimodal LLMs are valid chat models).
-  for (final c in components) {
-    if (!_isAudio(c) && !_isTts(c) && !_isImageGen(c)) {
-      llm = c.id;
-      break;
-    }
-  }
-  llm ??= components.first.id;
+  // LLM/chat = the chat-tagged component, else the first that isn't audio/tts/
+  // image/EMBEDDING (excluding embedding is what was missing — the embedding
+  // model was being picked as "chat" and 400'ing). Vision-multimodal LLMs count.
+  final llm = chatComponentIdOf(collection, models) ?? components.first.id;
 
   return ResolvedModalityModels(
     llm: llm,

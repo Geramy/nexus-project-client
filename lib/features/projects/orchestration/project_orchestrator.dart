@@ -12,6 +12,10 @@ import 'package:flutter_riverpod/legacy.dart' show StateProvider;
 import 'package:nexus_projects_client/core/providers/database_provider.dart';
 import 'package:nexus_projects_client/core/providers/worker_capture_provider.dart';
 import 'package:nexus_projects_client/infrastructure/database/nexus_database.dart';
+import 'package:nexus_projects_client/infrastructure/build/web_preview.dart'
+    show captureProjectWebScreenshot;
+import 'package:nexus_projects_client/infrastructure/inference/inference_backend.dart'
+    show ChatContentDelta, ChatStreamEvent;
 import 'package:nexus_projects_client/infrastructure/inference/inference_backend_factory.dart'
     show backendForServer;
 import 'package:nexus_projects_client/infrastructure/inference/routed_server.dart'
@@ -23,10 +27,7 @@ import 'package:nexus_projects_client/infrastructure/models/ui/inference_server.
 import 'package:nexus_projects_client/infrastructure/lemonade/api/types/model_info.dart'
     show ApiModelInfo;
 import 'package:nexus_projects_client/infrastructure/lemonade/services/persona_model_resolver.dart'
-    show
-        resolveAgentChatModel,
-        defaultOmniCollectionForTitle,
-        pickRoutedCollectionId;
+    show resolveAgentChatModel, defaultOmniCollectionForTitle;
 import 'package:nexus_projects_client/infrastructure/lemonade/api/exceptions.dart'
     show LemonadeApiException;
 import 'package:nexus_projects_client/features/ai_providers/providers/ai_servers_cache_provider.dart'
@@ -47,6 +48,7 @@ import 'package:nexus_projects_client/features/agents/agent_tool_permissions.dar
 import 'package:nexus_projects_client/features/projects/coordinator_session.dart';
 import 'package:nexus_projects_client/features/projects/orchestration/orchestrator_prompts.dart';
 import 'package:nexus_projects_client/features/projects/orchestration/milestone_planner.dart';
+import 'package:nexus_projects_client/features/projects/orchestration/finalize_progress.dart';
 import 'package:nexus_projects_client/features/projects/project_baseline.dart'
     show buildProjectBaseline;
 import 'package:nexus_projects_client/features/projects/project_working_hours.dart';
@@ -182,6 +184,16 @@ class ProjectOrchestrator {
   // against a pathological infinite loop.
   static const int _maxStagnantRounds = 6;
   static const int _absoluteMaxTestingRounds = 40;
+  /// After CI goes green, the FINAL PASS verifies every requested feature is
+  /// actually implemented + hooked up. It keeps fixing+re-verifying as long as
+  /// it's making PROGRESS (fewer unwired features each pass); it only gives up
+  /// after the count fails to drop for [_maxFinalPassStagnant] consecutive
+  /// passes (same philosophy as the CI loop — not a hard cap). The outer
+  /// [_absoluteMaxTestingRounds] is the ultimate backstop.
+  static const int _maxFinalPassStagnant = 3;
+  /// Turn budget for the read-only Final Pass reviewer that traces each feature's
+  /// wiring in the code before giving its verdict.
+  static const int _maxFinalPassTurns = 14;
   /// Per-CI-run failpoint payload cap handed to the fixer — generous so e.g. 100
   /// failures all go in ONE pass (fix them all, THEN re-run CI; don't test after
   /// every point).
@@ -198,6 +210,13 @@ class ProjectOrchestrator {
   /// Done-set signature the testing loop exhausted its rounds on, so we don't
   /// immediately re-enter the (slow) loop for the same unchanged red state.
   String? _testingExhaustedSig;
+  /// FINAL PASS progress tracking (persists across testing re-entries): the
+  /// unwired-feature count from the previous pass, and how many consecutive
+  /// passes have FAILED to reduce it. Keep going while the count drops; give up
+  /// after [_maxFinalPassStagnant] non-improving passes. Reset on a clean pass /
+  /// new run.
+  int? _finalPassPrevCount;
+  int _finalPassStagnant = 0;
 
   // Per-task retry budget within ONE run before a task is surfaced as Blocked.
   // Kept generous so a couple of transient hiccups (a flaky worker turn, a
@@ -236,6 +255,13 @@ class ProjectOrchestrator {
   /// back (NOT penalized — a stall isn't its fault), the slot frees, and the pump
   /// moves on. Generous so a slow-but-working turn under load is never killed.
   static const Duration _turnIdleTimeout = Duration(minutes: 4);
+  /// HARD wall-clock cap on a single agent turn, regardless of stream activity.
+  /// The idle timeout resets on every SSE event, so a backend that dribbles
+  /// keep-alives (or streams token-by-token forever on a bloated context) can
+  /// hang a turn indefinitely without ever tripping the idle guard — observed as
+  /// the Final Pass fixer freezing for 18min. This cap fires no matter what, so a
+  /// stuck turn is aborted (and retried) instead of wedging the phase.
+  static const Duration _turnWallClock = Duration(minutes: 8);
   /// Safety valve for the shared git lane: a single materialize/commit/merge
   /// that hangs would wedge the lane (and so freeze EVERY task's git step) until
   /// the app restarts. Cap how long any one lane op may hold the mutex so the
@@ -265,6 +291,8 @@ class ProjectOrchestrator {
     // always actually starts the work instead of immediately re-surfacing a
     // board full of Blocked tasks the user can't get past.
     _attempts.clear();
+    _finalPassPrevCount = null;
+    _finalPassStagnant = 0;
     unawaited(_db.requeueBlockedTasks(projectId));
     // Reconcile tasks orphaned mid-run by a crash/quit: our in-memory _active
     // set is empty on a fresh start, so any task still marked `running` in the
@@ -1102,6 +1130,12 @@ class ProjectOrchestrator {
     } catch (_) {}
     b.write('''
 
+=== FULLY IMPLEMENT — NO STUBS (your task is REJECTED if you leave any) ===
+- Actually BUILD the feature. Do NOT leave TODO/FIXME comments, empty method bodies, `UnimplementedError`, "not yet implemented", "coming soon", or placeholder screens/text. Compiling is NOT the bar — a working, wired-up feature is.
+- WIRE IT IN where the task tells you to. If your feature must be reachable (a screen/route/button/menu/tab/handler), make the SMALLEST ADDITIVE change to the shared router / navigation / entrypoint so the app actually reaches it. An orphaned widget or service that nothing routes to or calls is an INCOMPLETE task — link it exactly where the task says it belongs. (Adding your one entry to a shared glue file is explicitly allowed — see STAY IN YOUR LANE.)
+- If your task depends on something not built yet, implement your own part FULLY against the expected interface; never stub your own feature to "make it compile".
+- Review verifies this and sends the task back if it finds any placeholder markers, so finish it for real the first time.
+
 === STAY IN YOUR LANE (this is how parallel tasks avoid overwriting each other) ===
 - Implement ONLY your task's artifact (the file[s] this task is about). Other tasks own the other files — do NOT rewrite or "improve" a file that belongs to another task.
 - When you need something another task provides (a model, service, route, widget), reference it by its expected name/path as an interface — do NOT recreate it. If it isn't there yet, code against the interface the task map implies; integration happens at merge.
@@ -1123,6 +1157,187 @@ class ProjectOrchestrator {
 
   // ── Verify stage ──────────────────────────────────────────────────────
 
+  /// Markers that betray an UNIMPLEMENTED feature left behind as a placeholder —
+  /// the "compiles but does nothing" trap. Deterministic, no LLM.
+  static final RegExp _stubMarkerRe = RegExp(
+    r'\bTODO\b|\bFIXME\b|UnimplementedError|UnsupportedError'
+    r'|not[\s_-]*yet[\s_-]*implemented|not[\s_-]*implemented'
+    r'|implement[\s_-]*(this|me|later)\b',
+    caseSensitive: false,
+  );
+
+  bool _isScannableCodeFile(String path) {
+    final p = path.toLowerCase();
+    const exts = [
+      '.dart', '.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.rs',
+      '.cs', '.java', '.kt', '.kts', '.swift', '.cpp', '.cc', '.c', '.h',
+      '.hpp', '.rb', '.php', '.vue', '.svelte',
+    ];
+    return exts.any(p.endsWith);
+  }
+
+  /// Scan the files THIS task touched (its footprint) for unimplemented-stub
+  /// markers, by OWNERSHIP: if the task CHANGED/added a file it owns that file, so
+  /// ANY stub in it is rejected (leaving your own deliverable a "— TODO" is the
+  /// hole this closes); if the task did NOT change a footprint file (pure
+  /// reference — e.g. a UI task reading a stubbed service another task owns), only
+  /// a NEW stub line counts, so the templater's pre-existing scaffold stubs are
+  /// exempt (the #484 false-positive fix). Returns `file:line` findings (capped);
+  /// empty when clean, no footprint, or can't diff. NOTE: this is the EARLY,
+  /// footprint-based catch; `_scanTreeForStubs` is the restart-proof whole-tree
+  /// backstop that guarantees no stub survives to completion.
+  Future<String> _scanTaskForStubs(Task task, String branch) async {
+    final footprint = _taskFootprint[task.task_pk];
+    if (footprint == null || footprint.isEmpty) return '';
+    final code = footprint.where(_isScannableCodeFile).toList();
+    if (code.isEmpty) return '';
+    final base = await _integrationTargetBranch(task);
+    final th = await _resolveTaskHandles(task.task_pk);
+    if (th == null) return '';
+    try {
+      // This task's version of each touched file.
+      await th.lane.run(
+        () => th.git.materializeInto(branch, th.tree),
+        timeout: _laneOpTimeout,
+      );
+      final taskLines = <String, List<String>>{};
+      for (final f in code) {
+        final path = f.startsWith('/') ? f : '/$f';
+        if (await th.tree.exists(path)) {
+          taskLines[f] = (await th.tree.readString(path)).split('\n');
+        }
+      }
+      if (taskLines.isEmpty) return '';
+
+      // The BASE version of each footprint file, kept RAW so we can tell whether
+      // this task actually CHANGED the file. Two cases:
+      //  • task did NOT change the file (pure reference — e.g. a UI task reading a
+      //    stubbed service another task owns): its pre-existing scaffold stubs are
+      //    NOT this task's fault → exempt them (this is the #484 false-positive fix).
+      //  • task DID change the file (or ADDED it): the task now OWNS that file's
+      //    content, so ANY stub in it is this task's to answer for — even one
+      //    inherited from the templater scaffold. Leaving your OWN deliverable a
+      //    "— TODO" placeholder is the exact hole this closes (#488/#489).
+      // Base unreadable → treat as changed (strict: flag all).
+      final baseRaw = <String, String?>{};
+      try {
+        await th.lane.run(
+          () => th.git.materializeInto(base, th.tree),
+          timeout: _laneOpTimeout,
+        );
+        for (final f in taskLines.keys) {
+          final path = f.startsWith('/') ? f : '/$f';
+          baseRaw[f] = await th.tree.exists(path)
+              ? await th.tree.readString(path)
+              : ''; // absent in base = the task ADDED it → owns it
+        }
+      } catch (_) {
+        // base unavailable — leave baseRaw entries null (flag all task stubs).
+      }
+
+      final findings = <String>[];
+      for (final entry in taskLines.entries) {
+        final f = entry.key;
+        final lines = entry.value;
+        final baseContent = baseRaw[f];
+        final taskChangedFile =
+            baseContent == null || lines.join('\n') != baseContent;
+        final preExisting = (baseContent ?? '')
+            .split('\n')
+            .map((l) => l.trim())
+            .toSet();
+        for (var i = 0; i < lines.length; i++) {
+          final line = lines[i];
+          // Flag a stub if the task owns this file (changed/added it), OR — for an
+          // unchanged referenced file — only if the stub line is NEW vs base.
+          if (_stubMarkerRe.hasMatch(line) &&
+              (taskChangedFile || !preExisting.contains(line.trim()))) {
+            findings.add(
+              '$f:${i + 1}: ${line.trim().length > 120 ? '${line.trim().substring(0, 120)}…' : line.trim()}',
+            );
+            if (findings.length >= 40) break;
+          }
+        }
+        if (findings.length >= 40) break;
+      }
+      return findings.join('\n');
+    } catch (e) {
+      debugPrint(
+        '[Orchestrator p$projectId] task ${task.task_pk}: stub scan skipped ($e).',
+      );
+      return '';
+    } finally {
+      await _releaseTaskTree(task.task_pk);
+    }
+  }
+
+  /// Generated / vendored code that legitimately carries markers and is NOT a
+  /// hand-written feature — excluded from the hard-no stub scan so a codegen
+  /// artifact never blocks completion.
+  bool _isGeneratedOrVendor(String path) {
+    final p = path.toLowerCase();
+    const genSuffixes = [
+      '.g.dart', '.freezed.dart', '.mocks.dart', '.gr.dart', '.config.dart',
+      '.pb.dart', '.pbjson.dart', '.pbenum.dart', '.gen.dart', '.d.ts',
+    ];
+    if (genSuffixes.any(p.endsWith)) return true;
+    const vendorDirs = [
+      '/generated/', '/.dart_tool/', '/build/', '/node_modules/', '/vendor/',
+      '/.git/', '/ios/pods/', '/android/.gradle/',
+    ];
+    return vendorDirs.any(p.contains);
+  }
+
+  /// WHOLE-TREE stub scan (the "hard no" backstop): read EVERY hand-written code
+  /// file on `main` and flag any [_stubMarkerRe] hit. Unlike the per-task diff
+  /// scan this has NO base-branch exemption and NO reliance on the in-memory
+  /// footprint — so it catches a task that left its OWN scaffolded deliverable a
+  /// stub, and survives an orchestrator restart (which clears the footprint). The
+  /// project must NOT reach `completed` while this returns anything. Returns
+  /// `file:line` findings (capped) grouped so the fixer can implement them, '' when
+  /// the whole tree is clean.
+  Future<String> _scanTreeForStubs() async {
+    final handles = await _resolveWorkspaceHandles();
+    final ws = handles.ws;
+    final git = handles.git;
+    if (ws == null || git == null) return '';
+    try {
+      await git.checkoutBranch('main');
+    } catch (_) {}
+    final findings = <String>[];
+    try {
+      final files = (await ws.walk())
+          .where(
+            (f) =>
+                !f.isDirectory &&
+                _isScannableCodeFile(f.path) &&
+                !_isGeneratedOrVendor(f.path),
+          )
+          .toList();
+      for (final f in files) {
+        final List<String> lines;
+        try {
+          lines = (await ws.readString(f.path)).split('\n');
+        } catch (_) {
+          continue;
+        }
+        for (var i = 0; i < lines.length; i++) {
+          if (_stubMarkerRe.hasMatch(lines[i])) {
+            final t = lines[i].trim();
+            findings.add(
+              '${f.path}:${i + 1}: ${t.length > 120 ? '${t.substring(0, 120)}…' : t}',
+            );
+            if (findings.length >= 60) return findings.join('\n');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[Orchestrator p$projectId] whole-tree stub scan skipped ($e).');
+      return '';
+    }
+    return findings.join('\n');
+  }
+
   /// REVIEW. The project's CI/test gate is consolidated into a SINGLE end-of-
   /// project scan ([_maybeFinalizeProject]) — for a mostly-automated pipeline,
   /// testing once at the end is far faster than a full build per task. So per-task
@@ -1134,6 +1349,28 @@ class ProjectOrchestrator {
     // never get a verdict is surfaced to Blocked instead of cycling forever.
     _attempts[task.task_pk] = (_attempts[task.task_pk] ?? 0) + 1;
     final branch = task.workBranch ?? 'task/${task.task_pk}';
+
+    // STUB GATE — a task is NOT done if it left the feature unimplemented behind a
+    // placeholder marker (an unfinished-work comment, empty body, or
+    // UnimplementedError). Compiling isn't the bar; implementing is. Reject such
+    // submissions here so they never become "done" and slip to the Final Pass (or
+    // ship). The worker re-does it for real.
+    final stubs = await _scanTaskForStubs(task, branch);
+    if (stubs.isNotEmpty) {
+      await _db.recordTaskVerdict(task.task_pk, passed: false);
+      await _db.attachTaskBuildFailure(
+        task.task_pk,
+        'REJECTED — this task was submitted with UNIMPLEMENTED stubs. Every '
+            'feature must be FULLY implemented, never left as a TODO, placeholder, '
+            'empty body, or UnimplementedError. Implement these for real (and '
+            'remove the markers):\n\n$stubs',
+      );
+      debugPrint(
+        '[Orchestrator p$projectId] task ${task.task_pk}: REVIEW REJECTED — left '
+        'unimplemented stubs; sent back to implement for real.',
+      );
+      return;
+    }
 
     final verification = (task.verification ?? '').trim();
     if (verification.isEmpty) {
@@ -1334,6 +1571,11 @@ class ProjectOrchestrator {
     final deadline = DateTime.now().add(_buildTimeout);
     while (!_disposed && DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(_buildPollInterval);
+      // Disposal (project switch / navigating off the workspace view) can land
+      // DURING the delay above; touching `_db` (a ref.read) after that throws
+      // "Cannot use Ref after disposed". Bail before the read — the re-mounted
+      // orchestrator resumes from the checklist.
+      if (_disposed) break;
       final run = await _db.getCiRun(runPk);
       if (run == null) break;
       final status = CiStatusX.fromWire(run.status);
@@ -1341,7 +1583,7 @@ class ProjectOrchestrator {
         return (passed: status == CiStatus.success, runPk: runPk);
       }
     }
-    return (passed: false, runPk: runPk); // timed out → fail the gate
+    return (passed: false, runPk: runPk); // timed out / disposed → fail the gate
   }
 
   // ── Build stage ───────────────────────────────────────────────────────
@@ -1537,6 +1779,35 @@ class ProjectOrchestrator {
           '${text.substring(0, _maxFixErrorChars)}\n… (additional failures truncated — fix these first, the rest surface on the next run)';
     }
     return (text: text, count: picked.length);
+  }
+
+  /// True when a RED CI run failed ONLY on info-level analyzer lints — no errors,
+  /// no warnings, and no non-analyze failure (a failed test/build/pub step). Info
+  /// lints (e.g. `use_build_context_synchronously`) are advisory: the app compiles
+  /// and runs, but `flutter analyze` exits non-zero on ANY issue, which otherwise
+  /// stalls the whole project on a single style hint that the fixer can't reliably
+  /// clear. In that case the finalize gate treats the run as GREEN. Conservative:
+  /// ANY non-analyze failed step, or any `error -`/`warning -` diagnostic line in
+  /// an analyze log, returns false (never masks a real failure).
+  Future<bool> _ciRedIsInfoOnly(int runPk) async {
+    final jobs = await _db.getCiJobsForRun(runPk);
+    final sevRe = RegExp(r'^(error|warning)\s+[-•]', caseSensitive: false);
+    var sawFailedAnalyze = false;
+    for (final job in jobs) {
+      final steps = await _db.getCiStepsForJob(job.ci_job_pk);
+      for (final step in steps) {
+        if (step.status != 'failed') continue;
+        if (!step.name.toLowerCase().contains('analyze')) {
+          return false; // a non-analyze step failed → a real failure
+        }
+        final hasErrOrWarn = step.logText
+            .split('\n')
+            .any((l) => sevRe.hasMatch(l.trimLeft()));
+        if (hasErrOrWarn) return false; // real errors/warnings, not just infos
+        sawFailedAnalyze = true;
+      }
+    }
+    return sawFailedAnalyze;
   }
 
   // ── Merge stage ───────────────────────────────────────────────────────
@@ -1848,14 +2119,33 @@ class ProjectOrchestrator {
     // commit (the files exist) and look like a failure. Reuse the scaffold and
     // let the caller proceed (re-run the CI gate, etc.).
     final existingHead = await git.headOid();
-    if (existingHead != null) {
-      final existingFiles =
-          (await ws.walk()).where((f) => !f.isDirectory).length;
-      if (existingFiles > 0) {
-        // ignore: avoid_print
-        print('[Templater] scaffold already present (head=$existingHead, '
-            '$existingFiles file(s)) — skipping re-scaffold.');
-        return true;
+    final existingFiles = (await ws.walk()).where((f) => !f.isDirectory).length;
+    if (existingHead != null && existingFiles > 0) {
+      // ignore: avoid_print
+      print('[Templater] scaffold already present (head=$existingHead, '
+          '$existingFiles file(s)) — skipping re-scaffold.');
+      return true;
+    }
+    // RETRY after an interrupted run: the agent had written a scaffold but a 502
+    // burst killed it before git_commit (head still unborn, files on disk). Don't
+    // redo the whole thing — commit what's there and accept.
+    if (existingHead == null && existingFiles >= 2) {
+      try {
+        await ref.read(gitLaneProvider(projectId)).run(
+          () => git.commitAll(message: 'chore: scaffold base project'),
+          timeout: _laneOpTimeout,
+        );
+        if ((await git.headOid()) != null) {
+          // ignore: avoid_print
+          print('[Templater] committed $existingFiles uncommitted scaffold '
+              'file(s) from a prior run — scaffold accepted.');
+          ref.read(workspaceRevisionProvider(projectId).notifier).state++;
+          return true;
+        }
+      } catch (e) {
+        debugPrint(
+          '[Orchestrator p$projectId] templater retry-salvage failed: $e',
+        );
       }
     }
     // A pre-existing main commit must NOT let the templater "succeed" without
@@ -1912,29 +2202,47 @@ class ProjectOrchestrator {
     );
 
     var kickoff = prompts.render(OrchestratorPromptField.templaterKickoff, vars);
-    for (var turn = 0; turn < _maxTurnsPerStage && !_disposed; turn++) {
+    const maxTransientRetries = 10;
+    var transientRetries = 0;
+    // Manual turn counter so a TRANSIENT failure (502/stall/backpressure) can
+    // retry WITHOUT burning a real turn — a burst of 502s used to exhaust the
+    // turn cap and fail the scaffold even though the files were being written.
+    var turn = 0;
+    while (turn < _maxTurnsPerStage && !_disposed) {
       if (!await _stillRunning()) return false;
       var toolCalls = 0;
+      var transient = false;
       try {
-        await for (final _ in session.runTurn(
-          kickoff,
-          onToolResult: (r) {
-            toolCalls++;
-            // ignore: avoid_print
-            print('[Templater] tool#$toolCalls: '
-                '${r.length > 140 ? "${r.substring(0, 140)}…" : r}');
-          },
-        ).timeout(_turnIdleTimeout)) {}
+        await _drainTurn(
+          session.runTurn(
+            kickoff,
+            onToolResult: (r) {
+              toolCalls++;
+              // ignore: avoid_print
+              print('[Templater] tool#$toolCalls: '
+                  '${r.length > 140 ? "${r.substring(0, 140)}…" : r}');
+            },
+          ),
+        );
       } catch (e) {
         if (e is! TimeoutException && !_isNotTaskFault(e)) {
           debugPrint('[Orchestrator p$projectId] templater turn $turn failed: $e');
-          return (await git.headOid()) != beforeHead;
+          break; // fall through to the salvage commit below
         }
-        // stall/transient/backpressure — retry the turn.
+        transient = true; // 502 / stall / backpressure
       }
+      if (transient) {
+        transientRetries++;
+        if (transientRetries > maxTransientRetries) break;
+        // ignore: avoid_print
+        print('[Templater] transient error (retry $transientRetries/'
+            '$maxTransientRetries) — not burning a turn.');
+        await Future<void>.delayed(const Duration(seconds: 4));
+        continue; // retry same turn without incrementing
+      }
+      transientRetries = 0;
       final head = await git.headOid();
-      final wsFiles =
-          (await ws.walk()).where((f) => !f.isDirectory).length;
+      final wsFiles = (await ws.walk()).where((f) => !f.isDirectory).length;
       // ignore: avoid_print
       print('[Templater] turn $turn: $toolCalls tool call(s); '
           'workspace has $wsFiles file(s); head=${head ?? "unborn"} '
@@ -1942,19 +2250,41 @@ class ProjectOrchestrator {
       if (head != beforeHead && wsFiles > 0) {
         // ignore: avoid_print
         print('[Templater] NEW commit + $wsFiles file(s) — scaffold accepted.');
-        // Make the scaffold visible in the Code & Git workspace view right away.
         ref.read(workspaceRevisionProvider(projectId).notifier).state++;
         return true;
       }
       kickoff =
-          'You have NOT produced a real scaffold yet (workspace shows $wsFiles '
+          'You have NOT committed the scaffold yet (workspace shows $wsFiles '
           'file(s)). Use create_file to write the manifest + main runner + a stub '
           'file per task (+ DB schema if there is a database), THEN git_commit. '
           'An empty commit does not count.';
+      turn++;
+    }
+    // SALVAGE: the agent wrote a scaffold but never committed it (common when a
+    // 502 burst interrupts before git_commit). Don't throw the work away — commit
+    // the workspace ourselves and accept it. A stub scaffold is a valid base; the
+    // base CI gate is non-blocking and the end-of-project scan is the real gate.
+    final leftover = (await ws.walk()).where((f) => !f.isDirectory).length;
+    if (leftover >= 2 && (await git.headOid()) == beforeHead) {
+      try {
+        await ref.read(gitLaneProvider(projectId)).run(
+          () => git.commitAll(message: 'chore: scaffold base project'),
+          timeout: _laneOpTimeout,
+        );
+        if ((await git.headOid()) != beforeHead) {
+          // ignore: avoid_print
+          print('[Templater] salvaged $leftover uncommitted file(s) with a safety '
+              'commit — scaffold accepted.');
+          ref.read(workspaceRevisionProvider(projectId).notifier).state++;
+          return true;
+        }
+      } catch (e) {
+        debugPrint('[Orchestrator p$projectId] templater salvage commit failed: $e');
+      }
     }
     // ignore: avoid_print
     print('[Templater] hit turn cap without a real scaffold — FAILED.');
-    return false; // the loop returns true only on a real (file-bearing) commit
+    return false;
   }
 
   /// The Templater's base spec: the condensed top-of-tree story (a whole-project
@@ -2100,8 +2430,12 @@ class ProjectOrchestrator {
   /// these are the conventional compile/analyze/test commands for each stack.
   static String _defaultCiYaml(String kind) {
     final steps = switch (kind) {
+      // --no-fatal-infos: info-level lints (e.g. use_build_context_synchronously)
+      // are advisory — don't fail the whole gate on a style hint (errors and
+      // warnings still fail). The orchestrator's `_ciRedIsInfoOnly` is the belt-
+      // and-suspenders equivalent for projects whose CI YAML predates this.
       'flutter' => '      - run: flutter pub get\n'
-          '      - run: flutter analyze\n'
+          '      - run: flutter analyze --no-fatal-infos\n'
           '      - run: flutter test',
       'dart' => '      - run: dart pub get\n'
           '      - run: dart analyze\n'
@@ -2221,84 +2555,576 @@ class ProjectOrchestrator {
   /// after the count fails to drop for [_maxStagnantRounds] rounds. [doneSig] is
   /// the completed-task signature this run gates, so a pass/exhaust suppresses
   /// re-running for the same settled state.
+  /// End-of-project finalize, ordered to avoid the "green → rewire → re-break →
+  /// re-converge" thrash: LINK first, CI second, then a read-only double-check
+  /// SCAN.
+  ///
+  ///   PHASE 1 — LINKING PUSH: one solid pass that wires EVERY requested feature
+  ///     into the running app (route/nav/entrypoint), UP FRONT, before CI. The
+  ///     build phase should already have wired most of it; this closes the gaps
+  ///     in a single comprehensive edit instead of one-feature-at-a-time later.
+  ///   PHASE 2 — CI CONVERGENCE: compile/test the now-wired app and fix whatever
+  ///     the wiring surfaced, progress-gated, until GREEN.
+  ///   PHASE 3 — DOUBLE-CHECK SCAN: a READ-ONLY logic re-confirmation that every
+  ///     feature is reachable. CI must never *unlink* anything, so this should
+  ///     pass first time; only if it genuinely finds a gap does it do a targeted
+  ///     rewire and re-converge (bounded by the stagnation gate).
   Future<void> _runTestingPhase(Project project, String doneSig) async {
-    _setTesting(true, 'Testing — running CI on main…');
+    _setTesting(true, 'Linking — wiring every feature across the app…');
     try {
-      var stagnant = 0;
-      int? prevCount;
-      for (var round = 1; round <= _absoluteMaxTestingRounds; round++) {
+      if (!await _stillRunning()) return;
+
+      // ── PHASE 1: LINKING PUSH (one comprehensive wiring pass, before CI) ─────
+      await _runLinkingPass(project);
+
+      // ── PHASE 2: CONVERGE CI on the now-wired app ───────────────────────────
+      final green = await _convergeCi(project, doneSig);
+      if (green == null) return; // infra down — retry on a later pump/tick
+      if (!green) return; // exhausted — [_testingExhaustedSig] already set
+
+      // ── PHASE 3: DOUBLE-CHECK (INCREMENTAL — shrinks as features verify) ─────
+      // Load the persistent checklist so each pass only re-reviews features that
+      // are NOT yet confirmed, and a verified feature is never re-touched. This is
+      // what stops the link↔test alternation from re-litigating settled work every
+      // round (the count only goes DOWN).
+      final prog = await loadFinalizeProgress(projectId);
+      _finalPassPrevCount = null;
+      _finalPassStagnant = 0;
+      for (var pass = 1; pass <= _absoluteMaxTestingRounds; pass++) {
         if (!await _stillRunning()) return;
-        _setTesting(true, 'Testing — CI run $round…');
+        _setTesting(true, 'Double-check — re-confirming remaining features…');
         debugPrint(
-          '[Orchestrator p$projectId] TESTING phase round $round: running CI on '
-          'main (this can take a few minutes)…',
+          '[Orchestrator p$projectId] CI GREEN → DOUBLE-CHECK (pass $pass): '
+          '${prog.verified.length} feature(s) already confirmed — re-checking the '
+          'rest + stubs + screenshot…',
         );
-        final outcome = await _runWorkflowGate(
-          clientPk: project.client_fk,
-          branch: 'main',
-          workflowPath: _defaultCiPath,
-          triggeredBy: 'testing',
-        );
-        if (outcome == null) return; // infra down — retry on a later pump/tick
-        if (outcome.passed) {
-          _finalScanPassedSig = doneSig; // settled green — stop re-scanning
-          // SUCCESS CONDITION: mark the project complete so the pump stops and
-          // the UI shows a clear "complete" state (not just a silent idle).
-          await _db.setProjectOrchestrationState(projectId, 'completed');
+        final scan = await _runFinalPass(project, alreadyVerified: prog.verified);
+        if (scan.nowVerified.isNotEmpty) {
+          prog.verified.addAll(scan.nowVerified);
+          await saveFinalizeProgress(projectId, prog);
           debugPrint(
-            '[Orchestrator p$projectId] TESTING phase GREEN at round $round — '
-            'project COMPLETE (CI passing on main).',
+            '[Orchestrator p$projectId] DOUBLE-CHECK: +${scan.nowVerified.length} '
+            'feature(s) confirmed this pass (${prog.verified.length} total).',
+          );
+        }
+        if (scan.passed) {
+          _finalScanPassedSig = doneSig; // settled green — stop re-scanning
+          _finalPassPrevCount = null;
+          _finalPassStagnant = 0;
+          await _db.setProjectOrchestrationState(projectId, 'completed');
+          // Done — drop the checklist so any future re-run (after the project is
+          // re-opened / tasks change) re-verifies from scratch.
+          await clearFinalizeProgress(projectId);
+          debugPrint(
+            '[Orchestrator p$projectId] DOUBLE-CHECK OK — project COMPLETE '
+            '(linked, CI green, every feature confirmed reachable, no stubs).',
           );
           return;
         }
-
-        // Count this run's failpoints and gather ALL of them for the fixer (so it
-        // fixes everything in one pass, not one error per CI run).
-        final diag = outcome.runPk != null
-            ? await _collectCiFailpoints(outcome.runPk!)
-            : (text: '', count: 0);
-        debugPrint(
-          '[Orchestrator p$projectId] TESTING phase round $round: CI RED — '
-          '${diag.count} failpoint(s)'
-          '${prevCount != null ? ' (was $prevCount)' : ''}.',
-        );
-
-        // PROGRESS GATE: keep going as long as the failure count is dropping;
-        // only count a NON-improving run toward the stagnation budget. This lets
-        // it grind a big backlog (e.g. 100 → 60 → 25 → 0) without the user
-        // stepping in, while still bailing if it's truly stuck.
-        if (prevCount != null && diag.count >= prevCount) {
-          stagnant++;
-          if (stagnant >= _maxStagnantRounds) {
+        // A gap remains (unverified wiring, a stub, or a visual issue). Targeted
+        // fix, then re-converge CI. Progress = the issue count dropping OR the
+        // verified set growing; only a pass that does NEITHER counts toward the
+        // stagnation budget.
+        final issueCount = _countIssueBullets(scan.issues);
+        final madeProgress =
+            scan.nowVerified.isNotEmpty ||
+            _finalPassPrevCount == null ||
+            issueCount < _finalPassPrevCount!;
+        if (!madeProgress) {
+          _finalPassStagnant++;
+          if (_finalPassStagnant >= _maxFinalPassStagnant) {
             _testingExhaustedSig = doneSig;
             debugPrint(
-              '[Orchestrator p$projectId] TESTING phase: failpoint count hasn\'t '
-              'dropped for $_maxStagnantRounds rounds (${diag.count} left) — '
-              'leaving for manual review.',
+              '[Orchestrator p$projectId] DOUBLE-CHECK: no progress for '
+              '$_maxFinalPassStagnant passes ($issueCount issue(s) left) — '
+              'leaving for manual review:\n${scan.issues}',
             );
             return;
           }
         } else {
-          stagnant = 0; // made progress this round
+          _finalPassStagnant = 0;
         }
-        prevCount = diag.count;
-
+        _finalPassPrevCount = issueCount;
+        debugPrint(
+          '[Orchestrator p$projectId] DOUBLE-CHECK found $issueCount issue(s) — '
+          'targeted fix then re-converge:\n${scan.issues}',
+        );
         _setTesting(
           true,
-          'Testing — fixing ${diag.count} error(s) (round $round)…',
+          'Double-check — fixing $issueCount remaining issue(s)…',
         );
-        await _runFixAgent(project, diag.text, round);
+        await _runFixAgent(project, scan.issues, pass, functional: true);
+        final reGreen = await _convergeCi(project, doneSig);
+        if (reGreen == null) return; // infra down — retry later
+        if (!reGreen) return; // exhausted — flag set
       }
-      // Hard backstop hit (should be rare — progress gate usually ends it first).
       _testingExhaustedSig = doneSig;
       debugPrint(
-        '[Orchestrator p$projectId] TESTING phase hit the $_absoluteMaxTestingRounds-'
-        'round backstop — CI still RED; leaving for manual review.',
+        '[Orchestrator p$projectId] DOUBLE-CHECK hit the $_absoluteMaxTestingRounds-'
+        'pass backstop — leaving for manual review.',
       );
     } catch (e, st) {
-      debugPrint('[Orchestrator p$projectId] TESTING phase errored: $e\n$st');
+      // A torn-down orchestrator (project switch / navigating off the workspace
+      // view disposes this autoDispose provider) throws "Cannot use Ref after
+      // disposed" from any lingering `_db` read. That's benign here — the
+      // re-mounted orchestrator resumes finalize from the persisted checklist —
+      // so log it quietly rather than as a phase error.
+      if (_disposed || e.toString().contains('after it has been disposed')) {
+        debugPrint(
+          '[Orchestrator p$projectId] FINALIZE phase bailed (orchestrator '
+          'disposed mid-flight) — will resume on re-mount.',
+        );
+      } else {
+        debugPrint('[Orchestrator p$projectId] FINALIZE phase errored: $e\n$st');
+      }
     } finally {
       _setTesting(false, null);
+    }
+  }
+
+  /// PHASE 1 helper — the comprehensive LINKING PUSH. Hands the task list to the
+  /// wiring agent and tells it to trace the entrypoint and connect EVERY feature
+  /// in one solid pass (edits main, commits). Runs ONCE per project (tracked by
+  /// [FinalizeProgress.linkDone]) — on a later entry (restart / re-pump / rebuild)
+  /// it is SKIPPED so we don't re-churn already-wired work; the incremental
+  /// double-check handles what's left. Features already CONFIRMED wired
+  /// ([FinalizeProgress.verified]) are dropped from the worklist so even the first
+  /// push only spans what isn't settled.
+  Future<void> _runLinkingPass(Project project) async {
+    if (!await _stillRunning()) return;
+    final prog = await loadFinalizeProgress(projectId);
+    if (prog.linkDone) {
+      debugPrint(
+        '[Orchestrator p$projectId] LINKING PASS: already done on a prior entry — '
+        'skipping the full re-link, going straight to the double-check.',
+      );
+      return;
+    }
+    final tasks = await _db.getTasksForProject(projectId);
+    final pending = tasks
+        .where((t) => !prog.verified.contains(t.task_pk))
+        .toList();
+    if (pending.isEmpty) {
+      prog.linkDone = true;
+      await saveFinalizeProgress(projectId, prog);
+      return;
+    }
+    final worklist = StringBuffer();
+    for (final t in pending) {
+      final desc = (t.description ?? '').trim();
+      final firstLine = desc.isEmpty ? '' : ' — ${desc.split('\n').first}';
+      worklist.writeln('- [#${t.task_pk}] ${t.title}$firstLine');
+    }
+    debugPrint(
+      '[Orchestrator p$projectId] LINKING PASS: one comprehensive wiring push '
+      'over ${pending.length}/${tasks.length} feature(s) before CI…',
+    );
+    _setTesting(true, 'Linking — wiring every feature across the app…');
+    await _runFixAgent(
+      project,
+      worklist.toString().trim(),
+      0,
+      functional: true,
+      linkAll: true,
+    );
+    prog.linkDone = true;
+    await saveFinalizeProgress(projectId, prog);
+  }
+
+  /// PHASE 2 helper — the progress-gated CI convergence loop. Runs CI on main and
+  /// fixes failures until GREEN. Returns true on green, false when exhausted (the
+  /// stagnation/backstop gate fired; [_testingExhaustedSig] set), or null when the
+  /// CI infra is unavailable (caller should return and let a later pump retry).
+  Future<bool?> _convergeCi(Project project, String doneSig) async {
+    var stagnant = 0;
+    int? prevCount;
+    for (var round = 1; round <= _absoluteMaxTestingRounds; round++) {
+      if (!await _stillRunning()) return null;
+      _setTesting(true, 'Testing — CI run $round…');
+      debugPrint(
+        '[Orchestrator p$projectId] CI convergence round $round: running CI on '
+        'main (this can take a few minutes)…',
+      );
+      final outcome = await _runWorkflowGate(
+        clientPk: project.client_fk,
+        branch: 'main',
+        workflowPath: _defaultCiPath,
+        triggeredBy: 'testing',
+      );
+      if (outcome == null) return null; // infra down — retry on a later pump/tick
+      if (outcome.passed) return true;
+
+      // Info-lint tolerance: `flutter analyze` exits non-zero on ANY issue, so a
+      // single advisory INFO (e.g. use_build_context_synchronously) fails the gate
+      // even though the app compiles and runs — and the fixer often can't clear a
+      // stubborn lint, stalling the whole project. If the red run failed ONLY on
+      // info-level lints (no errors/warnings, no test/build failure), accept it as
+      // green and move on to the double-check.
+      if (outcome.runPk != null && await _ciRedIsInfoOnly(outcome.runPk!)) {
+        debugPrint(
+          '[Orchestrator p$projectId] CI convergence round $round: run '
+          '${outcome.runPk} RED on info-level lints only (no errors/warnings) — '
+          'treating as GREEN.',
+        );
+        return true;
+      }
+
+      // Gather ALL failpoints so the fixer resolves them in one pass, not one
+      // error per CI run.
+      final diag = outcome.runPk != null
+          ? await _collectCiFailpoints(outcome.runPk!)
+          : (text: '', count: 0);
+      debugPrint(
+        '[Orchestrator p$projectId] CI convergence round $round: CI RED — '
+        '${diag.count} failpoint(s)'
+        '${prevCount != null ? ' (was $prevCount)' : ''}.',
+      );
+
+      // PROGRESS GATE: keep going while the failure count is dropping; only a
+      // NON-improving run counts toward the stagnation budget (lets it grind a
+      // big backlog 100 → 60 → 25 → 0 while still bailing if truly stuck).
+      if (prevCount != null && diag.count >= prevCount) {
+        stagnant++;
+        if (stagnant >= _maxStagnantRounds) {
+          _testingExhaustedSig = doneSig;
+          debugPrint(
+            '[Orchestrator p$projectId] CI convergence: failpoint count hasn\'t '
+            'dropped for $_maxStagnantRounds rounds (${diag.count} left) — '
+            'leaving for manual review.',
+          );
+          return false;
+        }
+      } else {
+        stagnant = 0; // made progress this round
+      }
+      prevCount = diag.count;
+
+      _setTesting(
+        true,
+        'Testing — fixing ${diag.count} error(s) (round $round)…',
+      );
+      await _runFixAgent(project, diag.text, round);
+    }
+    // Hard backstop hit (rare — the progress gate usually ends it first).
+    _testingExhaustedSig = doneSig;
+    debugPrint(
+      '[Orchestrator p$projectId] CI convergence hit the $_absoluteMaxTestingRounds-'
+      'round backstop — CI still RED; leaving for manual review.',
+    );
+    return false;
+  }
+
+  /// FINAL PASS: with CI green, confirm every REQUESTED feature (task) is truly
+  /// implemented AND reachable in the running app — not left as a placeholder or
+  /// stub. Two checks: a code-trace review (the reliable one — catches the
+  /// "press Start, land on a placeholder screen" case), and a best-effort
+  /// screenshot of the running web build for a vision sanity check. Passed only
+  /// when neither flags anything.
+  /// [alreadyVerified]: task_pks the checklist has already confirmed — the
+  /// code-trace SKIPS them (only re-reviews the rest), so each pass shrinks.
+  /// [nowVerified] returns the task_pks this pass newly confirmed wired+reachable.
+  Future<({bool passed, String issues, Set<int> nowVerified})> _runFinalPass(
+    Project project, {
+    Set<int> alreadyVerified = const <int>{},
+  }) async {
+    final buf = StringBuffer();
+    var nowVerified = <int>{};
+    // HARD NO on stubs — a deterministic whole-tree scan (no base exemption,
+    // footprint-independent, restart-proof). This is the guarantee the per-task
+    // gate can't give: a task that left its OWN scaffolded deliverable a TODO
+    // placeholder is caught here, and the project cannot reach `completed` while
+    // any marker remains. Listed FIRST and as bullets so it drives the fixer and
+    // counts toward the progress gate. Global (not scoped by the checklist).
+    try {
+      final treeStubs = await _scanTreeForStubs();
+      if (treeStubs.trim().isNotEmpty) {
+        buf.writeln(
+          'UNIMPLEMENTED STUBS — these files still contain TODO/placeholder '
+          'markers. IMPLEMENT each feature FOR REAL (build the actual UI/logic and '
+          'remove the marker); do NOT merely wire, comment out, or delete it:',
+        );
+        for (final line in treeStubs.trim().split('\n')) {
+          if (line.trim().isNotEmpty) buf.writeln('- $line');
+        }
+      }
+    } catch (e) {
+      debugPrint(
+        '[Orchestrator p$projectId] final-pass tree stub scan failed: $e',
+      );
+    }
+    try {
+      final allTasks = await _db.getTasksForProject(projectId);
+      final reviewPks = allTasks
+          .map((t) => t.task_pk)
+          .toSet()
+          .difference(alreadyVerified);
+      final code = await _finalPassCodeTrace(project, reviewPks: reviewPks);
+      nowVerified = code.verified;
+      if (code.issues.trim().isNotEmpty) {
+        if (buf.isNotEmpty) buf.writeln();
+        buf.writeln('UNWIRED / INCOMPLETE FEATURES (from a code review):');
+        buf.writeln(code.issues.trim());
+      }
+    } catch (e) {
+      debugPrint('[Orchestrator p$projectId] final-pass code trace failed: $e');
+    }
+    try {
+      final visual = await _finalPassVision(project);
+      if (visual.trim().isNotEmpty) {
+        if (buf.isNotEmpty) buf.writeln();
+        buf.writeln('VISUAL ISSUES (from a screenshot of the running app):');
+        buf.writeln(visual.trim());
+      }
+    } catch (e) {
+      debugPrint('[Orchestrator p$projectId] final-pass vision skipped: $e');
+    }
+    final issues = buf.toString().trim();
+    return (passed: issues.isEmpty, issues: issues, nowVerified: nowVerified);
+  }
+
+  /// Count the flagged features in a Final Pass report (bullet lines) — the
+  /// progress metric for the loop's stagnation gate.
+  int _countIssueBullets(String issues) => issues
+      .split('\n')
+      .map((l) => l.trim())
+      .where((l) => l.startsWith('- ') || l.startsWith('* '))
+      .length;
+
+  /// Read-only reviewer: reads the code to trace each task's UI wiring and reports
+  /// which features aren't hooked up. Scoped by [reviewPks] (the checklist's
+  /// not-yet-verified set) so it shrinks each pass; when null, reviews all tasks.
+  /// Returns the ISSUE text (for the fixer) and the set of #pks it CONFIRMED wired
+  /// this pass (to add to the checklist). Inconclusive review → empty both (never
+  /// blocks completion, never falsely marks verified).
+  Future<({String issues, Set<int> verified})> _finalPassCodeTrace(
+    Project project, {
+    Set<int>? reviewPks,
+  }) async {
+    const empty = (issues: '', verified: <int>{});
+    final persona =
+        await _findPersonaForRole(AgentRole.verificationAgent) ??
+        await _findPersonaForRole(AgentRole.sdeGeneralist) ??
+        await _findPersonaForRole(AgentRole.coordinator);
+    if (persona == null) return empty;
+    final resolved = await _resolveBackend(persona);
+    if (resolved == null) return empty;
+    final handles = await _resolveWorkspaceHandles();
+    final ws = handles.ws;
+    final git = handles.git;
+    if (ws == null || git == null) return empty;
+    try {
+      await git.checkoutBranch('main');
+    } catch (_) {}
+
+    final allTasks = await _db.getTasksForProject(projectId);
+    final tasks = reviewPks == null
+        ? allTasks
+        : allTasks.where((t) => reviewPks.contains(t.task_pk)).toList();
+    if (tasks.isEmpty) return empty; // nothing left to review → all confirmed
+    final reviewed = tasks.map((t) => t.task_pk).toSet();
+    final taskList = StringBuffer();
+    for (final t in tasks) {
+      final desc = (t.description ?? '').trim();
+      final firstLine = desc.isEmpty ? '' : ' — ${desc.split('\n').first}';
+      taskList.writeln('- [#${t.task_pk}] ${t.title}$firstLine');
+    }
+
+    final baseline = await buildProjectBaseline(_db, projectId);
+    final systemPrompt =
+        '$baseline\n\n${defaultSystemPrompt(AgentRole.verificationAgent)}\n\n'
+        'You are the FINAL PASS reviewer. The project compiles and CI is GREEN, '
+        'but that does NOT prove the features are wired up. For EACH requested '
+        'feature below, verify it is genuinely implemented AND reachable in the '
+        'running app: the UI path that should reach it (entrypoint/home → '
+        'button/route/menu/tab) leads to the REAL feature, not a '
+        'TODO/placeholder/empty/"coming soon" screen. READ the code — open the '
+        'entrypoint (main / home / router) and trace down to each feature. Do NOT '
+        'edit anything.\n'
+        'Output, for EACH feature, exactly one line:\n'
+        '  #<pk> OK               — genuinely wired up and reachable.\n'
+        '  #<pk> ISSUE: <what is wrong / what should happen instead + the file>\n'
+        'Then a final line: FINALPASS_OK (every feature OK) or FINALPASS_ISSUES.';
+
+    final sessionPk = await _db.getOrCreateAgentChatSession(
+      projectId,
+      persona.agent_pk,
+      persona.name,
+    );
+    final session = ProjectCoordinatorSession(
+      client: resolved.client,
+      projectId: projectId,
+      projectName: persona.name,
+      db: _db,
+      model: resolved.model,
+      chatSessionPk: sessionPk,
+      permissions: AgentToolPermissions.fromConfigJson(persona.configJson),
+      confirmAsk: (_, _) async => true,
+      agentName: persona.name,
+      workspace: ws,
+      git: git,
+      buildService: handles.build,
+      leanTools: false,
+      fixMode: true, // file/git read tools — we instruct it to only read
+      systemPromptOverride: systemPrompt,
+      enableThinking: resolveEnableThinking(
+        agent: personaThinkingMode(persona.configJson, personaName: persona.name),
+        task: ThinkingMode.off,
+      ),
+    );
+
+    var kickoff =
+        'Requested features (tasks):\n\n${taskList.toString().trim()}\n\n'
+        'Trace each in the code, then output one "#<pk> OK" or "#<pk> ISSUE: …" '
+        'line per feature, ending with FINALPASS_OK or FINALPASS_ISSUES.';
+    final content = StringBuffer();
+    for (var turn = 0; turn < _maxFinalPassTurns && !_disposed; turn++) {
+      if (!await _stillRunning()) break;
+      content.clear();
+      var sawTool = false;
+      var transient = false;
+      try {
+        await _drainTurn(
+          session.runTurn(
+            kickoff,
+            maxToolRounds: 8,
+            onToolResult: (_) => sawTool = true,
+          ),
+          onEvent: (ev) {
+            if (ev is ChatContentDelta) content.write(ev.text);
+          },
+        );
+      } catch (e) {
+        if (e is! TimeoutException && !_isNotTaskFault(e)) {
+          debugPrint('[Orchestrator p$projectId] final-pass turn $turn failed: $e');
+          break;
+        }
+        transient = true;
+      }
+      if (transient) continue;
+      final text = content.toString();
+      if (text.contains('FINALPASS_OK') || text.contains('FINALPASS_ISSUES')) {
+        return _parseCodeTraceVerdict(text, reviewed);
+      }
+      if (!sawTool) {
+        // No tools + no verdict → nudge once, then accept an inconclusive review.
+        kickoff =
+            'Give your verdict now: one "#<pk> OK" or "#<pk> ISSUE: …" line per '
+            'feature, then FINALPASS_OK or FINALPASS_ISSUES.';
+        continue;
+      }
+      kickoff =
+          'Keep tracing the remaining features, then output the per-feature lines '
+          'and FINALPASS_OK or FINALPASS_ISSUES.';
+    }
+    return _parseCodeTraceVerdict(content.toString(), reviewed);
+  }
+
+  /// Parse the reviewer's per-feature verdict. A `#N OK` line → verified; a
+  /// `#N ISSUE:` line → an issue bullet (and NOT verified). A reviewed feature the
+  /// reviewer never mentioned stays UNverified (conservative). If it declared
+  /// FINALPASS_OK with no ISSUE lines, all reviewed features are verified.
+  ({String issues, Set<int> verified}) _parseCodeTraceVerdict(
+    String text,
+    Set<int> reviewed,
+  ) {
+    final verified = <int>{};
+    final issued = <int>{};
+    final issueLines = <String>[];
+    final okRe = RegExp(r'#(\d+)\s+OK\b', caseSensitive: false);
+    final issueRe = RegExp(r'#(\d+)\s+ISSUE\b', caseSensitive: false);
+    for (final raw in text.split('\n')) {
+      final line = raw.trim();
+      final iss = issueRe.firstMatch(line);
+      if (iss != null) {
+        final pk = int.tryParse(iss.group(1)!);
+        if (pk != null) issued.add(pk);
+        issueLines.add(line.startsWith('-') || line.startsWith('*') ? line : '- $line');
+        continue;
+      }
+      final ok = okRe.firstMatch(line);
+      if (ok != null) {
+        final pk = int.tryParse(ok.group(1)!);
+        if (pk != null && reviewed.contains(pk)) verified.add(pk);
+      }
+    }
+    verified.removeAll(issued); // an ISSUE always wins over an OK for the same pk
+    if (issueLines.isEmpty && text.contains('FINALPASS_OK')) {
+      verified.addAll(reviewed); // clean sweep of the reviewed scope
+    }
+    return (issues: issueLines.join('\n'), verified: verified);
+  }
+
+
+  /// Best-effort vision check: build the project as web, screenshot the running
+  /// app headlessly, and ask the (vision-capable) model whether it renders a real
+  /// working UI. Returns '' when it looks fine OR when no screenshot could be
+  /// produced (so a missing browser / non-web project never blocks completion).
+  Future<String> _finalPassVision(Project project) async {
+    final handles = await _resolveWorkspaceHandles();
+    final ws = handles.ws;
+    if (ws == null) return '';
+    _setTesting(true, 'Final pass — building web preview + screenshot…');
+    final shot = await captureProjectWebScreenshot(ws);
+    if (shot.png == null) {
+      debugPrint(
+        '[Orchestrator p$projectId] final-pass: no screenshot available '
+        '(non-web / no browser / build failed).',
+      );
+      return '';
+    }
+    final persona =
+        await _findPersonaForRole(AgentRole.verificationAgent) ??
+        await _findPersonaForRole(AgentRole.coordinator) ??
+        await _findPersonaForRole(AgentRole.sdeGeneralist);
+    if (persona == null) return '';
+    final resolved = await _resolveBackend(persona);
+    if (resolved == null || resolved.model == null) return '';
+
+    final tasks = await _db.getTasksForProject(projectId);
+    final list = tasks.map((t) => '- ${t.title}').join('\n');
+    final dataUrl = 'data:image/png;base64,${base64Encode(shot.png!)}';
+    final messages = <Map<String, dynamic>>[
+      {
+        'role': 'system',
+        'content':
+            'You are a QA reviewer looking at a screenshot of a running app.',
+      },
+      {
+        'role': 'user',
+        'content': [
+          {
+            'type': 'text',
+            'text':
+                'Screenshot of the running app "${project.name}". Requested '
+                'features:\n$list\n\nDoes it render a real, working UI? Report any '
+                'VISIBLE problems: blank/error/placeholder/TODO screens, missing '
+                'core UI, or obvious breakage. If it looks like a functional app '
+                'with no obvious problems, reply EXACTLY "VISUAL_OK".',
+          },
+          {
+            'type': 'image_url',
+            'image_url': {'url': dataUrl},
+          },
+        ],
+      },
+    ];
+    try {
+      final resp = await resolved.client
+          .createChatCompletion(
+            model: resolved.model!,
+            messages: messages,
+            maxTokens: 800,
+          )
+          .timeout(_turnIdleTimeout);
+      final text = (resp.choices.isNotEmpty
+              ? resp.choices.first.message.content
+              : null) ??
+          '';
+      if (text.contains('VISUAL_OK')) return '';
+      return text.trim();
+    } catch (e) {
+      debugPrint('[Orchestrator p$projectId] final-pass vision call failed: $e');
+      return '';
     }
   }
 
@@ -2308,7 +3134,16 @@ class ProjectOrchestrator {
   /// generalist's code-tuned model — on the routed plan that's the full default
   /// Omni collection (the strongest available). Returns true if it landed a new
   /// commit (so the next CI scan sees the changes).
-  Future<bool> _runFixAgent(Project project, String errors, int round) async {
+  Future<bool> _runFixAgent(
+    Project project,
+    String errors,
+    int round, {
+    bool functional = false,
+    // [linkAll]: PHASE-1 comprehensive linking push — [errors] is the full task
+    // list (not a scan-derived defect list), and the agent proactively traces the
+    // entrypoint and wires EVERY feature in one pass. Implies [functional].
+    bool linkAll = false,
+  }) async {
     final persona = await _findPersonaForRole(AgentRole.sdeGeneralist) ??
         await _findPersonaForRole(AgentRole.coordinator);
     if (persona == null) return false;
@@ -2339,14 +3174,43 @@ class ProjectOrchestrator {
       ..writeln(defaultSystemPrompt(AgentRole.sdeGeneralist))
       ..writeln()
       ..writeln(
-        'You are the end-of-project TESTING & FIX agent. The whole project is '
-        'built and merged onto main, but its CI build/tests are FAILING. Your '
-        'job is to make the WHOLE project compile cleanly and its tests pass.',
+        linkAll
+            ? 'You are the end-of-project LINKING agent. Every requested feature '
+                  'below is ALREADY BUILT and merged onto main — this is a WIRING '
+                  'pass, NOT a rebuild. In ONE solid pass, go through the WHOLE app '
+                  'and make every feature genuinely reachable: open the entrypoint '
+                  '(main / home / router) and trace the UI path that should reach '
+                  'each feature (route/nav/button/menu/tab/handler). Where a '
+                  'feature is orphaned, unhooked, or its trigger lands on a '
+                  'placeholder, CONNECT it to the existing implementation with the '
+                  'SMALLEST change. Reuse what is there — do NOT rewrite files or '
+                  're-implement working code; only implement something new if a '
+                  'feature is genuinely absent. Wire everything in this one push.'
+            : functional
+            ? 'You are the end-of-project FINAL PASS agent. The project compiles '
+                  'and its CI is GREEN. The listed problems are of TWO kinds and you '
+                  'must resolve BOTH: (1) UNIMPLEMENTED STUBS — a feature that is '
+                  'still a TODO/placeholder ("— TODO", empty body, "coming soon", '
+                  'UnimplementedError) is NOT built; IMPLEMENT it FOR REAL (build the '
+                  'actual UI/logic and REMOVE the marker) — do not merely wire, '
+                  'comment out, or delete it. (2) UNWIRED features — the real '
+                  'implementation exists but is not reachable; CONNECT it with the '
+                  'SMALLEST change (route/nav/button/menu). For the wiring kind, '
+                  'reuse what is there; do NOT rewrite working code.'
+            : 'You are the end-of-project TESTING & FIX agent. The whole project '
+                  'is built and merged onto main, but its CI build/tests are '
+                  'FAILING. Your job is to make the WHOLE project compile cleanly '
+                  'and its tests pass.',
       )
       ..writeln(
-        '- Work across AS MANY FILES AS NEEDED — read the failing files, find '
-        'the real cause, and fix it. Do not stop at the first error; resolve the '
-        'whole class of failures.',
+        functional || linkAll
+            ? '- For EACH listed item: if it is a STUB, build the real feature and '
+                  'remove the marker; if it merely needs WIRING, find the existing '
+                  'implementation and connect its trigger path with a small edit. '
+                  'Never leave a TODO/placeholder behind.'
+            : '- Work across AS MANY FILES AS NEEDED — read the failing files, '
+                  'find the real cause, and fix it. Do not stop at the first '
+                  'error; resolve the whole class of failures.',
       )
       ..writeln(
         '- Keep changes minimal and correct; do not delete features or stub '
@@ -2399,12 +3263,22 @@ class ProjectOrchestrator {
       ),
     );
 
-    var kickoff =
-        'CI on main is RED with the failpoints below. Fix EVERY one of them in '
-        'this session — work through the WHOLE list, committing as you finish each '
-        'file or group. Do NOT stop after the first fix and do NOT ask to re-run '
-        'CI: keep going until every listed failure is addressed (the phase re-runs '
-        'CI for you afterwards). Failpoints:\n\n$errors';
+    var kickoff = linkAll
+        ? 'These are ALL the requested features. In ONE solid pass, go through the '
+              'whole app and make sure EVERY one is wired up and reachable from the '
+              'entrypoint — connect any that are orphaned or land on a placeholder, '
+              'committing as you go. Do NOT stop after the first; wire them all now. '
+              'Requested features:\n\n$errors'
+        : functional
+        ? 'CI is green but these requested features are NOT wired up. Hook up '
+              'EVERY one in this session — implement and connect each so it works '
+              'end to end, committing as you go. Do NOT stop after the first one. '
+              'Unwired features:\n\n$errors'
+        : 'CI on main is RED with the failpoints below. Fix EVERY one of them in '
+              'this session — work through the WHOLE list, committing as you finish '
+              'each file or group. Do NOT stop after the first fix and do NOT ask '
+              'to re-run CI: keep going until every listed failure is addressed '
+              '(the phase re-runs CI for you afterwards). Failpoints:\n\n$errors';
     // Work through ALL failpoints in one pass — do NOT bail on the first commit
     // (that's what made it "test after every point"). But the "done" signal is the
     // agent no longer making CHANGES, not no longer using tools: it'll keep
@@ -2420,29 +3294,31 @@ class ProjectOrchestrator {
       var sawEdit = false;
       var transient = false;
       try {
-        await for (final _ in session.runTurn(
-          kickoff,
-          maxToolRounds: 8,
-          onToolResult: (r) {
-            sawTool = true;
-            // Did this tool result actually CHANGE the tree (edit/write/commit/
-            // move/create)? Reads & searches don't count toward "still working".
-            final rl = r.toLowerCase();
-            if (rl.contains('edited "') ||
-                rl.contains('committed all changes') ||
-                rl.contains('committed your working tree') ||
-                rl.contains('updated file') ||
-                rl.contains('created file') ||
-                rl.contains('wrote ') ||
-                rl.contains('moved ')) {
-              sawEdit = true;
-            }
-            debugPrint(
-              '[Orchestrator p$projectId] testing-fix r$round turn $turn tool → '
-              '${r.length > 140 ? '${r.substring(0, 140)}…' : r}',
-            );
-          },
-        ).timeout(_turnIdleTimeout)) {}
+        await _drainTurn(
+          session.runTurn(
+            kickoff,
+            maxToolRounds: 8,
+            onToolResult: (r) {
+              sawTool = true;
+              // Did this tool result actually CHANGE the tree (edit/write/commit/
+              // move/create)? Reads & searches don't count toward "still working".
+              final rl = r.toLowerCase();
+              if (rl.contains('edited "') ||
+                  rl.contains('committed all changes') ||
+                  rl.contains('committed your working tree') ||
+                  rl.contains('updated file') ||
+                  rl.contains('created file') ||
+                  rl.contains('wrote ') ||
+                  rl.contains('moved ')) {
+                sawEdit = true;
+              }
+              debugPrint(
+                '[Orchestrator p$projectId] testing-fix r$round turn $turn tool → '
+                '${r.length > 140 ? '${r.substring(0, 140)}…' : r}',
+              );
+            },
+          ),
+        );
       } catch (e) {
         if (e is! TimeoutException && !_isNotTaskFault(e)) {
           debugPrint(
@@ -2530,6 +3406,63 @@ class ProjectOrchestrator {
   }
 
   // ── Shared helpers ──────────────────────────────────────────────────────
+
+  /// Drain an agent turn stream with BOTH an idle timeout (no event for
+  /// [_turnIdleTimeout]) AND a hard wall-clock cap ([_turnWallClock]). Either
+  /// firing throws a [TimeoutException] and cancels the subscription (closing the
+  /// SSE socket). Unlike `stream.timeout` (which only enforces idle and resets on
+  /// every keep-alive), the wall-clock cap guarantees a stuck turn can't hang
+  /// forever. [onEvent] gets each event (e.g. to accumulate content).
+  Future<void> _drainTurn(
+    Stream<ChatStreamEvent> stream, {
+    void Function(ChatStreamEvent event)? onEvent,
+  }) {
+    final completer = Completer<void>();
+    Timer? idle;
+    void fail(Object e, [StackTrace? st]) {
+      if (!completer.isCompleted) completer.completeError(e, st);
+    }
+
+    final wall = Timer(
+      _turnWallClock,
+      () => fail(
+        TimeoutException(
+          'turn exceeded ${_turnWallClock.inMinutes}m wall-clock cap',
+        ),
+      ),
+    );
+    void bumpIdle() {
+      idle?.cancel();
+      idle = Timer(
+        _turnIdleTimeout,
+        () => fail(
+          TimeoutException('turn idle for ${_turnIdleTimeout.inMinutes}m'),
+        ),
+      );
+    }
+
+    bumpIdle();
+    final sub = stream.listen(
+      (ev) {
+        bumpIdle();
+        if (onEvent != null) {
+          try {
+            onEvent(ev);
+          } catch (_) {}
+        }
+      },
+      onError: fail,
+      onDone: () {
+        if (!completer.isCompleted) completer.complete();
+      },
+      cancelOnError: true,
+    );
+    return completer.future.whenComplete(() {
+      idle?.cancel();
+      wall.cancel();
+      unawaited(sub.cancel());
+    });
+  }
 
   /// First persona for the client whose stored title maps to [role], or null.
   Future<AgentPersona?> _findPersonaForRole(AgentRole role) async {
@@ -2733,6 +3666,7 @@ class ProjectOrchestrator {
   /// True while the project is still in the running state — used to bail out of
   /// a multi-turn agent stage promptly when the human pauses/stops.
   Future<bool> _stillRunning() async {
+    if (_disposed) return false; // torn-down orchestrator: never touch _db (ref)
     final project = await _db.getProjectById(projectId);
     return project != null && project.orchestrationState == 'running';
   }
@@ -2768,56 +3702,49 @@ class ProjectOrchestrator {
         ? (jsonDecode(chosen.availableModelsJson) as List).cast<String>()
         : const <String>[];
 
-    // Address the model the SAME way the app/coordinator does. The routed Nexus
-    // Router serves the Omni COLLECTION id (kDefaultOmniCollection) DIRECTLY, so
-    // send it as-is and default to it — never decompose to a raw sub-model, which
-    // fell through to a small 4B (e.g. Qwen3.5-4B): the wrong model, and (when the
-    // routed server had no selected model) the null→'default-coordinator'
-    // sentinel that 503'd and Blocked every task. Local servers (which 500 on a
-    // bare collection) decompose from their live model list instead.
+    // Resolve the worker's model BY TAGS. Fetch the server's full catalog (model
+    // labels + collection components) for BOTH routed and local: a collection
+    // (e.g. NXS-PJX-Chat) is decomposed to its chat/LLM component so we never send
+    // the bare collection id and let the router land on a non-chat component like
+    // the embedding model (→ HTTP 400 "does not support chat completion"). An
+    // explicit per-persona llmModel still wins; an empty catalog falls back to the
+    // collection id as-is. (aiServersCacheProvider is 5-min TTL, so this is cheap.)
     final routed = isRoutedProviderType(chosen.providerType);
     List<ApiModelInfo> serverModels = const [];
-    if (!routed) {
+    // Best-effort: NEVER let a catalog-fetch failure throw here — it runs on every
+    // dispatch and a throw would error the stage → instant re-dispatch → hot loop
+    // (observed as "Bad state: Server N not found" spamming when the UI's current
+    // client didn't match the project's server). On failure we degrade to the
+    // collection id (the resolver's fallback), which still works.
+    try {
       final cache = ref.read(aiServersCacheProvider.notifier);
       var entry = cache.entryFor(chosen.server_pk);
       if (entry == null || entry.models.isEmpty) {
-        await cache.refreshServer(chosen.server_pk);
+        // Look up under the PROJECT's client (not the UI's current client).
+        await cache.refreshServerForClient(chosen.server_pk, project.client_fk);
         entry = cache.entryFor(chosen.server_pk);
       }
       serverModels = entry?.models ?? const <ApiModelInfo>[];
+    } catch (e) {
+      debugPrint(
+        '[Orchestrator p$projectId] model catalog unavailable for server '
+        '${chosen.server_pk} ($e) — resolving with the collection id as-is.',
+      );
     }
-    // Resolve the worker's model the SAME way the coordinator/setup now do: honor
-    // the persona's own Omni collection (its per-role default — e.g. a dedicated
-    // coding collection), not just the global product default. On the routed
-    // Router the collection id is sent as-is; an explicit per-persona llmModel
-    // still wins. Local servers decompose from their live model list.
     final personaCollection = persona.omniCollectionModel;
     final collection =
         (personaCollection != null && personaCollection.trim().isNotEmpty)
         ? personaCollection.trim()
         : defaultOmniCollectionForTitle(persona.title);
     final pLlm = persona.llmModel;
-    var model = routed
-        ? ((pLlm != null && pLlm.trim().isNotEmpty) ? pLlm.trim() : collection)
-        : resolveAgentChatModel(
-            routed: false,
-            personaModel: pLlm,
-            selectedModel: chosen.selectedModel,
-            serverModels: serverModels,
-          );
-    // SELF-HEAL a server-side collection rename: if the routed server advertises a
-    // model list and it doesn't include the id we're about to send, swap to an
-    // advertised chat/omni collection so a stale persona id can't strand the run.
-    if (routed && models.isNotEmpty && !models.contains(model)) {
-      final alt = pickRoutedCollectionId(models);
-      if (alt != null && alt != model) {
-        debugPrint(
-          '[Orchestrator p$projectId] routed collection "$model" not advertised '
-          '— self-healing to "$alt".',
-        );
-        model = alt;
-      }
-    }
+    final model = resolveAgentChatModel(
+      routed: routed,
+      personaModel: pLlm,
+      // For routed, the persona's collection is the default when no explicit
+      // llmModel; the resolver decomposes it to the chat component by tags.
+      selectedModel: routed ? collection : chosen.selectedModel,
+      serverModels: serverModels,
+    );
     debugPrint(
       '[Orchestrator p$projectId] worker "${persona.name}" → server '
       '"${chosen.name}" model=$model (routed=$routed, collection=$collection)',

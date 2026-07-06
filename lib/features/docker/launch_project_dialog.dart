@@ -73,6 +73,7 @@ class _LaunchProjectDialogState extends ConsumerState<LaunchProjectDialog> {
   StreamSubscription<DockerBuildEvent>? _sub;
   _Phase _phase = _Phase.preparing;
   String _kind = '';
+  String _subdir = ''; // project folder holding the manifest ('' = repo root)
   List<_Target> _targets = const [_Target.dockerWeb];
   _Target _target = _Target.dockerWeb;
 
@@ -133,9 +134,14 @@ class _LaunchProjectDialogState extends ConsumerState<LaunchProjectDialog> {
       final ws = await ref.read(
         workspaceFsProvider(widget.projectPk).future,
       );
-      final kind = await detectDockerStackKind(ws);
-      final tpl = dockerLaunchTemplate(kind);
-      _kind = kind;
+      final info = await detectDockerProject(ws);
+      final tpl = dockerLaunchTemplate(
+        info.kind,
+        subdir: info.subdir,
+        dotnetAssembly: info.dotnetAssembly,
+      );
+      _kind = info.kind;
+      _subdir = info.subdir;
       _containerPort.text = '${tpl.containerPort}';
       _dockerfile.text = tpl.dockerfile.trim();
 
@@ -366,13 +372,20 @@ class _LaunchProjectDialogState extends ConsumerState<LaunchProjectDialog> {
         workspaceFsProvider(widget.projectPk).future,
       );
       mat = await const WorkspaceMaterializer().materialize(ws, tag: 'winlaunch');
+      // Build in the app directory (the folder holding pubspec.yaml — often a
+      // nested `client/`), not the materialized root, or `flutter create .` would
+      // scaffold a default app at the root instead of building the real project.
+      final appDir = _subdir.isEmpty
+          ? mat.path
+          : '${mat.path}${Platform.pathSeparator}'
+                '${_subdir.replaceAll('/', Platform.pathSeparator)}';
       // Ensure the Windows platform files exist, then build. `flutter create`
       // only adds the missing windows/ shell — it never touches lib/ source.
       final res = await runCaptured(
         'flutter create . --platforms windows && '
         'flutter pub get && '
         'flutter build windows --release',
-        workingDirectory: mat.path,
+        workingDirectory: appDir,
       );
       for (final line in res.output.split('\n')) {
         if (line.trim().isEmpty) continue;
@@ -387,7 +400,7 @@ class _LaunchProjectDialogState extends ConsumerState<LaunchProjectDialog> {
         return;
       }
 
-      final exe = await _findWindowsExe(mat.dir);
+      final exe = await _findWindowsExe(Directory(appDir));
       if (exe == null) {
         _append(
           const DockerBuildEvent(
