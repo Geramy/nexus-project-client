@@ -151,11 +151,16 @@ On a FAIL, submit_verdict's `evidence` MUST state the concrete behavior that is 
 Task #{taskId}: {title}
 Work branch: "{branch}". The worktree is on "{targetBranch}".
 
-Merge "{branch}" into "{targetBranch}" with git_merge, then call approve_task with task_id={taskId} to mark it Done. If git_merge reports conflicts, do NOT force it — call reject_task with task_id={taskId} and a note so the worker can rebase.''',
+Merge "{branch}" into "{targetBranch}" with git_merge, then call approve_task with task_id={taskId} to mark it Done.
+
+If git_merge reports CONFLICTS, RESOLVE them yourself — do NOT reject the task (rejecting just sends it back to collide again, and it ends up Blocked). You have file + git tools, so integrate the two versions:
+- For EACH conflicted file, read it and write a merged version that KEEPS BOTH SIDES' intent. A shared glue/config file (router, DI/service container, barrel/index export, navigation table, pubspec/manifest) must end up containing BOTH tasks' entries — never drop one side. For overlapping logic, combine both changes.
+- Remove EVERY conflict marker (`<<<<<<<`, `=======`, `>>>>>>>`), make sure the result still compiles/analyzes, then git_commit the resolution and approve_task.
+- ONLY reject_task if the two changes are genuinely, irreconcilably contradictory (the same behavior defined two incompatible ways) — and then state exactly which lines conflict and why.''',
   OrchestratorPromptField.mergeKickoff:
-      'Integrate task #{taskId}: merge "{branch}" into "{targetBranch}", then approve_task to finish it.',
+      'Integrate task #{taskId}: merge "{branch}" into "{targetBranch}". If it conflicts, RESOLVE every conflicted file (keep both sides — a shared router/DI/barrel/manifest keeps BOTH tasks\' entries), remove all conflict markers, git_commit, then approve_task.',
   OrchestratorPromptField.mergeContinue:
-      'Finish integrating task #{taskId}: complete the merge of "{branch}" into "{targetBranch}" and call approve_task (or reject_task on conflict).',
+      'Finish integrating task #{taskId} into "{targetBranch}": resolve any remaining conflicts (keep both sides, remove every `<<<<<<<`/`=======`/`>>>>>>>` marker, ensure it still compiles), git_commit the resolution, then approve_task. Only reject_task if the changes are truly irreconcilable.',
   OrchestratorPromptField.templaterFraming: '''
 === TEMPLATER — SCAFFOLD THE BASE PROJECT (runs ONCE, before any task) ===
 You set up the EMPTY starting environment so every engineering agent drops into a real, compiling skeleton — instead of each one inventing the project from scratch at the same time. You write ONLY boilerplate, stubs, config and (if needed) the DB schema — NEVER any feature logic.
@@ -166,7 +171,10 @@ You are on branch "{branch}" (main); every task branches off it, so it MUST comp
 
 YOUR JOB IS EXACTLY THESE THREE THINGS, then commit and stop:
 1. ENVIRONMENT — create the conventional project skeleton for the stack: the manifest that declares the requested packages/libraries (e.g. pubspec.yaml / package.json / a .csproj / CMakeLists.txt / requirements.txt — whatever the BASELINE language uses), the entry-point / main runner file, a `.gitignore`, and the standard source-folder layout. It must build/analyze with nothing implemented.
-2. TASK STUBS + WIRING — create ONE placeholder source file for EACH task listed below: correct package/namespace declaration + an EMPTY class/function/interface OUTLINE (signatures + `// TODO`), so each task has a real place to start. No logic. THEN WIRE THE STUBS TOGETHER: create the shared "glue" files that reference them — route/endpoint registration, the dependency-injection / service container, barrel/index exports, the navigation table — pointing at every stub. This is what lets the tasks run in PARALLEL without overwriting each other: each task only fills in its OWN stub's body and almost never has to touch a shared file. Build the glue complete now so no two tasks fight over it later.
+2. CONTRACTS + STUBS + WIRING — in this order:
+   (a) CONTRACTS FIRST (the most important thing you do). Identify every SHARED component that MORE THAN ONE task depends on — data models, repositories, services, API/DB clients, DAOs, state/providers, the route/nav table. For EACH, declare its COMPLETE public interface NOW: EVERY method / getter / field the dependent tasks below will call, with full, correct, typed signatures (an abstract class or interface, or a fully-typed class header with method signatures + `// TODO` bodies). DERIVE the member set from what the tasks NEED — read the task list and enumerate: e.g. a task that "lists/filters exercises" implies the repository contract needs `listExercises()`, `getById()`, `add()`, `update()`, `delete()`, `byGroup()`, … so declare them ALL up front. Over-declare rather than under-declare. These interfaces are the CONTRACT every task codes against, so a caller and the implementer can never diverge — this is what prevents the "the service calls 48 methods the repository never declared" merge blow-up.
+   (b) STUBS: give each remaining task a placeholder file (correct package/namespace + signatures + `// TODO`, no logic) so it has a real place to start.
+   (c) WIRING — own EVERY shared glue file COMPLETELY now, so feature tasks never touch them (touching them is what makes task branches collide and Blocks them on merge conflict). Specifically: the app entry / `main.dart`, the ROUTE / NAVIGATION table (register EVERY screen the tasks below add, each pointing at its stub), the DI / service container (register every service/repository), barrel/index exports, AND the manifest (`pubspec.yaml` / `package.json` / …) — declare NOW every dependency ANY task will need (so no task has to add one). Wire every contract + stub in. Done right, each feature task only fills in its OWN body and NEVER edits `main.dart` / the router / the manifest / the DI container.
 3. SCHEMA — if the project uses a database (see the BASELINE / base spec), create the basic STARTER SCHEMA as a real migration/schema file for that DB, so every task shares one consistent data model.
 
 THE TASKS THAT EACH NEED A STARTING STUB:
@@ -174,6 +182,8 @@ THE TASKS THAT EACH NEED A STARTING STUB:
 
 RULES:
 - Read what already exists first (`list_directory` / `read_file_chunk`) and be IDEMPOTENT — only create MISSING files; never overwrite real work.
+- CONTRACTS ARE COMPLETE + FROZEN. A shared interface must be EXHAUSTIVE the first time (list every member any task will need, fully typed) so tasks never have to change it. Downstream, a task that IMPLEMENTS a contracted component satisfies its FULL declared interface; a task that USES one calls ONLY its declared members. Getting the contracts complete now is worth more than the stubs.
+- CODE GENERATION: if the stack uses a codegen library (drift, freezed, json_serializable, riverpod generator, retrofit, …), the manifest MUST include `build_runner` AND the matching generator (e.g. `drift_dev` for drift, `freezed`+`json_serializable`) in dev_dependencies. Declare generated code via a `part '…g.dart';` / `part '…freezed.dart';` directive in the SOURCE and let the build run codegen — NEVER hand-write a `*.g.dart` / `*.freezed.dart` file (a hand-faked one causes hundreds of type-mismatch errors).
 - Do NOT implement features, write real logic, write tests, or generate images. Your only tools are file/git/CI — use them only for the three things above.
 - When the environment + stubs + schema are in place and it compiles, COMMIT with git_commit (message like "chore: scaffold base project"). Then STOP — a CI check runs automatically and the task agents take over from there.''',
   OrchestratorPromptField.templaterKickoff:

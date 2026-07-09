@@ -190,7 +190,7 @@ class ProjectOrchestrator {
   /// after the count fails to drop for [_maxFinalPassStagnant] consecutive
   /// passes (same philosophy as the CI loop — not a hard cap). The outer
   /// [_absoluteMaxTestingRounds] is the ultimate backstop.
-  static const int _maxFinalPassStagnant = 3;
+  static const int _maxFinalPassStagnant = 5;
   /// Turn budget for the read-only Final Pass reviewer that traces each feature's
   /// wiring in the code before giving its verdict.
   static const int _maxFinalPassTurns = 14;
@@ -276,6 +276,17 @@ class ProjectOrchestrator {
   /// references, the analyze summary, and test/exception failures.
   static final RegExp _diagLineRe = RegExp(
     r'(\b(error|warning|info)\b\s*[-:]|\.dart:\d+|\bissues? found\b|\bError:|\bFAILED\b|\bException\b)',
+    caseSensitive: false,
+  );
+
+  /// A STACK-TRACE frame — NOT a distinct failure. A single failing test can dump
+  /// thousands of these (`#2674  Foo.bar (package:…/x.dart:442:11)`, `(elided 212
+  /// frames …)`), and each contains a `.dart:line` so [_diagLineRe] would count it
+  /// as its own failpoint — inflating one test failure into "100 → 363 failpoints"
+  /// (which fooled the progress gate and flooded the fix agent). Excluded from the
+  /// failpoint set so the count reflects REAL failures.
+  static final RegExp _stackFrameRe = RegExp(
+    r'^\s*#\d+\s|\belided\s+\d+\s+frame|^\s*(package:|dart:)\S+\.dart:\d+',
     caseSensitive: false,
   );
 
@@ -1134,12 +1145,13 @@ class ProjectOrchestrator {
 - Actually BUILD the feature. Do NOT leave TODO/FIXME comments, empty method bodies, `UnimplementedError`, "not yet implemented", "coming soon", or placeholder screens/text. Compiling is NOT the bar — a working, wired-up feature is.
 - WIRE IT IN where the task tells you to. If your feature must be reachable (a screen/route/button/menu/tab/handler), make the SMALLEST ADDITIVE change to the shared router / navigation / entrypoint so the app actually reaches it. An orphaned widget or service that nothing routes to or calls is an INCOMPLETE task — link it exactly where the task says it belongs. (Adding your one entry to a shared glue file is explicitly allowed — see STAY IN YOUR LANE.)
 - If your task depends on something not built yet, implement your own part FULLY against the expected interface; never stub your own feature to "make it compile".
+- Do NOT hand-write GENERATED files (`*.g.dart`, `*.freezed.dart`, `*.mocks.dart`, `*.pb.dart`). Write the SOURCE (the drift table/DAO, freezed/json_serializable model, etc.) with its `part '...g.dart';` directive and let the build run code generation — a hand-faked generated file is the source of hundreds of mismatched-type errors. Make sure the codegen deps (`build_runner` + the generator, e.g. `drift_dev`) are in pubspec dev_dependencies if your feature needs them.
 - Review verifies this and sends the task back if it finds any placeholder markers, so finish it for real the first time.
 
 === STAY IN YOUR LANE (this is how parallel tasks avoid overwriting each other) ===
 - Implement ONLY your task's artifact (the file[s] this task is about). Other tasks own the other files — do NOT rewrite or "improve" a file that belongs to another task.
-- When you need something another task provides (a model, service, route, widget), reference it by its expected name/path as an interface — do NOT recreate it. If it isn't there yet, code against the interface the task map implies; integration happens at merge.
-- For a SHARED/glue file many tasks touch (a router, DI/service registration, barrel export, schema), make the SMALLEST ADDITIVE change (add your entry) — never rewrite or reformat the whole file.''');
+- When you need something another task provides (a model, service, route, widget), READ its contract/interface file (the scaffold declares shared components as complete interfaces) and code EXACTLY to its DECLARED members — do NOT recreate it, and do NOT call methods/fields it doesn't declare. If a member you need is genuinely absent from the contract, add it to that interface as the SMALLEST additive change (so the implementer sees it) rather than inventing a call to a method that doesn't exist. If the component YOU own declares an interface (abstract members / a contract), implement EVERY declared member.
+- The scaffold ALREADY wired the shared glue — `main.dart` / the app entry, the route/navigation table, the DI/service container, barrel exports, and the manifest (pubspec/package.json) declare every screen/service/dependency up front. So DON'T edit those files: your screen/route/service is already registered — just fill in your own file's body. Editing a shared glue file makes your branch collide with other tasks and get Blocked on merge. ONLY if your entry is genuinely missing from the glue, make the SMALLEST ADDITIVE change (add just your one line) — never rewrite or reformat the file.''');
     return b.toString().trimRight();
   }
 
@@ -1729,7 +1741,7 @@ class ProjectOrchestrator {
     }
     final lines = buf.toString().split('\n');
     final hits = lines
-        .where((l) => _diagLineRe.hasMatch(l))
+        .where((l) => _diagLineRe.hasMatch(l) && !_stackFrameRe.hasMatch(l))
         .map((l) => l.trimRight())
         .where((l) => l.isNotEmpty)
         .toList();
@@ -1758,7 +1770,7 @@ class ProjectOrchestrator {
     }
     final lines = buf.toString().split('\n');
     final hits = lines
-        .where((l) => _diagLineRe.hasMatch(l))
+        .where((l) => _diagLineRe.hasMatch(l) && !_stackFrameRe.hasMatch(l))
         .map((l) => l.trimRight())
         .where((l) => l.isNotEmpty)
         .toList();
@@ -2366,6 +2378,101 @@ class ProjectOrchestrator {
     return outcome?.passed ?? true; // infra unavailable → don't block templating
   }
 
+  /// Runtime-lib import marker → the dev-dependency that GENERATES its code. A
+  /// project using any of these needs the generator AND `build_runner`, or its
+  /// `.g.dart`/`.freezed.dart` can never be produced (workers hand-fake them →
+  /// hundreds of type-mismatch errors).
+  static const Map<String, String> _codegenGenerators = {
+    'package:drift/': 'drift_dev',
+    'package:freezed_annotation': 'freezed',
+    'package:json_annotation': 'json_serializable',
+    'package:riverpod_annotation': 'riverpod_generator',
+    'package:retrofit/': 'retrofit_generator',
+  };
+
+  /// Ensure the CODE-GENERATION toolchain is present in pubspec when the source
+  /// ACTUALLY uses it. Detect usage from the app's `.dart` source (generator
+  /// imports + `part '…g.dart'` directives), and add any missing generator +
+  /// `build_runner` to dev_dependencies (as `any`, so `pub get` resolves a
+  /// compatible version), then commit. Flutter/dart only; no-op otherwise.
+  Future<void> _ensureCodegenDeps(Project project) async {
+    try {
+      final kind = await _detectStackKind();
+      if (kind != 'flutter' && kind != 'dart') return;
+      final handles = await _resolveWorkspaceHandles();
+      final ws = handles.ws;
+      final git = handles.git;
+      if (ws == null || git == null) return;
+      final info = await _appManifestInfo(ws);
+      final pubPath = info.subdir.isEmpty
+          ? '/pubspec.yaml'
+          : '/${info.subdir}/pubspec.yaml';
+      if (!await ws.exists(pubPath)) return;
+      var pubspec = await ws.readString(pubPath);
+
+      final libPrefix = info.subdir.isEmpty ? '/lib/' : '/${info.subdir}/lib/';
+      final used = <String>{};
+      var sawGenPart = false;
+      final partRe = RegExp(r"""part\s+'[^']*\.(g|freezed)\.dart'""");
+      for (final f in await ws.walk()) {
+        if (f.isDirectory) continue;
+        final p = f.path;
+        if (!p.startsWith(libPrefix) || !p.endsWith('.dart')) continue;
+        if (p.endsWith('.g.dart') || p.endsWith('.freezed.dart')) continue;
+        String content;
+        try {
+          content = await ws.readString(p);
+        } catch (_) {
+          continue;
+        }
+        for (final e in _codegenGenerators.entries) {
+          if (content.contains(e.key)) used.add(e.value);
+        }
+        if (!sawGenPart && partRe.hasMatch(content)) sawGenPart = true;
+      }
+      if (used.isEmpty && !sawGenPart) return; // no code generation in use
+
+      final needed = <String>{'build_runner', ...used};
+      final missing = needed
+          .where((d) => !RegExp('(^|\\n)\\s*$d\\s*:').hasMatch(pubspec))
+          .toList();
+      if (missing.isEmpty) return;
+
+      pubspec = _addDevDependencies(pubspec, missing);
+      final lane = ref.read(gitLaneProvider(projectId));
+      await lane.run(() async {
+        try {
+          await git.checkoutBranch('main');
+        } catch (_) {}
+        await ws.writeString(pubPath, pubspec);
+        await git.commitAll(
+          message: 'deps: add codegen toolchain (${missing.join(", ")})',
+        );
+      }, timeout: _laneOpTimeout);
+      ref.read(workspaceRevisionProvider(projectId).notifier).state++;
+      debugPrint(
+        '[Orchestrator p$projectId] added codegen dev-deps: ${missing.join(", ")}.',
+      );
+    } catch (e) {
+      debugPrint('[Orchestrator p$projectId] ensure codegen deps failed: $e');
+    }
+  }
+
+  /// Append [deps] (each as `name: any`) under `dev_dependencies:`, creating that
+  /// section if it doesn't exist.
+  static String _addDevDependencies(String pubspec, List<String> deps) {
+    final add = deps.map((d) => '  $d: any').join('\n');
+    final lines = pubspec.split('\n');
+    final idx = lines.indexWhere(
+      (l) => RegExp(r'^dev_dependencies:\s*$').hasMatch(l),
+    );
+    if (idx < 0) {
+      return '${pubspec.trimRight()}\n\ndev_dependencies:\n$add\n';
+    }
+    lines.insert(idx + 1, add);
+    return lines.join('\n');
+  }
+
   /// Guarantee the project has ONE deterministic CI workflow at [_defaultCiPath]
   /// on main, so per-task review and the end-of-project scan always have a fast,
   /// no-LLM gate to run. Idempotent (no-op if the Templater already wrote one).
@@ -2377,9 +2484,27 @@ class ProjectOrchestrator {
       final ws = handles.ws;
       final git = handles.git;
       if (ws == null || git == null) return;
-      if (await ws.exists(_defaultCiPath)) return;
       final kind = await _detectStackKind();
-      final yaml = _defaultCiYaml(kind);
+      // For flutter/dart, find the app subdir + whether it uses code generation.
+      final info = (kind == 'flutter' || kind == 'dart')
+          ? await _appManifestInfo(ws)
+          : (subdir: '', codegen: false);
+      final existing = await ws.exists(_defaultCiPath)
+          ? await ws.readString(_defaultCiPath)
+          : null;
+      // UPGRADE an existing gate that predates codegen support: a codegen project
+      // whose CI never runs build_runner analyzes STALE/absent generated
+      // (`.g.dart`) files and reports hundreds of phantom errors for even a simple
+      // app. Rewrite it to run build_runner before analyze. Otherwise leave an
+      // existing gate untouched.
+      final needsCodegen =
+          existing != null && info.codegen && !existing.contains('build_runner');
+      if (existing != null && !needsCodegen) return;
+      final yaml = _defaultCiYaml(
+        kind,
+        subdir: info.subdir,
+        codegen: info.codegen,
+      );
       final lane = ref.read(gitLaneProvider(projectId));
       await lane.run(() async {
         try {
@@ -2389,11 +2514,17 @@ class ProjectOrchestrator {
           // if not, commitAll roots the first commit.
         }
         await ws.writeString(_defaultCiPath, yaml);
-        await git.commitAll(message: 'ci: add default $kind CI gate');
+        await git.commitAll(
+          message: needsCodegen
+              ? 'ci: run build_runner (codegen) before analyze'
+              : 'ci: add default $kind CI gate',
+        );
       }, timeout: _laneOpTimeout);
       ref.read(workspaceRevisionProvider(projectId).notifier).state++;
       debugPrint(
-        '[Orchestrator p$projectId] wrote default CI gate ($kind) at $_defaultCiPath.',
+        '[Orchestrator p$projectId] ${needsCodegen ? "upgraded" : "wrote"} CI gate '
+        '($kind${info.codegen ? "+codegen" : ""}'
+        '${info.subdir.isNotEmpty ? ", subdir=${info.subdir}" : ""}) at $_defaultCiPath.',
       );
     } catch (e) {
       debugPrint(
@@ -2428,30 +2559,48 @@ class ProjectOrchestrator {
   /// The default GitHub-Actions-format CI body for [kind]. The local runner runs
   /// `run:` steps as shell commands (`uses:` steps are recorded but skipped), so
   /// these are the conventional compile/analyze/test commands for each stack.
-  static String _defaultCiYaml(String kind) {
+  static String _defaultCiYaml(
+    String kind, {
+    String subdir = '',
+    bool codegen = false,
+  }) {
+    // `cd <subdir> && ` prefix for a nested app (pubspec/manifest not at the repo
+    // root); empty at root.
+    final pfx = subdir.trim().isEmpty ? '' : 'cd ${subdir.trim()} && ';
+    // Code generation (drift/freezed/json_serializable/riverpod_generator, …) MUST
+    // run before analyze — otherwise every reference to the stale/absent generated
+    // `.g.dart` files errors, producing hundreds of phantom errors for even a
+    // simple app. Only emitted when the project actually depends on build_runner
+    // (else `dart run build_runner` would fail on projects that don't use it).
+    // `--delete-conflicting-outputs` avoids the interactive prompt that would hang.
+    final gen = codegen
+        ? '      - run: ${pfx}dart run build_runner build --delete-conflicting-outputs\n'
+        : '';
+    // --no-fatal-infos: info-level lints (e.g. use_build_context_synchronously)
+    // are advisory — don't fail the whole gate on a style hint (errors and
+    // warnings still fail). The orchestrator's `_ciRedIsInfoOnly` is the belt-
+    // and-suspenders equivalent for projects whose CI YAML predates this.
     final steps = switch (kind) {
-      // --no-fatal-infos: info-level lints (e.g. use_build_context_synchronously)
-      // are advisory — don't fail the whole gate on a style hint (errors and
-      // warnings still fail). The orchestrator's `_ciRedIsInfoOnly` is the belt-
-      // and-suspenders equivalent for projects whose CI YAML predates this.
-      'flutter' => '      - run: flutter pub get\n'
-          '      - run: flutter analyze --no-fatal-infos\n'
-          '      - run: flutter test',
-      'dart' => '      - run: dart pub get\n'
-          '      - run: dart analyze\n'
-          '      - run: dart test',
-      'dotnet' => '      - run: dotnet restore\n'
-          '      - run: dotnet build --no-restore\n'
-          '      - run: dotnet test --no-build',
-      'node' => '      - run: npm ci\n'
-          '      - run: npm run build --if-present\n'
-          '      - run: npm test --if-present',
-      'python' => '      - run: pip install -r requirements.txt\n'
-          '      - run: python -m pytest',
-      'go' => '      - run: go build ./...\n'
-          '      - run: go test ./...',
-      'rust' => '      - run: cargo build\n'
-          '      - run: cargo test',
+      'flutter' => '      - run: ${pfx}flutter pub get\n'
+          '$gen'
+          '      - run: ${pfx}flutter analyze --no-fatal-infos\n'
+          '      - run: ${pfx}flutter test',
+      'dart' => '      - run: ${pfx}dart pub get\n'
+          '$gen'
+          '      - run: ${pfx}dart analyze\n'
+          '      - run: ${pfx}dart test',
+      'dotnet' => '      - run: ${pfx}dotnet restore\n'
+          '      - run: ${pfx}dotnet build --no-restore\n'
+          '      - run: ${pfx}dotnet test --no-build',
+      'node' => '      - run: ${pfx}npm ci\n'
+          '      - run: ${pfx}npm run build --if-present\n'
+          '      - run: ${pfx}npm test --if-present',
+      'python' => '      - run: ${pfx}pip install -r requirements.txt\n'
+          '      - run: ${pfx}python -m pytest',
+      'go' => '      - run: ${pfx}go build ./...\n'
+          '      - run: ${pfx}go test ./...',
+      'rust' => '      - run: ${pfx}cargo build\n'
+          '      - run: ${pfx}cargo test',
       _ => '      - run: echo "No build configured for this stack"',
     };
     return 'name: CI\n'
@@ -2461,6 +2610,46 @@ class ProjectOrchestrator {
         '    runs-on: ubuntu-latest\n'
         '    steps:\n'
         '$steps\n';
+  }
+
+  /// For a flutter/dart project, locate the app's pubspec (root or nested) →
+  /// its [subdir] (relative dir, '' at root) and whether it uses code generation
+  /// (depends on `build_runner`). Drives the CI gate's `cd <subdir>` prefix and
+  /// whether it runs build_runner before analyze.
+  Future<({String subdir, bool codegen})> _appManifestInfo(Workspace ws) async {
+    try {
+      String? bestRel;
+      var bestDepth = 1 << 30;
+      for (final f in await ws.walk()) {
+        if (f.isDirectory) continue;
+        final rel = f.path.startsWith('/') ? f.path.substring(1) : f.path;
+        if (rel.split('/').last.toLowerCase() != 'pubspec.yaml') continue;
+        final l = '/${rel.toLowerCase()}/';
+        if (l.contains('/build/') || l.contains('/.dart_tool/')) continue;
+        final depth = rel.contains('/')
+            ? rel
+                  .substring(0, rel.lastIndexOf('/'))
+                  .split('/')
+                  .where((s) => s.isNotEmpty)
+                  .length
+            : 0;
+        if (depth < bestDepth) {
+          bestDepth = depth;
+          bestRel = rel;
+        }
+      }
+      if (bestRel == null) return (subdir: '', codegen: false);
+      final subdir = bestRel.contains('/')
+          ? bestRel.substring(0, bestRel.lastIndexOf('/'))
+          : '';
+      var codegen = false;
+      try {
+        codegen = (await ws.readString('/$bestRel')).contains('build_runner');
+      } catch (_) {}
+      return (subdir: subdir, codegen: codegen);
+    } catch (_) {
+      return (subdir: '', codegen: false);
+    }
   }
 
   /// Open the next milestone batch when appropriate. Two triggers:
@@ -2523,8 +2712,13 @@ class ProjectOrchestrator {
           t.status == TaskStatus.review,
     );
     if (open.isNotEmpty) return false; // work still in flight — not finished yet
+    // A BLOCKED task = unresolved work: NEVER start end-of-project testing on an
+    // incomplete project. Blocked must be cleared first (self-healed or by the
+    // human) — testing against a project with a missing/failed feature just
+    // manufactures errors. The re-pump retries once it's unblocked.
+    if (tasks.any((t) => t.status == TaskStatus.blocked)) return false;
     final done = tasks.where((t) => t.status == TaskStatus.done).toList();
-    if (done.isEmpty) return false; // nothing built (all blocked) — leave it
+    if (done.isEmpty) return false; // nothing built — leave it
     // Skip if this exact completed state already passed (or exhausted) testing —
     // don't re-run the slow loop every tick on a settled project.
     final sig = '${done.length}:'
@@ -2573,6 +2767,15 @@ class ProjectOrchestrator {
     _setTesting(true, 'Linking — wiring every feature across the app…');
     try {
       if (!await _stillRunning()) return;
+
+      // Make sure the CI gate is current before we converge — in particular, add
+      // the build_runner codegen step for drift/freezed/… projects so we don't
+      // grind against stale generated files (hundreds of phantom errors). First
+      // provision the codegen toolchain in pubspec if the source uses it but the
+      // dev-deps are missing (why generation was never possible), THEN the gate
+      // ensure sees build_runner and adds the codegen step.
+      await _ensureCodegenDeps(project);
+      await _ensureDefaultCiWorkflow(project);
 
       // ── PHASE 1: LINKING PUSH (one comprehensive wiring pass, before CI) ─────
       await _runLinkingPass(project);
@@ -2868,12 +3071,21 @@ class ProjectOrchestrator {
     } catch (e) {
       debugPrint('[Orchestrator p$projectId] final-pass code trace failed: $e');
     }
+    // VISION is ADVISORY ONLY — it must NOT block completion. The web-build
+    // screenshot is inherently unreliable: a NATIVE app (drift/native-SQLite,
+    // path_provider, platform channels) compiles for web but renders BLANK at
+    // runtime, and render timing/CanvasKit quirks produce false "blank/broken"
+    // reports for apps that are actually fine. The authoritative gates are CI
+    // (compiles + tests pass), the hard-no STUB scan, and the code-trace wiring
+    // review — all above. So log the screenshot's opinion for the human, but do
+    // NOT add it to `issues` (which gates completion + drives the fixer).
     try {
       final visual = await _finalPassVision(project);
       if (visual.trim().isNotEmpty) {
-        if (buf.isNotEmpty) buf.writeln();
-        buf.writeln('VISUAL ISSUES (from a screenshot of the running app):');
-        buf.writeln(visual.trim());
+        debugPrint(
+          '[Orchestrator p$projectId] final-pass VISION (advisory, non-blocking): '
+          '${visual.trim()}',
+        );
       }
     } catch (e) {
       debugPrint('[Orchestrator p$projectId] final-pass vision skipped: $e');
@@ -3188,15 +3400,25 @@ class ProjectOrchestrator {
                   'feature is genuinely absent. Wire everything in this one push.'
             : functional
             ? 'You are the end-of-project FINAL PASS agent. The project compiles '
-                  'and its CI is GREEN. The listed problems are of TWO kinds and you '
-                  'must resolve BOTH: (1) UNIMPLEMENTED STUBS — a feature that is '
-                  'still a TODO/placeholder ("— TODO", empty body, "coming soon", '
-                  'UnimplementedError) is NOT built; IMPLEMENT it FOR REAL (build the '
-                  'actual UI/logic and REMOVE the marker) — do not merely wire, '
-                  'comment out, or delete it. (2) UNWIRED features — the real '
-                  'implementation exists but is not reachable; CONNECT it with the '
-                  'SMALLEST change (route/nav/button/menu). For the wiring kind, '
-                  'reuse what is there; do NOT rewrite working code.'
+                  'and its CI is GREEN. Each listed problem was found by a code '
+                  'REVIEW that read the actual code — so if it says a feature is '
+                  'missing/not-implemented, it GENUINELY is not there (a compiling, '
+                  'partly-working file is NOT the same as the feature being done). '
+                  'Three kinds, resolve them ALL: (1) UNIMPLEMENTED STUBS — a '
+                  'TODO/placeholder/empty body/UnimplementedError: build the real '
+                  'UI/logic and remove the marker. (2) UNWIRED — the real code '
+                  'exists but is unreachable: connect it with the smallest '
+                  'route/nav/button change. (3) INCOMPLETE — the feature partly '
+                  'works but is MISSING part of its requirement (e.g. "custom dice '
+                  'with user-defined sides" when only fixed types exist): BUILD the '
+                  'missing part FOR REAL, even if it needs a refactor — widen the '
+                  'enum to a class/sealed hierarchy or add a variant AND update '
+                  'every usage (model + provider + screen + widget), add the input '
+                  'UI, etc. Reading the files is NOT progress — you must EDIT them. '
+                  'Before you finish, RE-READ the changed files and CONFIRM the '
+                  'EXACT described capability now exists in the code; NEVER commit a '
+                  '"implemented/done" message for something you did not actually '
+                  'build — the review WILL re-check and reject a false claim.'
             : 'You are the end-of-project TESTING & FIX agent. The whole project '
                   'is built and merged onto main, but its CI build/tests are '
                   'FAILING. Your job is to make the WHOLE project compile cleanly '
@@ -3215,6 +3437,17 @@ class ProjectOrchestrator {
       ..writeln(
         '- Keep changes minimal and correct; do not delete features or stub '
         'things out to silence errors. Preserve existing behavior.',
+      )
+      ..writeln(
+        '- A failing TEST can be a RUNTIME error, not a compile error — read the '
+        'test output for the ROOT cause and fix THAT, not the test. Common Flutter '
+        'ones: a `RenderFlex overflowed` / "unbounded height" / layout assertion '
+        'from a Column/Row (e.g. the smoke test "App starts without errors" throws '
+        'during layout) is fixed by wrapping the offending column in a '
+        '`SingleChildScrollView` (or using `Expanded`/`Flexible` for a child that '
+        'should flex) — the file:line in the error points at the exact widget. A '
+        'missing provider/DB/DI at startup is fixed by initializing it (or a test '
+        'setup), never by weakening the test.',
       )
       ..writeln(
         '- ALWAYS read_file the EXACT current contents of a file immediately '
