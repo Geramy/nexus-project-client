@@ -106,7 +106,18 @@ ${described.isEmpty ? '' : '\nWhat the user described at setup (their own words)
 ${lines.join('\n')}
 ${summary.isEmpty ? '' : '\nProject summary:\n$summary\n'}
 HARD RULES:
-- Build ONLY for the Target platforms above.
+- Build for EVERY one of the Target platforms above — the app must actually RUN on
+  each. If WEB is one of them, the app MUST work in a browser: NEVER use a
+  native-only API on a code path that runs on web — no `dart:io` (File/Directory/
+  Platform/Process), no native path_provider paths, no FFI, and no native-only
+  database connection (e.g. drift's `NativeDatabase`/sqlite3 FFI). These throw
+  "Unsupported operation" on web and leave a BLANK screen. Instead use a
+  cross-platform setup: a `kIsWeb` guard or conditional imports
+  (`import 'x_native.dart' if (dart.library.js_interop) 'x_web.dart'`) that pick a
+  web backend on web (e.g. drift's `WasmDatabase`/IndexedDB + the sqlite3 wasm +
+  drift worker assets, or `shared_preferences`/`hive` which already support web),
+  and declare the web dependencies/assets in the manifest. A web-targeted app that
+  renders blank is a FAILED build, not done.
 - Write code ONLY in the listed Languages, using the listed Frameworks / engines —
   do NOT swap in a different stack. (e.g. if the platforms/frameworks describe a
   WEB or DESKTOP app, do not choose a native game engine like Unity/C#; and

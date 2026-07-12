@@ -1050,11 +1050,18 @@ class SetupToolExecutor {
           } catch (_) {}
         }
 
+        // SOURCE: if this value is one the user PICKED from the options the last
+        // ask_question offered, it's their explicit CHOICE (AI suggested → user
+        // selected), not an AI invention — tag it `chosen`. Anything else the host
+        // records (the AI-derived stack, description inferences) stays `ai`.
+        final tagSource = _lastPicks.contains(_normOpt(value))
+            ? TagSource.chosen
+            : TagSource.ai;
         await controller.upsert(
           ProjectTag(
             category: catStr,
             value: value,
-            source: TagSource.ai,
+            source: tagSource,
             origin: 'setup',
             status: TagStatus.proposed,
             layerKey: layerKey,

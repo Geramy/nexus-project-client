@@ -67,6 +67,8 @@ class _LaunchProjectDialogState extends ConsumerState<LaunchProjectDialog> {
   final _containerName = TextEditingController();
   final _containerPort = TextEditingController(text: '80');
   final _hostPort = TextEditingController();
+  final _saveName = TextEditingController(); // windows: output folder/app name
+  final _saveLocation = TextEditingController(); // windows: where to save it
   final _scroll = ScrollController();
 
   final List<DockerBuildEvent> _log = [];
@@ -98,6 +100,8 @@ class _LaunchProjectDialogState extends ConsumerState<LaunchProjectDialog> {
     _containerName.dispose();
     _containerPort.dispose();
     _hostPort.dispose();
+    _saveName.dispose();
+    _saveLocation.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -108,12 +112,33 @@ class _LaunchProjectDialogState extends ConsumerState<LaunchProjectDialog> {
     return trimmed.isEmpty ? 'app' : trimmed;
   }
 
+  /// The host port Docker binds to [cport] is published a beat AFTER the container
+  /// starts, so a single read right after `runContainer` usually comes back null —
+  /// which is why the launch found "no port" and never opened the browser even
+  /// though the container was up (`0.0.0.0:63986->80/tcp`). Poll briefly for it.
+  Future<String?> _hostPortWithRetry(String id, String cport) async {
+    final client = ref.read(dockerEngineClientProvider);
+    for (var i = 0; i < 15; i++) {
+      final hp = await client.containerHostPort(id, cport);
+      if (hp != null && hp.isNotEmpty) return hp;
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+    }
+    return null;
+  }
+
   Future<void> _prepare() async {
     try {
       final project = await widget.db.getProjectById(widget.projectPk);
       final base = _sanitize(project?.name ?? 'app');
       _tag.text = '$base:latest';
       _containerName.text = '$base-app';
+      // Windows save: default the app/folder name to the project name (folder-safe)
+      // and the location to the Desktop.
+      final folderName = (project?.name ?? 'app')
+          .replaceAll(RegExp(r'[<>:"/\\|?*]'), '')
+          .trim();
+      _saveName.text = folderName.isEmpty ? 'app' : folderName;
+      _saveLocation.text = await desktopDir();
 
       // Offered targets come from the project's platform tags.
       final tags = await widget.db.getTagsForProject(widget.projectPk);
@@ -229,7 +254,7 @@ class _LaunchProjectDialogState extends ConsumerState<LaunchProjectDialog> {
             );
             if (!existing.isRunning) await client.startContainer(existing.id);
             ref.invalidate(dockerContainersProvider);
-            final hp = await client.containerHostPort(existing.id, cport);
+            final hp = await _hostPortWithRetry(existing.id, cport);
             if (hp != null && hp.isNotEmpty) {
               final url = 'http://localhost:$hp';
               _openUrl = url;
@@ -338,8 +363,9 @@ class _LaunchProjectDialogState extends ConsumerState<LaunchProjectDialog> {
       }
       ref.invalidate(dockerContainersProvider);
 
-      // Discover the port Docker actually bound, then open it in the browser.
-      final hostPort = await client.containerHostPort(id, cport) ?? requestedHost;
+      // Discover the port Docker actually bound (polling — it publishes a beat
+      // after start), then open it in the browser.
+      final hostPort = (await _hostPortWithRetry(id, cport)) ?? requestedHost;
       final shortId = id.length > 12 ? id.substring(0, 12) : id;
       if (hostPort.isNotEmpty) {
         final url = 'http://localhost:$hostPort';
@@ -387,6 +413,19 @@ class _LaunchProjectDialogState extends ConsumerState<LaunchProjectDialog> {
         'flutter build windows --release',
         workingDirectory: appDir,
       );
+      // Persist the FULL build output to a stable file so a failure stays
+      // diagnosable after the (ephemeral) dialog log closes.
+      String? logPath;
+      try {
+        logPath =
+            '${Directory.systemTemp.path}${Platform.pathSeparator}nexus_windows_launch.log';
+        await File(logPath).writeAsString(res.output);
+      } catch (_) {
+        logPath = null;
+      }
+      if (logPath != null) {
+        _append(DockerBuildEvent('Full build log saved: $logPath'));
+      }
       for (final line in res.output.split('\n')) {
         if (line.trim().isEmpty) continue;
         _append(DockerBuildEvent(line, isError: false));
@@ -412,14 +451,53 @@ class _LaunchProjectDialogState extends ConsumerState<LaunchProjectDialog> {
         await mat.dispose();
         return;
       }
-      // NOTE: do NOT dispose the materialized dir — the running .exe needs its
-      // sibling DLLs/data. It lives in the OS temp area until cleaned up.
-      _exePath = exe;
-      _append(DockerBuildEvent('Launching ${exe.split(Platform.pathSeparator).last}…'));
-      await launchExecutable(exe);
+      // A Flutter Windows app is the WHOLE Release folder (exe + DLLs + data/),
+      // not a lone .exe. SAVE that bundle out of the temp build dir into the
+      // user's chosen location, named after the app — permanent + clickable —
+      // then add a Desktop shortcut. Do NOT auto-launch: the user runs it.
+      final releaseDir = File(exe).parent; // <build>/…/Release
+      final exeName = exe.split(Platform.pathSeparator).last;
+      final name = _saveName.text.trim().isEmpty ? 'app' : _saveName.text.trim();
+      final loc = _saveLocation.text.trim().isEmpty
+          ? await desktopDir()
+          : _saveLocation.text.trim();
+      final destDir = '$loc${Platform.pathSeparator}$name';
+      _append(DockerBuildEvent('Saving the app to "$destDir"…'));
+      try {
+        await copyDirectory(releaseDir, Directory(destDir));
+      } catch (e) {
+        _append(
+          DockerBuildEvent('Could not save to "$destDir": $e', isError: true),
+        );
+        if (mounted) setState(() => _phase = _Phase.error);
+        await mat.dispose();
+        return;
+      }
+      final savedExe = '$destDir${Platform.pathSeparator}$exeName';
+      // Best-effort Desktop shortcut named after the app.
+      try {
+        final desk = await desktopDir();
+        if (desk.isNotEmpty) {
+          await createShortcut(
+            '$desk${Platform.pathSeparator}$name.lnk',
+            savedExe,
+            workingDir: destDir,
+          );
+          _append(DockerBuildEvent('Desktop shortcut created: $name'));
+        }
+      } catch (_) {}
+      // The saved copy is self-contained, so the temp build dir can be removed.
+      await mat.dispose();
+      _exePath = savedExe;
+      _append(
+        const DockerBuildEvent(
+          'Done — the app is saved and NOT running. Double-click the Desktop '
+          'shortcut (or the .exe in the folder) to launch it.',
+        ),
+      );
       if (mounted) setState(() => _phase = _Phase.done);
     } catch (e) {
-      _append(DockerBuildEvent('Windows launch failed: $e', isError: true));
+      _append(DockerBuildEvent('Windows build failed: $e', isError: true));
       if (mounted) setState(() => _phase = _Phase.error);
       await mat?.dispose();
     }
@@ -501,24 +579,27 @@ class _LaunchProjectDialogState extends ConsumerState<LaunchProjectDialog> {
                           color: const Color(0xFF1E1E1E),
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: SelectionArea(
-                          child: ListView.builder(
-                            controller: _scroll,
-                            itemCount: _log.length,
-                            itemBuilder: (c, i) {
-                              final e = _log[i];
-                              return Text(
-                                e.text,
-                                style: TextStyle(
-                                  fontFamily: 'monospace',
-                                  fontSize: 12,
-                                  color: e.isError
-                                      ? const Color(0xFFFF6B6B)
-                                      : const Color(0xFFD4D4D4),
-                                ),
-                              );
-                            },
-                          ),
+                        // Per-line SelectableText — NOT a SelectionArea wrapping a
+                        // lazy ListView: that combination crashes on paragraph
+                        // selection (dart:ui/math.dart assertion in
+                        // selectable_region.dart) when the user drags to copy the
+                        // log. Each line is independently selectable/copyable.
+                        child: ListView.builder(
+                          controller: _scroll,
+                          itemCount: _log.length,
+                          itemBuilder: (c, i) {
+                            final e = _log[i];
+                            return SelectableText(
+                              e.text,
+                              style: TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 12,
+                                color: e.isError
+                                    ? const Color(0xFFFF6B6B)
+                                    : const Color(0xFFD4D4D4),
+                              ),
+                            );
+                          },
                         ),
                       ),
                     ],
@@ -536,7 +617,7 @@ class _LaunchProjectDialogState extends ConsumerState<LaunchProjectDialog> {
         if (_phase == _Phase.done && _exePath != null)
           TextButton.icon(
             icon: const Icon(Icons.folder_open, size: 16),
-            label: const Text('Show file'),
+            label: const Text('Show saved app'),
             onPressed: () => revealInFileManager(_exePath!),
           ),
         TextButton(
@@ -557,9 +638,9 @@ class _LaunchProjectDialogState extends ConsumerState<LaunchProjectDialog> {
           label: Text(
             switch (_phase) {
               _Phase.working => 'Working…',
-              _Phase.done => 'Launched',
+              _Phase.done => isDocker ? 'Launched' : 'Saved',
               _Phase.error => 'Retry',
-              _ => 'Launch',
+              _ => isDocker ? 'Launch' : 'Build & save',
             },
           ),
         ),
@@ -685,11 +766,63 @@ class _LaunchProjectDialogState extends ConsumerState<LaunchProjectDialog> {
       Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Text(
-          'Compiles the Windows desktop app (flutter build windows --release) '
-          'and launches the .exe. Requires the Flutter Windows toolchain '
-          '(Visual Studio) on this machine.',
+          'Compiles the Windows desktop app (flutter build windows --release), '
+          'SAVES it to the folder below (it is NOT auto-launched), and adds a '
+          'Desktop shortcut you can double-click. Requires the Flutter Windows '
+          'toolchain (Visual Studio) on this machine.',
           style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
         ),
+      ),
+      TextField(
+        controller: _saveName,
+        enabled: !_busy,
+        decoration: const InputDecoration(
+          labelText: 'App name (folder + Desktop shortcut)',
+          hintText: 'My App',
+          isDense: true,
+          border: OutlineInputBorder(),
+        ),
+      ),
+      const SizedBox(height: 10),
+      Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _saveLocation,
+              enabled: !_busy,
+              decoration: const InputDecoration(
+                labelText: 'Save location',
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          OutlinedButton.icon(
+            onPressed: _busy
+                ? null
+                : () async {
+                    final picked = await pickFolder('Save the app to…');
+                    if (picked != null && picked.isNotEmpty && mounted) {
+                      setState(() => _saveLocation.text = picked);
+                    }
+                  },
+            icon: const Icon(Icons.folder_open, size: 16),
+            label: const Text('Browse'),
+          ),
+          const SizedBox(width: 4),
+          OutlinedButton(
+            onPressed: _busy
+                ? null
+                : () async {
+                    final d = await desktopDir();
+                    if (d.isNotEmpty && mounted) {
+                      setState(() => _saveLocation.text = d);
+                    }
+                  },
+            child: const Text('Desktop'),
+          ),
+        ],
       ),
     ];
   }

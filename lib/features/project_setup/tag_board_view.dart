@@ -375,7 +375,9 @@ class _TagChip extends ConsumerWidget {
         onTap: () =>
             tag.isRejected ? controller.reset(pk) : controller.reject(pk),
       ),
-      if (tag.source == TagSource.user)
+      // The user can delete anything they authored — typed (user) OR picked from
+      // suggestions (chosen).
+      if (tag.source == TagSource.user || tag.source == TagSource.chosen)
         _IconBtn(
           icon: Icons.delete_outline,
           active: false,

@@ -8,7 +8,14 @@ import 'tag_category.dart';
 enum TagStatus { proposed, accepted, rejected }
 
 /// Who introduced a tag.
-enum TagSource { user, ai, workspace }
+/// Where a tag came from:
+/// - [user]: the user typed it (free text / their own description).
+/// - [chosen]: the user SELECTED it from AI-suggested options in an ask_question
+///   (AI offered, user picked — their explicit choice, not the AI's invention).
+/// - [ai]: the AI derived/inferred it itself (the stack, or unmistakable
+///   implications) without the user picking it from a list.
+/// - [workspace]: discovered from existing workspace files.
+enum TagSource { user, chosen, ai, workspace }
 
 extension TagStatusX on TagStatus {
   String get wire => name;
@@ -23,6 +30,7 @@ extension TagSourceX on TagSource {
   String get wire => name;
   static TagSource fromWire(String? s) => switch (s) {
     'user' => TagSource.user,
+    'chosen' => TagSource.chosen,
     'workspace' => TagSource.workspace,
     _ => TagSource.ai,
   };
